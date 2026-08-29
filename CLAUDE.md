@@ -66,6 +66,34 @@ There is deliberately no build system: the Full JDK removes the JavaFX module-pa
 otherwise have forced one. IntelliJ has two committed run configurations, **MrPong** and
 **Physics SelfTest**. The project SDK must stay `liberica-21`.
 
+### The IntelliJ project files — `$MODULE_DIR$` is not what it looks like
+
+Four files under `.idea/` are load-bearing and are all committed: `modules.xml` (registers the module —
+if it goes missing there is no module at all and every Run button greys out), the module file
+`3D-Table-Tennis-In-Java.iml`, `misc.xml` (pins the SDK and the `out/` output dir), and
+`runConfigurations/`. Only `workspace.xml` is local and ignored.
+
+For a module file stored inside `.idea/`, **IntelliJ resolves `$MODULE_DIR$` to the PROJECT directory,
+not to `.idea/`.** So the content root is written as plain `$MODULE_DIR$` and the source root as
+`$MODULE_DIR$/src`:
+
+```xml
+<content url="file://$MODULE_DIR$">
+  <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
+</content>
+```
+
+Do not "correct" those to `$MODULE_DIR$/..`. That resolves to the *parent* of this repo, which makes
+every sibling project a part of this one and points the source root at a `src` that does not exist. With
+no source root IntelliJ cannot see `MrPong` as a main class and **the Run button goes grey** — that is
+the symptom to recognise if this file is ever edited.
+
+The module name comes from the `.iml` filename and must stay `3D-Table-Tennis-In-Java`, because both run
+configurations name it in their `<module>` element.
+
+Note that a running IntelliJ rewrites `.idea/` underneath you. Edit these files with the IDE closed, and
+check `git status` afterwards.
+
 From a shell — PowerShell:
 
 ```powershell
