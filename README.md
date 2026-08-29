@@ -77,10 +77,14 @@ There are no other dependencies and no build script — this compiles with stock
 
 ## Running
 
+> **I have only ever built and run this from IntelliJ.** That is the only setup I have actually
+> tested. The terminal commands below are provided for reference and are not the path I use, so if
+> something there does not work for you, try it from the IDE first.
+
 In IntelliJ: open the project, set the project SDK to the Full JDK 21, and use the committed
 **MrPong** run configuration. **Physics SelfTest** runs the headless validation suite.
 
-From a terminal:
+From a terminal (untested by me):
 
 ```powershell
 # PowerShell
@@ -111,7 +115,8 @@ the table at smash speed.
 "$JDK/java" -cp out/production/3D-Table-Tennis-In-Java physics.SelfTest
 ```
 
-It prints PASS/FAIL per check and exits non-zero if anything fails.
+It prints PASS/FAIL per check and exits non-zero if anything fails. I run it from the
+**Physics SelfTest** configuration in IntelliJ.
 
 ## Built with
 
