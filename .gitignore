@@ -1,0 +1,16 @@
+# Compiled output
+out/
+build/
+target/
+bin/
+*.class
+*.jar
+
+# IntelliJ (project files are tracked; .idea/.gitignore excludes the local-only ones)
+*.iws
+.idea/shelf/
+.idea/workspace.xml
+
+# OS
+.DS_Store
+Thumbs.db
