@@ -1,0 +1,9 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Physics SelfTest" type="Application" factoryName="Application">
+    <option name="MAIN_CLASS_NAME" value="physics.SelfTest" />
+    <module name="3D-Table-Tennis-In-Java" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>

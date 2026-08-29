@@ -1,0 +1,9 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="MrPong" type="Application" factoryName="Application">
+    <option name="MAIN_CLASS_NAME" value="MrPong" />
+    <module name="3D-Table-Tennis-In-Java" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>
