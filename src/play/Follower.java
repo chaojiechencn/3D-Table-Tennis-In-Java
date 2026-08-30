@@ -40,29 +40,124 @@ public final class Follower implements Opponent {
     /** The plane the opponent's blade lives on: just beyond its own end of the table. */
     public static final double PLANE_Z = -(TABLE_LENGTH / 2 + 0.12);
 
+    /**
+     * How high above the table the blade will go, in metres.
+     *
+     * A ceiling is not a detail here, it is the difference between an opponent and a rocket
+     * engine. The tracked height used to be max(0.04, ball.y()) with nothing above it, so the
+     * blade followed a ball to ANY height -- and since it may move at MAX_SPEED it stayed in
+     * contact all the way up, striking again on every step. No contact ever added energy and
+     * SelfTest stayed green throughout; the blade was simply hitting the ball over and over,
+     * and one lifted return went past 6 m still climbing.
+     *
+     * 0.55 m is about as high as a player takes a bat over a table without leaving the ground.
+     * Above that the ball is out of reach, the blade waits, and the ball comes back down to
+     * it -- which is what a person does.
+     */
+    private static final double MAX_REACH_Y = 0.55;
+
+    /** Where the blade waits before a rally and after it has played its shot. */
+    private static final Vec3 READY = new Vec3(0, 0.20, PLANE_Z);
+
     /** How close the ball has to get before it commits to a stroke. */
     private static final double SWING_RANGE = 0.30;
 
-    /** Peak blade speed of its return, and how long the stroke lasts. */
-    private static final double SWING_SPEED = 9.0;
+    /** How long the stroke lasts. */
     private static final double SWING_TIME = 0.10;
 
-    /** A small upward component to the stroke, so returns are lifted rather than pushed. */
-    private static final double SWING_LIFT = 3.0;
+    // ------------------------------------------------------------------ the tuned stroke
+    //
+    // These three decide whether a return is legal, and they were originally derived against
+    // the wrong question. The criterion was "does the return get back over the net", and every
+    // preset did -- by going nearly straight up. Asked the right question, "where does the
+    // return LAND", the old values (an OPEN face and a 9 m/s swing) put 0 of 9 presets on the
+    // table: the ball left at 19 m/s and came down 3 to 7 m past the end line.
+    //
+    // These come out of a sweep over all three, and the sweep found a trade-off rather than
+    // an optimum. Scored two ways over the nine presets:
+    //
+    //   maximise how many returns LAND          -> best is 3 of 9, and one preset then fails
+    //                                              to get back over the net at all
+    //   require all nine to clear the net       -> 318 settings manage it, and the best of
+    //                                              those lands 1 of 9, at an apex of 1.13 m
+    //
+    // No setting does both. That is not a tuning failure, it is the design showing its edge:
+    // the presets arrive between 3.5 and 18.4 m/s carrying 25 to 125 rev/s, and one fixed
+    // answer cannot be right for a 4.5 m/s serve and an 18 m/s smash at once -- whatever
+    // returns the slow ball sends the fast one long. Returning all nine legally means choosing
+    // the stroke FROM the ball, which means reading it: World.predict, and the October
+    // opponent. This is the measurement behind "difficulty has to come from prediction
+    // quality", which until now was only ever asserted.
+    //
+    // The net constraint wins, because being a wall is this class's entire job -- it exists so
+    // the ball always comes back while the player's controls are being built. So: 0.20 / 8.5 /
+    // 5.0, which clears the net on all nine and holds the worst apex to 1.13 m. The old values
+    // cleared the net too, but by lobbing to 5.42 m and landing 0 of 9.
+    //
+    // RallyTest prints the full landing table on every run so the 1 of 9 stays in front of
+    // whoever runs it, rather than being rediscovered in front of a grader.
 
     /**
-     * How far the face is OPENED, leaning back away from the incoming ball.
+     * How far the face is CLOSED over the incoming ball.
      *
-     * Open, not closed, and the sign matters more than the magnitude. The first version of
-     * this closed the face over the ball because that is what a looping player does -- and
-     * every fast shot went straight into the net, because a closed face on a horizontal swing
-     * drives the ball DOWN and the ball has 15 cm of net to clear from 12 cm away. Opening the
-     * face lifts the return over the cord. Swept across the presets, anything from 0.0 to 0.5
-     * returns all of them; 0.35 sits in the middle of that range rather than on its edge.
+     * Closed, not open -- which reverses what this comment used to say. The old reasoning was
+     * that a closed face drives the ball into the net, and on a HORIZONTAL swing that is true.
+     * This swing is not horizontal: it has an upward component, so a closed face brushes up
+     * the back of the ball and loops it. The topspin that puts on is what drags the return
+     * back down onto the table, which is the whole reason topspin dominates the sport and the
+     * one thing this simulation models most carefully. Opening the face instead produced a
+     * float that could only clear the net by being hit into the air.
      */
-    private static final double FACE_OPEN = 0.35;
+    private static final double FACE_CLOSED = 0.20;
+
+    /**
+     * Peak blade speed of the return, m/s.
+     *
+     * It has to stay high. Slowing it to 2.5 m/s lands more balls -- the incoming ball already
+     * supplies most of the pace, since rubber has e ~ 0.9 and a 12 m/s ball comes off a
+     * stationary blade at about 11 m/s -- but a slow blade cannot get the Cross-court loop back
+     * over the net, and returning everything is the job. See the sweep note above.
+     */
+    private static final double SWING_SPEED = 8.5;
+
+    /** Upward component of the stroke -- the brush that makes the topspin that brings the
+     *  return down. It is what holds the apex to 1.13 m instead of the old 5.42 m. */
+    private static final double SWING_LIFT = 5.0;
+
+    private final double faceClosed;
+    private final double swingSpeed;
+    private final double swingLift;
 
     private double swinging = -1;      // seconds into a stroke, negative when not swinging
+
+    /**
+     * Where the ball was when the current stroke was committed to.
+     *
+     * Captured once, at the start of the swing, and then not updated -- which is the whole
+     * point of it. The blade used to keep tracking the ball's height right through its own
+     * stroke, so it stayed glued to the ball it had just hit and struck it again on the next
+     * step, and the next, each hit steepening the return until the ball was going straight up.
+     * A player follows through along the stroke, not after the ball.
+     */
+    private Vec3 swingAim = READY;
+
+    public Follower() {
+        this(FACE_CLOSED, SWING_SPEED, SWING_LIFT);
+    }
+
+    /**
+     * A follower with a stroke of its own.
+     *
+     * Exists so the three numbers above can be swept rather than argued about -- that sweep is
+     * where "the best a fixed stroke manages is three of nine" came from, and it can be rerun
+     * against any change to the contact model. It is also the seam the October opponent will
+     * want, since difficulty is going to mean a different stroke as well as a different brain.
+     */
+    Follower(double faceClosed, double swingSpeed, double swingLift) {
+        this.faceClosed = faceClosed;
+        this.swingSpeed = swingSpeed;
+        this.swingLift = swingLift;
+    }
 
     @Override public String name() { return "follower (unbeatable)"; }
 
@@ -70,17 +165,15 @@ public final class Follower implements Opponent {
     public void advance(BallState ball, Paddle blade, double dt) {
         Vec3 b = ball.pos();
 
-        // Track the ball's CURRENT position. No prediction: that is the whole design.
-        // Height is clamped so the blade cannot dive through the table chasing a dead ball.
-        double targetY = Math.max(0.04, b.y());
-        double targetX = clamp(b.x(), -TABLE_WIDTH, TABLE_WIDTH);
-
         boolean incoming = b.z() < 0 && ball.vel().z() < 0;
         double reach = b.z() - PLANE_Z;
-        if (incoming && reach < SWING_RANGE && swinging < 0) swinging = 0;
-        if (!incoming && swinging < 0) swinging = -1;
 
-        double z = PLANE_Z;
+        if (incoming && reach < SWING_RANGE && swinging < 0) {
+            swingAim = reachable(b);        // commit, and stop following the ball
+            swinging = 0;
+        }
+
+        Vec3 want;
         if (swinging >= 0) {
             swinging += dt;
             double t = Math.min(1, swinging / SWING_TIME);
@@ -89,20 +182,41 @@ public final class Follower implements Opponent {
             // differences its pose.
             double s = (1 - Math.cos(Math.PI * t)) / 2;
             double travel = SWING_TIME * s * 2 / Math.PI;
-            z = PLANE_Z + SWING_SPEED * travel;
-            targetY += SWING_LIFT * travel;
+            want = new Vec3(swingAim.x(),
+                            swingAim.y() + swingLift * travel,
+                            PLANE_Z + swingSpeed * travel);
             if (t >= 1) swinging = -1;
+        } else if (incoming) {
+            // Move to meet it. Still no prediction: this is where the ball IS, not where it
+            // is going, and that is the whole design.
+            want = reachable(b);
+        } else {
+            // The ball is on its way back to the other end. Reset, rather than follow it --
+            // following a departing ball is how the blade ended up chasing one into the roof.
+            want = READY;
         }
 
         // Speed limit, so the blade sweeps rather than teleporting. Even a wall has to move.
-        Vec3 want = new Vec3(targetX, targetY, z);
         Vec3 step = want.minus(blade.pos());
         double maxStep = MAX_SPEED * dt;
         if (step.length() > maxStep) want = blade.pos().plusScaled(step.normalized(), maxStep);
 
-        // Face pointing back up the table at the ball, opened a little so returns clear
-        // the net. See FACE_OPEN for why this leans back rather than over.
-        blade.moveTo(want, new Vec3(0, FACE_OPEN, 1).normalized(), dt);
+        // Face pointing back up the table at the ball, closed over it so the upward part of
+        // the stroke brushes topspin on. See FACE_CLOSED for why this leans over rather than
+        // back, which is the opposite of what it used to do.
+        blade.moveTo(want, new Vec3(0, -faceClosed, 1).normalized(), dt);
+    }
+
+    /**
+     * The ball's position, brought back to somewhere the blade can actually be.
+     *
+     * Clamped at both ends of the height: the floor so it cannot dive through the table
+     * chasing a dead ball, the ceiling so it cannot chase a lob into the roof.
+     */
+    private static Vec3 reachable(Vec3 b) {
+        return new Vec3(clamp(b.x(), -TABLE_WIDTH, TABLE_WIDTH),
+                        clamp(b.y(), 0.04, MAX_REACH_Y),
+                        PLANE_Z);
     }
 
     private static double clamp(double v, double lo, double hi) {

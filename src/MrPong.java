@@ -2,13 +2,19 @@ import javafx.animation.AnimationTimer;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.embed.swing.SwingFXUtils;
+import javafx.geometry.Point2D;
 import javafx.scene.*;
 import javafx.scene.image.WritableImage;
 import javafx.scene.input.KeyCode;
+import javafx.scene.input.MouseButton;
+import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
 import javafx.stage.Stage;
 import physics.*;
+import play.Follower;
+import play.Opponent;
+import play.Stroke;
 import render.*;
 
 import javax.imageio.ImageIO;
@@ -21,26 +27,26 @@ import static physics.Constants.DT;
 import static physics.Constants.MAX_FRAME;
 
 /**
- * Mr. Pong - Checkpoint 1, the physics demo.
+ * Mr. Pong - a 3D table tennis game.
  *
- * Target for 27 August, from the project contract: "The ball flying with spin, curving in the
- * air, and bouncing right off the table and net. Not a game yet, just the physics running on
- * screen."
+ * Checkpoint 1 (27 August) was the physics on its own: a ball flying with spin, curving in the
+ * air, bouncing off the table and dying in the net. That still runs, and the ghost trail and
+ * camera presets that made the curve visible are still here.
  *
- * So there is no paddle, no opponent and no score here on purpose. What there is:
+ * This is checkpoint 2, the playable half. What it adds:
  *
- *   - a ball with real drag and a real Magnus force, integrated with RK4 at a fixed step
- *   - bounces that couple spin and velocity through a friction impulse, so topspin kicks
- *     forward off the table and backspin checks up
- *   - a net that kills a ball instead of reflecting it
- *   - in/out detection against the actual ITTF table dimensions
- *   - a menu of shots that differ mainly in their spin, so the difference on screen is
- *     attributable to the spin and nothing else
- *   - a grey ghost trail: the SAME shot with the spin deleted, flown alongside, which turns
- *     "it curves" from a claim into a visible gap
+ *   - a racket on the near end that follows the mouse, and one at the far end played by the AI
+ *   - a charge-and-release stroke: hold the right button to wind up, drag to choose the
+ *     direction you will swing through, let go to hit
+ *   - spin that comes out of the CONTACT rather than out of a table of shot types. Nothing
+ *     here tells the ball how fast to leave or how much spin to carry; the solver measures the
+ *     blade's own velocity and the tilt of its face, and the shot falls out of that
  *
- * The physics itself lives in the physics package and does not import JavaFX, so it can be
- * checked headlessly. Run physics.SelfTest for that.
+ * Still missing, and deliberately next rather than now: serving and scoring.
+ *
+ * The physics lives in the physics package and the game logic in play, and neither imports
+ * JavaFX -- so both can be checked headlessly, and neither can accidentally start depending on
+ * the frame rate. Run physics.SelfTest and play.RallyTest for that.
  */
 public class MrPong extends Application {
 
@@ -48,6 +54,23 @@ public class MrPong extends Application {
 
     private final World world = new World();
     private Shots currentShot = Shots.byName("Topspin loop");
+
+    /**
+     * The two rackets.
+     *
+     * Both are KINEMATIC: nothing pushes them around, and neither one tells the ball anything.
+     * A racket is moved to a pose each step and Paddle works out the velocity it must have had
+     * to get there, which is the velocity the contact solver strikes the ball with. That is
+     * why they are advanced per PHYSICS STEP below and never per frame -- driven at the frame
+     * rate, a slow machine would swing the same stroke harder.
+     */
+    private final Paddle playerPaddle =
+            new Paddle(new Vec3(0, 0.25, MouseAim.PLAYER_PLANE_Z), new Vec3(0, 0, -1));
+    private final Paddle aiPaddle =
+            new Paddle(new Vec3(0, 0.20, Follower.PLANE_Z), new Vec3(0, 0, 1));
+
+    private final Stroke stroke = new Stroke(new Vec3(0, 0.25, MouseAim.PLAYER_PLANE_Z));
+    private final Opponent opponent = new Follower();
 
     /**
      * Leftover time not yet consumed by a whole physics step.
@@ -62,7 +85,6 @@ public class MrPong extends Application {
     private double timeScale = 1.0;
     private boolean paused = false;
     private int singleSteps = 0;
-    private int stepsLastFrame = 0;
     private double fps = 0;
 
     // ------------------------------------------------------------------ view
@@ -78,6 +100,33 @@ public class MrPong extends Application {
     private final BounceMarks marks = new BounceMarks(24);
     private final CameraRig rig = new CameraRig();
     private final Hud hud = new Hud();
+
+    // Red rubber on the -normal side of both rackets. The player's blade faces down the table,
+    // so its red side looks back at the camera; the opponent's faces the other way, so we see
+    // its black side. The two never read as the same object from the player's viewpoint.
+    private final PaddleView playerView = new PaddleView(false);
+    private final PaddleView aiView = new PaddleView(false);
+
+    /**
+     * The racket poses at the START of the last physics step.
+     *
+     * Held so the rackets can be interpolated across a frame with the same alpha as the ball,
+     * for the same reason the ball needs it: at 480 Hz against a 60 Hz display the two rates
+     * never line up, and a blade snapped to the raw state stutters exactly when it is moving
+     * fastest and being watched hardest. Paddle.Blade is already precisely a frozen pose.
+     */
+    private Paddle.Blade prevPlayerPose = playerPaddle.collider();
+    private Paddle.Blade prevAiPose = aiPaddle.collider();
+
+    /**
+     * Where the cursor last pointed on the hitting plane, or null before the mouse has moved
+     * over the window.
+     *
+     * Sampled in the event handler and CONSUMED in advanceOne(). Never used straight from the
+     * handler: mouse events arrive once a frame and the stroke is advanced once a step, so
+     * moving the blade from the handler would be driving the physics at the frame rate.
+     */
+    private Vec3 pendingAim = null;
 
     private final Deque<Vec3> trailPoints = new ArrayDeque<>();
     private int stepsSinceTrailPoint = 0;
@@ -116,7 +165,7 @@ public class MrPong extends Application {
      *
      * Without this the demo dies quietly: the interesting second is over, the ball rolls away
      * across the floor, and what is left on screen is an empty table. Since this is meant to
-     * be left running in front of someone, the shot loops.
+     * be left running in front of someone, the feed loops.
      */
     private double replayAt = Double.NaN;
 
@@ -132,11 +181,17 @@ public class MrPong extends Application {
     public void start(Stage stage) {
         parseArgs();
 
+        // Hand the world its rackets. World.predict deliberately never does this -- a
+        // prediction that gets intercepted is a prediction of nothing.
+        world.setPaddles(playerPaddle, aiPaddle);
+
         Group world3d = new Group(
                 Court.build(),
                 marks.node(),
                 ghost.node(),
                 trail.node(),
+                aiView.node(),
+                playerView.node(),
                 ball.node(),
                 lighting());
 
@@ -146,6 +201,7 @@ public class MrPong extends Application {
         sub.setFill(Color.web("#0b0e13"));
         sub.setCamera(rig.camera());
         rig.attachControls(sub);
+        attachStrokeControls(sub);
 
         StackPane layers = new StackPane(sub, hud.node());
         Scene scene = new Scene(layers, 1280, 780, Color.web("#0b0e13"));
@@ -157,7 +213,7 @@ public class MrPong extends Application {
         scene.setOnKeyPressed(e -> onKey(e.getCode()));
 
         stage.setScene(scene);
-        stage.setTitle("Mr. Pong - physics demo (checkpoint 1)");
+        stage.setTitle("Mr. Pong");
         stage.show();
         sub.requestFocus();
 
@@ -192,8 +248,6 @@ public class MrPong extends Application {
     }
 
     private void stepPhysics(double frameSeconds) {
-        stepsLastFrame = 0;
-
         if (paused) {
             // Single-stepping still goes through the same fixed step, so a frame examined
             // while paused is identical to the one that would have been produced live.
@@ -204,11 +258,12 @@ public class MrPong extends Application {
             return;
         }
 
+        int steps = 0;
         accumulator += frameSeconds * timeScale;
         while (accumulator >= DT) {
             advanceOne();
             accumulator -= DT;
-            if (++stepsLastFrame > 4000) { accumulator = 0; break; }   // hard safety stop
+            if (++steps > 4000) { accumulator = 0; break; }        // hard safety stop
 
             if (!Double.isNaN(replayAt) && world.time() >= replayAt) {
                 launchShot(currentShot);
@@ -217,7 +272,22 @@ public class MrPong extends Application {
         }
     }
 
+    /**
+     * One physics step: move both rackets, then let the world resolve what that did.
+     *
+     * The order is the point. Both blades are posed for the step BEFORE the step runs, so the
+     * velocity the contact solver sees is the one the blade actually had while the ball was
+     * arriving. Posing them afterwards would hit the ball with the previous step's swing.
+     */
     private void advanceOne() {
+        // Freeze the poses the rackets are about to leave, for render() to interpolate from.
+        prevPlayerPose = playerPaddle.collider();
+        prevAiPose = aiPaddle.collider();
+
+        if (pendingAim != null) stroke.aimAt(pendingAim);
+        stroke.advance(playerPaddle, DT);
+        opponent.advance(world.state(), aiPaddle, DT);
+
         world.step();
 
         // The rally is over in one of two ways: the ball has dropped past the table and is
@@ -254,6 +324,11 @@ public class MrPong extends Application {
 
         ball.update(shown);
 
+        // The same alpha, so the blade and the ball never disagree about where they are at
+        // the instant of contact -- which is the one frame anybody is looking closely at.
+        drawPaddle(playerView, prevPlayerPose, playerPaddle, alpha);
+        drawPaddle(aiView, prevAiPose, aiPaddle, alpha);
+
         // The deque is handed over as-is. Copying it built a fresh 300-element list every
         // frame to describe a path that only changes by one point every other physics step.
         if (showTrail) trail.setPath(trailPoints);
@@ -265,10 +340,20 @@ public class MrPong extends Application {
             marks.setMarks(world.bounceMarks());
         }
 
-        if (showHud) {
-            hud.update(world, shown, currentShot, timeScale, paused, fps, stepsLastFrame,
-                       ball.isMagnified(), rig.view().label(), showGhost);
-        }
+        hud.setCharge(stroke.charge(), stroke.phase() == Stroke.Phase.CHARGING);
+    }
+
+    /**
+     * Draw a racket interpolated between its last two poses.
+     *
+     * The normal is lerped and renormalised rather than slerped. A blade turns by well under a
+     * degree in one 1/480 s step, and over an angle that small the two agree to parts in a
+     * million -- this is not the ball's orientation, which tumbles fast enough to need the
+     * real thing.
+     */
+    private static void drawPaddle(PaddleView view, Paddle.Blade from, Paddle to, double alpha) {
+        view.update(Vec3.lerp(from.centre(), to.pos(), alpha),
+                    Vec3.lerp(from.normal(), to.normal(), alpha).normalized());
     }
 
     private Group lighting() {
@@ -283,32 +368,51 @@ public class MrPong extends Application {
         return new Group(key, fill, new AmbientLight(Color.gray(0.32)));
     }
 
-    // ------------------------------------------------------------------ shots
+    // ------------------------------------------------------------------ input
 
-    private void launchShot(Shots shot) {
-        currentShot = shot;
-        world.launch(shot.state());
+    /**
+     * Mouse control of the player's racket.
+     *
+     * Three gestures on three separate signals, which is exactly why CameraRig had to be
+     * narrowed to the left button: bare movement aims, the right button charges and swings,
+     * and the left button orbits the camera. MOUSE_MOVED was entirely unused before this.
+     *
+     * addEventHandler throughout. setOnMouseMoved and friends are single-slot properties, so
+     * assigning one here would silently unhook the camera orbit that CameraRig just installed
+     * on this same SubScene.
+     */
+    private void attachStrokeControls(SubScene sub) {
+        sub.addEventHandler(MouseEvent.MOUSE_MOVED, e -> aim(sub, e));
 
-        accumulator = 0;
-        replayAt = Double.NaN;
-        stepsSinceTrailPoint = 0;
-        shownMarks = 0;
-        trailPoints.clear();
-        trail.clear();
-        marks.clear();
+        sub.addEventHandler(MouseEvent.MOUSE_PRESSED, e -> {
+            if (e.getButton() != MouseButton.SECONDARY) return;
+            aim(sub, e);            // press where the cursor IS, not where it last moved
+            stroke.press();
+        });
 
-        // The comparison ghost: identical launch, spin deleted. Predicted once, up front,
-        // because it never changes and re-simulating it every frame would be pure waste.
-        // Sampled at the SAME stride as the live trail and run for exactly as long as the
-        // trail can hold, so the two paths are comparable dot for dot and both start at the
-        // moment of launch.
-        List<Vec3> ghostPath = World.predict(shot.withoutSpin(),
-                TRAIL_DOTS * TRAIL_STRIDE * DT, TRAIL_STRIDE);
-        ghost.setPath(ghostPath);
-        ghost.setShown(showGhost && shot.state().spinRate() > 1e-6);
+        // Dragging with the right button down IS the backswing. It keeps aiming, and Stroke
+        // reads the drag since the press as the direction the swing will travel through.
+        sub.addEventHandler(MouseEvent.MOUSE_DRAGGED, e -> {
+            if (e.isSecondaryButtonDown()) aim(sub, e);
+        });
+
+        sub.addEventHandler(MouseEvent.MOUSE_RELEASED, e -> {
+            if (e.getButton() == MouseButton.SECONDARY) stroke.release();
+        });
     }
 
-    // ------------------------------------------------------------------ input
+    /**
+     * Sample the cursor onto the hitting plane and park it in a field for advanceOne().
+     *
+     * sceneToLocal, not getX/getY. This handler sits on the SubScene, but the events are
+     * targeted at the 3D nodes inside it and carry coordinates belonging to whatever was
+     * picked. Scene coordinates are the one frame both ends agree on.
+     */
+    private void aim(SubScene sub, MouseEvent e) {
+        Point2D p = sub.sceneToLocal(e.getSceneX(), e.getSceneY());
+        Vec3 fallback = pendingAim != null ? pendingAim : playerPaddle.pos();
+        pendingAim = MouseAim.onPlayerPlane(sub, p.getX(), p.getY(), fallback);
+    }
 
     private void onKey(KeyCode code) {
         switch (code) {
@@ -359,6 +463,41 @@ public class MrPong extends Application {
             if (Shots.ALL[k] == currentShot) { i = k; break; }
         }
         return Shots.byIndex(i + delta);
+    }
+
+    // ------------------------------------------------------------------ feeds
+
+    /**
+     * Put a ball in play.
+     *
+     * Not a serve -- serving is the next piece of work. This is a feed: the ball appears just
+     * behind the near end travelling down the table, as though the player had struck it, and
+     * the opponent answers it. The player's racket is left exactly where it is, because the
+     * hitting plane sits BEHIND every feed's launch point (see MouseAim.PLAYER_PLANE_Z) and
+     * the ball therefore flies away from the blade rather than into it.
+     */
+    private void launchShot(Shots shot) {
+        currentShot = shot;
+        world.launch(shot.state());
+        hud.setFeed(shot.name());
+
+        accumulator = 0;
+        replayAt = Double.NaN;
+        stepsSinceTrailPoint = 0;
+        shownMarks = 0;
+        trailPoints.clear();
+        trail.clear();
+        marks.clear();
+
+        // The comparison ghost: identical launch, spin deleted. Predicted once, up front,
+        // because it never changes and re-simulating it every frame would be pure waste.
+        // Sampled at the SAME stride as the live trail and run for exactly as long as the
+        // trail can hold, so the two paths are comparable dot for dot and both start at the
+        // moment of launch.
+        List<Vec3> ghostPath = World.predict(shot.withoutSpin(),
+                TRAIL_DOTS * TRAIL_STRIDE * DT, TRAIL_STRIDE);
+        ghost.setPath(ghostPath);
+        ghost.setShown(showGhost && shot.state().spinRate() > 1e-6);
     }
 
     // ------------------------------------------------------------------ screenshot mode

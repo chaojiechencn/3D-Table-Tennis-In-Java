@@ -3,6 +3,8 @@ package render;
 import javafx.scene.Group;
 import javafx.scene.PerspectiveCamera;
 import javafx.scene.SubScene;
+import javafx.scene.input.MouseEvent;
+import javafx.scene.input.ScrollEvent;
 import javafx.scene.transform.Rotate;
 
 import static render.Xform.SPM;
@@ -105,22 +107,34 @@ public final class CameraRig {
         camera.setTranslateZ(-distance * SPM);
     }
 
-    /** Wire mouse orbit and scroll zoom onto the SubScene showing this camera. */
+    /**
+     * Wire mouse orbit and scroll zoom onto the SubScene showing this camera.
+     *
+     * LEFT button only. This used to filter on no button at all, so ANY drag orbited -- which
+     * collides head-on with holding the right button to charge a stroke: winding up a shot
+     * span the camera at the same time.
+     *
+     * addEventHandler, not setOnMouseDragged. Those are single-slot properties, and MrPong
+     * has to put its own aiming and stroke handlers on this same SubScene; whichever assigned
+     * second would silently unhook the other.
+     */
     public void attachControls(SubScene sub) {
         final double[] anchor = new double[2];
 
-        sub.setOnMousePressed(e -> {
+        sub.addEventHandler(MouseEvent.MOUSE_PRESSED, e -> {
+            if (!e.isPrimaryButtonDown()) return;
             anchor[0] = e.getSceneX();
             anchor[1] = e.getSceneY();
         });
-        sub.setOnMouseDragged(e -> {
+        sub.addEventHandler(MouseEvent.MOUSE_DRAGGED, e -> {
+            if (!e.isPrimaryButtonDown()) return;
             double dx = e.getSceneX() - anchor[0];
             double dy = e.getSceneY() - anchor[1];
             anchor[0] = e.getSceneX();
             anchor[1] = e.getSceneY();
             orbit(-dx * 0.3, dy * 0.3);
         });
-        sub.setOnScroll(e -> zoom(e.getDeltaY() > 0 ? 0.92 : 1.087));
+        sub.addEventHandler(ScrollEvent.SCROLL, e -> zoom(e.getDeltaY() > 0 ? 0.92 : 1.087));
     }
 
     private static double clamp(double v, double lo, double hi) {

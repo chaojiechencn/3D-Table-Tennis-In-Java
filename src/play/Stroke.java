@@ -59,6 +59,24 @@ public final class Stroke {
      */
     private static final double FACE_CLOSE = 0.55;
 
+    /**
+     * How fast the blade may chase the cursor while it is NOT swinging, m/s.
+     *
+     * This exists because of a sampling mismatch, not for feel. The mouse is sampled once a
+     * FRAME and the blade is advanced once a STEP -- eight steps per frame at 60 Hz. Handing
+     * the blade straight to the cursor point makes it cover a whole frame of mouse travel
+     * inside a single 1/480 s step, and Paddle measures velocity by differencing its own pose:
+     * a 30 cm flick reads as 144 m/s and sends the ball out at nearly 300. The mouse took a
+     * frame to travel that far, so the blade has to take one too.
+     *
+     * TUNED: 8 m/s stands in for the speed a player carries the bat around at between strokes.
+     * What matters is where it sits relative to the two ends -- above ordinary aiming, so
+     * tracking still feels one-to-one, and well below the 12.4 and 17.8 m/s measured SWING
+     * speeds, so flicking the mouse can never out-hit a charged stroke. RallyTest asserts
+     * both halves of that.
+     */
+    public static final double TRACK_SPEED = 8.0;
+
     /** Default stroke if the player charges without moving the mouse: a standard loop. */
     private static final Vec3 DEFAULT_STROKE =
             new Vec3(0, Math.sin(Math.toRadians(30)), -Math.cos(Math.toRadians(30)));
@@ -69,7 +87,22 @@ public final class Stroke {
     private Vec3 strokeDir = DEFAULT_STROKE;
     private double charge;
     private double swungFor;
-    private Vec3 swingOrigin = Vec3.ZERO;
+
+    /**
+     * Where the forward swing starts from, or null until the first step of one.
+     *
+     * Null rather than computed in release() for a reason that only shows up at low charge.
+     * It used to be set to {@code target - strokeDir * swingLength/2}, which is exactly where
+     * the backswing has drawn the blade to at FULL charge -- but the backswing draws back by
+     * DRAW_BACK*charge while the swing is sized by max(0.15, charge), so below 15% charge the
+     * two disagree and the blade teleported up to 7.5 cm backwards on the first step of the
+     * swing. Paddle differences its own pose, so that read as 36 m/s, in the one phase that
+     * is deliberately not speed-limited. A tap of the button was the hardest hit in the game.
+     *
+     * Taking it from the blade is also the more honest model: a stroke carries on from where
+     * the backswing left the bat.
+     */
+    private Vec3 swingOrigin;
     private double swingLength;
 
     public Stroke(Vec3 restingAt) {
@@ -93,11 +126,15 @@ public final class Stroke {
         phase = Phase.SWINGING;
         swungFor = 0;
         swingLength = SWING_LENGTH * Math.max(0.15, charge);
-        // Start the blade drawn back so the swing sweeps THROUGH the cursor rather than
-        // launching away from it. The cursor point ends up at the middle of the stroke, which
-        // is where the blade is travelling fastest -- so aiming at the ball and aiming at
-        // maximum speed are the same act.
-        swingOrigin = target.plusScaled(strokeDir, -swingLength / 2);
+
+        // The blade is already drawn back, so the swing sweeps THROUGH the cursor rather than
+        // launching away from it: the backswing sits DRAW_BACK*charge behind the target and
+        // the stroke travels further than that, so it always passes the point being aimed at,
+        // and it passes it near the middle of the stroke where the blade is fastest. Aiming
+        // at the ball and aiming at maximum speed are the same act.
+        //
+        // Where it starts is taken from the blade on the first step -- see swingOrigin.
+        swingOrigin = null;
     }
 
     public Phase phase()  { return phase; }
@@ -110,6 +147,7 @@ public final class Stroke {
      *           and that velocity is what the ball is struck with
      */
     public void advance(Paddle blade, double dt) {
+        Phase was = phase;
         Vec3 pos;
 
         switch (phase) {
@@ -125,6 +163,7 @@ public final class Stroke {
                 pos = target.plusScaled(strokeDir, -DRAW_BACK * charge);
             }
             case SWINGING -> {
+                if (swingOrigin == null) swingOrigin = blade.pos();
                 swungFor += dt;
                 double t = Math.min(1, swungFor / SWING_TIME);
 
@@ -144,7 +183,21 @@ public final class Stroke {
             default -> pos = target;
         }
 
+        // Hold the cursor-chasing phases to a human tracking speed. The swing itself is left
+        // alone: its half-sine profile is already a physical velocity, and clamping it would
+        // quietly cap how hard a charged stroke can hit. Tested against the phase on ENTRY,
+        // because the swing sets itself back to IDLE on its final step and that step's
+        // displacement is still part of the swing.
+        if (was != Phase.SWINGING) pos = towards(blade.pos(), pos, TRACK_SPEED * dt);
+
         blade.moveTo(pos, faceFor(strokeDir), dt);
+    }
+
+    /** Move from {@code from} toward {@code to}, by at most {@code maxStep}. */
+    private static Vec3 towards(Vec3 from, Vec3 to, double maxStep) {
+        Vec3 step = to.minus(from);
+        double len = step.length();
+        return len <= maxStep ? to : from.plusScaled(step.scale(1.0 / len), maxStep);
     }
 
     /**

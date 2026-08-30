@@ -218,11 +218,17 @@ public final class World {
         BallState before = from, current = to;
         double stepLeft = DT;
 
+        // Built ONCE, outside the pass loop. The rackets are kinematic and do not move while
+        // a step is being resolved, so re-asking for them each pass rebuilt the list up to
+        // eight times a step and handed out a fresh Blade snapshot every time -- against the
+        // promise in Blade's own doc that the solver gets consistent answers from one pose.
+        Surface[] all = surfaces();
+
         for (int pass = 0; pass < 8; pass++) {
             Surface hitSurface = null;
             Contacts.Contact earliest = null;
 
-            for (Surface s : surfaces()) {
+            for (Surface s : all) {
                 Contacts.Contact c = Contacts.detect(before, current, s.shape());
                 if (c != null && (earliest == null || c.toi() < earliest.toi())) {
                     earliest = c;

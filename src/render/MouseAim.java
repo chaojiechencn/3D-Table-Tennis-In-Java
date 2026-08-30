@@ -26,11 +26,21 @@ public final class MouseAim {
     /**
      * Where the player's paddle lives, in metres: just behind the near end of the table.
      *
-     * The near edge is at z = +1.37, so this sits 12 cm behind it -- close enough to reach a
+     * The near edge is at z = +1.37, so this sits 20 cm behind it -- close enough to reach a
      * ball that has crossed the end line, far enough back that the blade is not permanently
      * inside the table.
+     *
+     * It was 12 cm, and 12 cm is wrong for a specific reason worth recording. The demo's feed
+     * shots launch from z = 1.52 (Shots.FROM), so a plane at 1.49 sat directly in FRONT of
+     * them: every feed crossed it on its first step and rebounded off the player's own bat
+     * before it had gone anywhere. At 1.57 the plane is BEHIND the launch point, so a feed
+     * flies away from the blade instead of into it -- the ball's centre starts 5.0 cm off the
+     * plane against the 2.75 cm (half blade thickness + ball radius) it takes to touch.
+     *
+     * The extra 8 cm costs about 8 ms of flight and a centimetre of drop on a 10 m/s return,
+     * which is nothing against the 83 cm of height the blade is allowed to cover.
      */
-    public static final double PLAYER_PLANE_Z = TABLE_LENGTH / 2 + 0.12;
+    public static final double PLAYER_PLANE_Z = TABLE_LENGTH / 2 + 0.20;
 
     /** How far the blade may stray, so a wild mouse cannot park the paddle in the ceiling. */
     private static final double MAX_X = TABLE_WIDTH / 2 + 0.45;
