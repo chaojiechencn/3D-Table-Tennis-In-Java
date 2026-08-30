@@ -1,5 +1,6 @@
 package physics;
 
+import physics.Constants.Material;
 import physics.Contacts.Box;
 import physics.Contacts.Hit;
 
@@ -34,10 +35,22 @@ public final class World {
             0, NET_HEIGHT / 2, 0,
             NET_WIDTH, NET_HEIGHT, NET_THICK);
 
-    /** The floor, 76 cm below the playing surface. Big enough that a ball never runs off it. */
+    /**
+     * The floor, 76 cm below the playing surface.
+     *
+     * 120 m across, which sounds absurd until you work out how far a table tennis ball
+     * actually rolls. Once it is rolling, the only things slowing it are quadratic drag and
+     * rolling resistance, and drag gives distance = ln(v0/v)/k with k = 0.5*rho*A*Cd/m ~
+     * 0.114 /m -- so a ball that starts rolling at 5 m/s covers about 17 m before it is down
+     * to walking pace, and something over 20 m before it stops. The old 40 m slab was
+     * narrower than that, so a missed ball reached the rim and fell off the edge of the world.
+     *
+     * This is a bounds convenience, not a real object -- the floor you can SEE is 14 x 16 m
+     * (Court.floor). Nothing here is load bearing except being wider than the ball can roll.
+     */
     public static final Box FLOOR = Box.centered(
             0, -TABLE_HEIGHT - 0.5, 0,
-            40, 1.0, 40);
+            120, 1.0, 120);
 
     // ------------------------------------------------------------------ events
 
@@ -45,7 +58,8 @@ public final class World {
         /** Landed on the playing surface. */          TABLE_BOUNCE,
         /** Clipped or was killed by the net. */       NET,
         /** Hit the floor. */                          FLOOR,
-        /** Passed the plane of the table top outside the playing surface. */ OUT_OF_BOUNDS
+        /** Passed the plane of the table top outside the playing surface. */ OUT_OF_BOUNDS,
+        /** Struck by a paddle. */                    PADDLE_HIT
     }
 
     /**
@@ -59,6 +73,7 @@ public final class World {
                 case NET -> "net";
                 case FLOOR -> "floor";
                 case OUT_OF_BOUNDS -> "out";
+                case PADDLE_HIT -> (side < 0 ? "player" : "opponent") + " hit";
             };
         }
     }
@@ -72,6 +87,30 @@ public final class World {
     private double apex;
     private int tableBounces;
     private boolean outReported;
+
+    /**
+     * Total table bounces since the World was created, never reset.
+     *
+     * {@code tableBounces} is a per-STROKE count -- it resets on every paddle contact so the
+     * in/out rules can be applied to each shot in a rally rather than once per rally. That
+     * makes it useless as a "has anything landed since I last looked?" flag for the renderer,
+     * which is what this is for.
+     */
+    private int bounceSerial;
+
+    /**
+     * The two rackets, or null in a world that has none.
+     *
+     * Null is not laziness -- World.predict builds a private World to fly a trajectory
+     * forward, and a prediction that gets intercepted by a paddle is not a prediction of
+     * anything. A paddle-free world is the honest tool for asking "where would this ball go
+     * if nothing touched it".
+     */
+    private Paddle player;
+    private Paddle opponent;
+
+    /** Count of paddle contacts, so a caller can tell when a stroke has happened. */
+    private int paddleHits;
 
     /**
      * Bounces slower than this are real but not worth reporting. A ball settling on the table
@@ -99,6 +138,7 @@ public final class World {
         apex = s.pos().y();
         tableBounces = 0;
         outReported = false;
+        paddleHits = 0;
         events.clear();
         bounceMarks.clear();
     }
@@ -130,48 +170,138 @@ public final class World {
         }
     }
 
+    /** One surface the ball can hit, paired with what it is made of. */
+    private record Surface(Collider shape, Material material, EventType event) {}
+
     /**
-     * Resolve against all three surfaces, repeating until nothing more is touching.
+     * Every surface in play, in no particular order -- the order stopped mattering when
+     * resolution became time-ordered.
+     */
+    private Surface[] surfaces() {
+        if (player == null && opponent == null) {
+            return new Surface[] {
+                    new Surface(NET,   NET_MAT,   EventType.NET),
+                    new Surface(TABLE, TABLE_MAT, EventType.TABLE_BOUNCE),
+                    new Surface(FLOOR, FLOOR_MAT, EventType.FLOOR),
+            };
+        }
+        List<Surface> all = new ArrayList<>(5);
+        all.add(new Surface(NET,   NET_MAT,   EventType.NET));
+        all.add(new Surface(TABLE, TABLE_MAT, EventType.TABLE_BOUNCE));
+        all.add(new Surface(FLOOR, FLOOR_MAT, EventType.FLOOR));
+        if (player != null)   all.add(new Surface(player.collider(),   RACKET_MAT, EventType.PADDLE_HIT));
+        if (opponent != null) all.add(new Surface(opponent.collider(), RACKET_MAT, EventType.PADDLE_HIT));
+        return all.toArray(new Surface[0]);
+    }
+
+    /**
+     * Resolve contacts, earliest first, repeating until nothing more is touching.
      *
      * The loop matters for the net: a ball that clips the cord can be pushed down into the
      * table in the same step, and resolving only once would leave it embedded.
+     *
+     * Two things changed here when the paddle arrived, and both are corrections rather than
+     * additions:
+     *
+     * 1. It resolves the EARLIEST contact, not the first one in a fixed list. With three
+     *    static surfaces those were the same answer often enough to get away with. With a
+     *    paddle that can be over the table they are not: a ball touching both in one step
+     *    must bounce off whichever it reached first, or a smash into the paddle resolves as
+     *    a table bounce.
+     *
+     * 2. After a SWEPT contact it flies the rest of the step. The old code left the ball
+     *    parked at the contact point for the remaining (1-t)*DT, which at table speeds was
+     *    invisible and at paddle speeds is not: a blade caught at t=0.1 would drop the ball
+     *    90% of a step short of where it belongs.
      */
     private BallState resolveContacts(BallState from, BallState to) {
-        BallState current = to;
+        BallState before = from, current = to;
+        double stepLeft = DT;
 
-        for (int pass = 0; pass < 4; pass++) {
-            Hit net = Contacts.resolve(from, current, NET, NET_MAT);
-            if (net != null) {
-                current = net.state();
-                if (net.impactSpeed() > 0.05) {
-                    record(EventType.NET, net.point(), net.impactSpeed(), 0);
+        for (int pass = 0; pass < 8; pass++) {
+            Surface hitSurface = null;
+            Contacts.Contact earliest = null;
+
+            for (Surface s : surfaces()) {
+                Contacts.Contact c = Contacts.detect(before, current, s.shape());
+                if (c != null && (earliest == null || c.toi() < earliest.toi())) {
+                    earliest = c;
+                    hitSurface = s;
                 }
-                continue;
+            }
+            if (earliest == null) return current;
+
+            // Bounce the state the ball is actually IN at the moment of impact.
+            //
+            // A swept contact happens part way through the step, but the flown state carries
+            // the velocity from the END of it -- for a ball falling at 60 m/s that is a
+            // measurably faster ball than the one that touched the table. Reflecting the
+            // end-of-step velocity and then flying the remainder hands the ball free energy
+            // every bounce, which is exactly what the energy check is there to catch.
+            BallState atContact = current;
+            if (earliest.swept()) {
+                atContact = Integrator.step(before, stepLeft * earliest.toi());
             }
 
-            Hit table = Contacts.resolve(from, current, TABLE, TABLE_MAT);
-            if (table != null) {
-                current = table.state();
-                if (!table.resting() && table.impactSpeed() > LOGGABLE_BOUNCE) {
-                    tableBounces++;
-                    Vec3 p = table.point();
-                    record(EventType.TABLE_BOUNCE, p, table.impactSpeed(), p.z() < 0 ? 1 : -1);
-                    addMark(p);
-                }
-                continue;
-            }
+            Hit hit = Contacts.respond(atContact, hitSurface.shape(), earliest, hitSurface.material());
+            record(hitSurface, hit);
+            current = hit.state();
 
-            Hit floor = Contacts.resolve(from, current, FLOOR, FLOOR_MAT);
-            if (floor != null) {
-                current = floor.state();
-                if (!floor.resting() && floor.impactSpeed() > 0.4) {
-                    record(EventType.FLOOR, floor.point(), floor.impactSpeed(), 0);
-                }
-                continue;
-            }
-            break;
+            // An end-of-step overlap has already used the whole step, so there is nothing to
+            // fly. Keep looping against the same segment: a ball that clips the cord can be
+            // pushed down into the table in the same step, and it still has to bounce off it.
+            if (!earliest.swept()) continue;
+
+            // A swept contact happened part way through. Fly the rest of the step from there,
+            // and test the remainder as a fresh segment.
+            double left = stepLeft * (1.0 - earliest.toi());
+            if (left < 1e-9) continue;
+
+            before = current;
+            current = Integrator.step(current, left);
+            stepLeft = left;
         }
         return current;
+    }
+
+    /** Log a contact, at the reporting threshold that surface deserves. */
+    private void record(Surface s, Hit hit) {
+        switch (s.event()) {
+            case NET -> {
+                if (hit.impactSpeed() > 0.05) {
+                    record(EventType.NET, hit.point(), hit.impactSpeed(), 0);
+                }
+            }
+            case TABLE_BOUNCE -> {
+                if (!hit.resting() && hit.impactSpeed() > LOGGABLE_BOUNCE) {
+                    tableBounces++;
+                    bounceSerial++;
+                    Vec3 p = hit.point();
+                    record(EventType.TABLE_BOUNCE, p, hit.impactSpeed(), p.z() < 0 ? 1 : -1);
+                    addMark(p);
+                }
+            }
+            case FLOOR -> {
+                if (!hit.resting() && hit.impactSpeed() > 0.4) {
+                    record(EventType.FLOOR, hit.point(), hit.impactSpeed(), 0);
+                }
+            }
+            case PADDLE_HIT -> {
+                if (hit.impactSpeed() > 0.3) {
+                    paddleHits++;
+                    Vec3 p = hit.point();
+                    record(EventType.PADDLE_HIT, p, hit.impactSpeed(), p.z() < 0 ? 1 : -1);
+
+                    // A new stroke is a new shot, so the in/out rules start again. Without
+                    // this, out-of-bounds fires at most once per RALLY and gives up entirely
+                    // after the first bounce -- which means "the return sails long" is never
+                    // detected, and in a rally that is most of the calls there are.
+                    tableBounces = 0;
+                    outReported = false;
+                }
+            }
+            default -> { }
+        }
     }
 
     /**
@@ -228,6 +358,17 @@ public final class World {
     public double time()        { return time; }
     public double apex()        { return apex; }
     public int tableBounces()   { return tableBounces; }
+    public int bounceSerial()   { return bounceSerial; }
+    public int paddleHits()     { return paddleHits; }
+
+    public Paddle player()      { return player; }
+    public Paddle opponent()    { return opponent; }
+
+    /** Give this world its rackets. Passing null for both makes it a plain flight simulator. */
+    public void setPaddles(Paddle player, Paddle opponent) {
+        this.player = player;
+        this.opponent = opponent;
+    }
 
     public List<Event> events()    { return List.copyOf(events); }
     public Event lastEvent()       { return events.peekLast(); }
@@ -254,7 +395,7 @@ public final class World {
      */
     public static List<Vec3> predict(BallState start, double seconds, int stride) {
         List<Vec3> path = new ArrayList<>();
-        World w = new World();
+        World w = new World();       // deliberately paddle-free; see the field comment
         w.launch(start);
 
         int steps = (int) Math.round(seconds / DT);

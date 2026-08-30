@@ -21,12 +21,22 @@ public final class Integrator {
 
     /** Advance one fixed step of {@code dt}. Orientation is carried along for the renderer. */
     public static BallState step(BallState s, double dt) {
+        return step(s, dt, Aero.DEFAULT_DRAG);
+    }
+
+    /**
+     * Advance one step under a named drag law.
+     *
+     * SelfTest uses this to integrate against a CONSTANT coefficient, which is the only case
+     * with a closed-form solution to compare to. The game always uses the default.
+     */
+    public static BallState step(BallState s, double dt, Aero.DragModel drag) {
         Vec3 p = s.pos(), v = s.vel(), w = s.spin();
 
-        Derivative a = Aero.derivative(p, v, w);
-        Derivative b = sample(p, v, w, a, dt * 0.5);
-        Derivative c = sample(p, v, w, b, dt * 0.5);
-        Derivative d = sample(p, v, w, c, dt);
+        Derivative a = Aero.derivative(p, v, w, drag);
+        Derivative b = sample(p, v, w, a, dt * 0.5, drag);
+        Derivative c = sample(p, v, w, b, dt * 0.5, drag);
+        Derivative d = sample(p, v, w, c, dt, drag);
 
         Vec3 dPos  = weighted(a.dPos(),  b.dPos(),  c.dPos(),  d.dPos());
         Vec3 dVel  = weighted(a.dVel(),  b.dVel(),  c.dVel(),  d.dVel());
@@ -40,10 +50,12 @@ public final class Integrator {
     }
 
     /** Evaluate the derivative at an offset along a previous derivative estimate. */
-    private static Derivative sample(Vec3 p, Vec3 v, Vec3 w, Derivative d, double dt) {
+    private static Derivative sample(Vec3 p, Vec3 v, Vec3 w, Derivative d, double dt,
+                                     Aero.DragModel drag) {
         return Aero.derivative(p.plusScaled(d.dPos(), dt),
                                v.plusScaled(d.dVel(), dt),
-                               w.plusScaled(d.dSpin(), dt));
+                               w.plusScaled(d.dSpin(), dt),
+                               drag);
     }
 
     /** The RK4 weighting: (a + 2b + 2c + d)/6. */

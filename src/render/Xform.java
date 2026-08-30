@@ -43,6 +43,20 @@ public final class Xform {
         return new Point3D(x(v.x()), y(v.y()), z(v.z()));
     }
 
+    /**
+     * Scene space back to physics space.
+     *
+     * The only reason an inverse exists at all: a mouse position is a fact about the SCREEN,
+     * and driving a paddle with it means turning it back into metres. Doing that here keeps
+     * the class comment above true -- the conversion still happens in exactly one place, it
+     * just now runs in both directions. Nowhere else may divide by SPM.
+     *
+     * The map is its own inverse up to the scale, since diag(1,-1,-1) squares to the identity.
+     */
+    public static Vec3 toPhysics(Point3D p) {
+        return new Vec3(p.getX() / SPM, -p.getY() / SPM, -p.getZ() / SPM);
+    }
+
     /** Move a node to a point given in physics metres. */
     public static void place(Node node, Vec3 p) {
         node.setTranslateX(x(p.x()));

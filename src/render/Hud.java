@@ -84,7 +84,13 @@ public final class Hud {
             bounces    %6d        t %6.2f s""",
             v.length(), v.length() * 3.6,
             interp.spinRevsPerSec(), topRevs, sideRevs,
-            Aero.spinRatio(v, w), Aero.liftCoefficient(v, w), C_DRAG,
+            // C_d has to be asked for at THIS speed and spin. It used to be the constant
+            // C_DRAG, which is no longer what the game flies with -- C_DRAG survives only as
+            // the fixed-coefficient reference the closed-form checks need. Printing it here
+            // meant the readout confidently showed 0.400 whatever the simulation was actually
+            // doing, which is the exact opposite of what this panel is for.
+            Aero.spinRatio(v, w), Aero.liftCoefficient(v, w),
+            Aero.measuredDragCoefficient(v.length(), Aero.spinRatio(v, w)),
             magnus.length(), G,
             drag.length(),
             interp.pos().y(), world.apex(),
