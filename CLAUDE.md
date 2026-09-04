@@ -22,9 +22,10 @@ so the milestones below are commitments with dates, not a wishlist.
       `src/physics/`, `src/render/`, validated by `physics.SelfTest` (68 checks).
 - [ ] **Playable demo** — *Sep 17*. A full point against the AI: mouse control, spin, serving, scoring.
       **Part-built.** The physics is done and validated (`SelfTest` 101, `RallyTest` 7). Both
-      rackets are wired into `MrPong`, the near one follows the mouse and reaches in over the
-      table for the ball, and the game opens on a gentle serve with a two-view rally-cam at
-      0.45x. What holds a rally together is `play/ShotAssist` (below). Scoring is not started.
+      rackets are wired into `MrPong`, the near one follows the mouse and *only* the mouse
+      (see the Sep 4 entry below), and the game opens on a gentle serve with a two-view
+      rally-cam at 0.45x. What holds a rally together is `play/ShotAssist` (below). Scoring is
+      not started.
 
       *Design change (Sep 2):* two of them, and both move away from the contract's realistic
       model. (1) The charge-and-release stroke was pulled — the paddle just follows the cursor.
@@ -201,14 +202,14 @@ src/
     Shots.java           named launch presets, defined by intent and solved by Aim
     SelfTest.java        headless validation vs. published numbers
   play/                    game logic; plain Java, no javafx, so it can be tested headlessly
-    Stroke.java          the player's paddle: follows the cursor, reaches in for the ball
+    Stroke.java          the player's paddle: follows the cursor, and nothing else
     ShotAssist.java      arcade shot model: turns any racket contact into a playable shot
     Opponent.java        interface: look at the ball, move the blade, swing
     Follower.java        the current opponent - tracks the ball, unbeatable, does NOT predict
     RallyTest.java       headless validation of the opponent (second main, own run config)
   render/
     Xform.java           the ONLY physics<->scene conversion, now both directions
-    MouseAim.java        cursor -> ray -> point on the player's hitting plane (at the blade's z)
+    MouseAim.java        cursor -> ray -> point on the player's REACH SURFACE (depth included)
     Court.java           table, net (real mesh), floor, legs, ITTF markings
     BallView.java        ball + procedural chequer texture that makes spin visible
     PaddleView.java      blade, red/black rubber, handle
@@ -249,6 +250,13 @@ Rules that keep this from rotting:
     "first in the list" and "the one it actually hit first" stop being the same answer.
   - A swept contact **flies the rest of the step** afterwards, and bounces the velocity the ball had
     *at impact*, not at the end of the step. Skipping either hands the ball free energy every bounce.
+- **The ball never moves the player's paddle.** `Stroke` is handed a cursor point and a
+  timestep, and that is all — deliberately not a `BallState`, so the rule is enforced by the
+  signature rather than by discipline. Ball position, velocity and `World.predict` are for the
+  opponent, the renderer and the assist; none of them may reach the near blade. The blade DOES
+  move in depth -- it reaches in over the table -- but that depth comes from the cursor's aim
+  ray in `render/MouseAim`, which is geometry the player drives. That is the only shape a reach
+  may ever take here.
 - **Spin is core, not a bonus.** Magnus in flight, and spin transfer on table/paddle/net contact. It
   shapes the collision code, so design for it up front rather than bolting it on.
 - **The AI predicts, it does not follow — but the one in the repo right now follows.**
@@ -486,12 +494,129 @@ the blade parked mid-table and was out of position for everything.
 - **Face eased toward the ball** (`FACE_TAU`), **`Stroke.TRACK_SPEED` 8 → 13**, **`timeScale`
   0.45**, **default feed = `Serve`** (gentle no-spin corner to corner).
 
+## Sep 4 — the player's paddle no longer follows the ball
+
+Reported as a gameplay bug and fixed at the source: with the mouse completely still, the near
+blade was still moving, because `Stroke.advance` read the ball twice.
+
+- **Depth.** `wantZ` tracked the ball's own z within a reach band (`REACH_FWD` 1.2 m /
+  `REACH_BACK` 0.8 m) whenever the ball was on our side and approaching. The blade walked out
+  over the table to meet a short ball with no input at all.
+- **Face.** `faceToward` aimed the blade's normal at the ball, falling back to down-table only
+  once the ball was behind it. That is auto-aim: the face turned to track a ball the player had
+  not reacted to.
+
+Both are gone. `advance(Paddle, double)` no longer takes a `BallState` at all, so the rule is
+enforced by the signature. Measured: over every preset and a 30 m/s ball driven straight at it,
+with the cursor set once and then still, blade drift, face turn and blade speed are **exactly
+0**.
+
+### The reach came back as geometry — `render/MouseAim`
+
+Pinning the blade to a plane cost the two things the ball-driven reach had been paying for: the
+player could not dig out a short ball, and ShotAssist reads forward drive off the blade's z, so
+there was no pace axis left either. Both are back, off the cursor, in `MouseAim.onReachSurface`.
+
+The blade stands **where the cursor's own ray meets the table**, and falls back to the rest plane
+only when the ray is not pointing at the near half at all. Point at your own end line and the
+blade is where the fixed plane had it; slide the cursor up-table and it walks out over the table
+riding at blade height; keep going and it comes back, rising, for a high or deep ball. Measured
+through the real camera (`ReachProbe`, scratch), sweeping the cursor down the wide rally view:
+
+| cursor, top → bottom | blade |
+| --- | --- |
+| 0.02 – 0.40 | rest plane, height 1.40 m falling to 0.90 m |
+| 0.42 – 0.52 | reaching in: z 1.45 → 0.70, height 0.82 → 0.29 |
+| 0.60 – 0.72 | skimming the table at y = 0.075, z 0.76 → 1.43 |
+| 0.80 – 0.98 | rest plane, low — exactly the old home position |
+
+Three properties make this legitimate rather than a second auto-follow:
+
+- **It never reads the ball.** It is the cursor ray and the camera, and nothing else.
+- **Every point of it is under the cursor**, because the depth is chosen along the aim ray. That
+  is what makes any depth choice honest — the blade always appears where you point, so the only
+  question the depth rule answers is *how far along the ray*, which the player cannot see anyway.
+- **It is stateless.** Depth is solved from the ray, then x and y are read on the plane that
+  solve chose. Reading the cursor on the plane the blade currently occupies — which is what the
+  old code did — is a loop WITH GAIN once depth is cursor-derived: the blade creeps forward, the
+  ray reads lower on the plane it just moved to, and it creeps further, to full stretch. Do not
+  reintroduce that by "simplifying" the two intersections into one.
+
+Reaching in is an UP-screen gesture, and that is geometry, not a choice: from a camera behind the
+near end, a blade reaching in is further away and therefore higher on screen. The gesture is
+"point at the ball", and a short ball you have to reach for is up-screen.
+
+**Coverage, measured** (`CoverageProbe`, scratch — the real camera's surface against the
+follower's actual returns): all **10 of 10** returns pass within 3 mm of a point the cursor can
+put the blade on, met at z = +0.69 to +1.57. Under the pinned plane, `Serve` and `Cross-court
+loop` arrived below the table top and could not be played at all.
+
+### The shot goes where the player aims it — `play/ShotAssist`
+
+The other half of the same report: the ball came back to the middle of the table however you
+swiped. It was not a weak aim. It was that **the rescue path had quietly become the normal
+path**, and the rescue re-aims down the middle by construction.
+
+`minShotSpeed` (7 m/s) was the floor for the whole search, and a contact low over the table or
+behind the end line off a dropping ball has *no* legal answer at 7 m/s — the shot has to be
+lifted, and a lifted shot is slow. So the main search failed, and every such shot was rescued
+and centred. Measured before: `passes = 4` (rescued) on seven of eight test swings, target x
+= 0.00 on every one of them, landing 0.09 m off centre *against* the swipe.
+
+Three changes, all in `Tuning` except the last:
+
+- **`minSearchSpeed` (new, 3.0 m/s)** — the slowest the SEARCH may consider, as against
+  `minShotSpeed`, the slowest the swing may ASK for. They were the same number and should never
+  have been: the score still prefers the speed the swing asked for, so a slow candidate only
+  wins when the fast ones are illegal, which is exactly when it should.
+- **The main ladder caps each candidate at its own speed** (`constrain(v, toOpp, speed)`), the
+  way the rescue always has. Without it, `minForwardVelocity` re-inflates a slow shot and undoes
+  the solve that just found it.
+- **The rescue carries the player's aim** (`rescueAimFracs = {1.0, 0.6, 0.3, 0.0}`) instead of
+  hard-centring. It tries the full aim first and gives it up only if nothing there is legal, so
+  the guarantee is unchanged and the aim survives.
+- Aim authority raised to match: `aimInfluence` 0.115 → 0.16, `targetHalfWidthFrac` 0.60 → 0.75
+  (the box's corners were so far inside the table that a committed swipe still landed mid-court),
+  `maxHorizontalDeviationDeg` 15 → 20 (at 15 the cone overruled the aim before the validator saw
+  it; widening it cannot make a shot illegal — every candidate is still flown and graded).
+
+Measured after, same swings: **`passes = 0`** — the normal search wins. Swipe right lands at
+x = +0.36, swipe left at −0.36, a hard swipe at +0.44, out of a 0.76 m half-table. Driving in
+deepens the shot from z = −0.56 to −0.77 and adds pace. The follower gained from the same fix
+without being touched: its returns went from 4.3–7.4 m/s landing at z = +0.34…+1.00 to
+**5.5–7.4 m/s landing at +0.70…+1.00**, which is most of the way through the first "not done"
+item below.
+
+### The assist was costing more than a frame
+
+Found while measuring the above, and worth keeping because the shape of it is not obvious: one
+`assist()` call took **25.8 ms** — longer than the 16.7 ms frame it happens inside, on the frame
+a contact lands. It was never the flights. It was `Aim.atTarget`: 60 bisection halvings, each
+flying a whole trajectory, called once per candidate shot, a dozen-plus times per contact.
+
+- **`Aim.ITERATIONS` 60 → 28** (`physics/`). 60 halvings of an 80-degree bracket is the last bit
+  of a double; 28 is 5e-9 rad, which is 14 nanometres of landing position on a 2.7 m shot. Free
+  when it solved twelve presets at startup, not free once the assist calls it per contact.
+  SelfTest grades every preset through this solver and is unchanged at 101/101.
+- **The search stops at the first legal candidate** rather than finishing the pass. The speed
+  ladder already tries the asked-for pace first and alternates outward, so the first legal
+  candidate is the one that would have won on score anyway.
+- **`ShotAssist.VALIDATE_DT` = 1/120**, four times the game's step, for validation flights only.
+  RK4 error is O(h⁴), so that is 256x an error SelfTest measures in tenths of a millimetre over
+  three seconds — millimetres, against the 5 cm landing margin it feeds. Not to be taken coarser
+  without redoing that arithmetic.
+
+**25.8 → 11.9 ms**, and an ordinary contact is now 2–3 ms; the worst case measured (a cord-high
+ball at the net, which does go through the rescue) is 12.4 ms. Note that this is the second
+change to `physics/` since the assist landed — `World.setState` is no longer the only one, though
+`Aim.ITERATIONS` is a cost knob with no effect on any answer the model gives.
+
 **Not done, next:**
 
-1. **Make the follower's returns less passive.** Rallies hold indefinitely now, but most of its
-   returns come back at 4.3 m/s through the assist's rescue path, because it still meets the
-   ball low near its own baseline and no fast shot is legal from there. That is a stroke-quality
-   problem, and the real answer is the October opponent choosing its stroke from the ball.
+1. **Make the follower's returns less passive.** Better than it was — the search floor fix
+   pulled its returns out of the rescue path too — but it still meets the ball low near its own
+   baseline and picks its stroke from nothing. The real answer is still the October opponent
+   choosing its stroke from the ball.
 2. **Scoring.** The point-ending events already fire and reset the rally; nothing counts points
    or tracks serve/receive turns.
 3. **Serving for real** — the player serving off their own blade, not a `launchShot` feed.

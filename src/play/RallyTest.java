@@ -331,13 +331,9 @@ public final class RallyTest {
         // hand moves a mouse, and let the eight steps of one 60 Hz frame consume it.
         stroke.aimAt(start.plus(new Vec3(1.0, 0, 0)));
 
-        // A ball down the table heading away, so the reach and face logic have something sane
-        // to work with; the claim here is about blade SPEED, which does not depend on it.
-        BallState ball = BallState.at(new Vec3(0, 0.25, -0.5), new Vec3(0, 0, -8), Vec3.ZERO);
-
         double fastest = 0;
         for (int i = 0; i < 8; i++) {
-            stroke.advance(blade, ball, DT);
+            stroke.advance(blade, DT);
             fastest = Math.max(fastest, blade.vel().length());
         }
         check("a mouse flick cannot move the blade faster than a player carries a bat",

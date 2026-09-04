@@ -338,7 +338,7 @@ public class MrPong extends Application {
         prevAiPose = aiPaddle.collider();
 
         if (pendingAim != null) stroke.aimAt(pendingAim);
-        stroke.advance(playerPaddle, world.state(), DT);
+        stroke.advance(playerPaddle, DT);
         opponent.advance(world.state(), aiPaddle, DT);
 
         // The one-bounce rule: only the racket that is currently ALLOWED to hit is in the
@@ -532,10 +532,11 @@ public class MrPong extends Application {
     private void aim(SubScene sub, MouseEvent e) {
         Point2D p = sub.sceneToLocal(e.getSceneX(), e.getSceneY());
         Vec3 fallback = pendingAim != null ? pendingAim : playerPaddle.pos();
-        // Read the cursor on the plane the blade is CURRENTLY at -- it reaches in and out to
-        // meet the ball, and x/y measured on a stale plane would drift under camera parallax.
-        pendingAim = MouseAim.onPlayerPlane(sub, p.getX(), p.getY(),
-                                            playerPaddle.pos().z(), fallback);
+        // A point on the reach surface, depth included: pointing at the table in front of you
+        // walks the blade out over it. Solved from the cursor's ray alone -- the blade's own
+        // position is passed only as the fallback for a degenerate ray, never as an input, or
+        // the reach would feed back on itself (see MouseAim).
+        pendingAim = MouseAim.onReachSurface(sub, p.getX(), p.getY(), fallback);
     }
 
     private void onKey(KeyCode code) {

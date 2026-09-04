@@ -9,11 +9,12 @@ an AI opponent plays you for the point. Inspired by the mobile game *Ping Pong F
 
 ## Gameplay
 
-The paddle follows your mouse — the cursor sets where it is across and up the table, and it steps in
-over the table on its own to meet a short ball. How you move it through the ball aims the shot:
-**drive it forward** for pace and depth, **swipe it sideways** to send the ball that way (swipe
-right, ball goes right), **lift it** to loop the ball shorter and higher; a still paddle just
-blocks it back soft. The game then keeps that shot playable — the ball is aimed at a real spot
+The paddle follows your mouse, and only your mouse. Point at the table and the paddle goes
+there — including out over the table, low, for a short ball that has died in front of you; point
+higher up the table and it comes back to meet a deep or high one. How you move it through the ball
+aims the shot: **swipe it sideways** to send the ball that way (swipe right, ball goes right),
+**push it up-table through the ball** for pace and depth, **lift it** to loop the ball higher with
+more topspin, **drag it down** to cut under the ball; a still paddle just blocks it back soft. The game then keeps that shot playable — the ball is aimed at a real spot
 on the other side, and the shot is checked all the way to the bounce before it is played, so it
 clears the net and lands in rather than flying off the end. It is assisted, arcade-style, more
 *Ping Pong Fury* than a physics sim (though a full physics simulation runs underneath — see
@@ -40,7 +41,7 @@ hits it; between hits it flies for real.
 
 **Playable now**
 
-- Mouse-controlled paddle that reaches in over the table for the ball
+- Mouse-controlled paddle that reaches in over the table when YOU point it there
 - Assisted arcade shots — drive for pace, swipe to aim; the game keeps the ball in play
 - Rallies against the AI, with the one-bounce rule and points that end on a net / long / double bounce
 - A two-view rally-cam that cuts on who last hit, plus five preset views, slow motion, single-step
@@ -65,10 +66,12 @@ Once the game exists:
 
 | Input | Action |
 | --- | --- |
-| Mouse | Move the paddle (it reaches in over the table on its own) |
-| Drive the paddle forward through the ball | Pace and depth |
+| Mouse | Move the paddle — across, up, and in over the table |
+| Point further up the table | Reaches in for a short ball; point lower to come back |
 | Swipe the paddle sideways | Sends the ball that way — swipe right, ball goes right |
-| Lift the paddle up through the ball | Shorter, higher, more topspin |
+| Drive the paddle through the ball | Pace and depth |
+| Lift the paddle up through the ball | Higher, with more topspin |
+| Drag the paddle down through the ball | Cuts under it for backspin |
 | Still paddle | Soft block back |
 
 There is no button to press — the shot is entirely in the mouse movement.
