@@ -38,7 +38,20 @@ public final class Aim {
 
     private static final double MIN_ELEV = Math.toRadians(-35);
     private static final double MAX_ELEV = Math.toRadians(45);
-    private static final int ITERATIONS = 60;      // bisection to ~1e-17 rad; cheap enough
+    /**
+     * Bisection halvings of the elevation bracket.
+     *
+     * The bracket is 80 degrees wide, so 28 halvings resolve the launch angle to 1.4 rad / 2^28
+     * = 5e-9 rad -- five nanoradians, which over a 2.7 m shot is 14 nanometres of landing
+     * position. The ball is 40 mm across.
+     *
+     * It was 60, which bisects to the last bit of a double and is free when this only ever ran
+     * twelve times at startup to solve the shot presets. It is not free now: play/ShotAssist
+     * calls this for every candidate shot, a dozen or more on the frame a racket contact lands
+     * on, and each iteration flies a whole trajectory. Cutting the count less than halves the
+     * accuracy of anything that matters and more than halves the cost of a contact.
+     */
+    private static final int ITERATIONS = 28;
 
     /**
      * Build a spin vector from spin expressed the way a player would describe it, relative

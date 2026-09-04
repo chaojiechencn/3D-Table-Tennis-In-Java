@@ -79,8 +79,11 @@ public final class ShotAssist {
          *  diminishing returns, which is what makes a hard swing feel controlled. */
         public double swingCurve = 0.7;
 
-        /** How far a sideways swipe moves the aim, as a fraction of the target box per m/s. */
-        public double aimInfluence = 0.115;
+        /** How far a sideways swipe moves the aim, as a fraction of the target box per m/s.
+         *  0.16 puts a 6 m/s swipe on the edge of the box, which is a firm but ordinary sweep
+         *  of the mouse -- the point of the number is that a player who swipes ACROSS the ball
+         *  sees the ball go there, rather than seeing a hint of it. */
+        public double aimInfluence = 0.16;
 
         /** How much a forward drive deepens the target, per m/s. */
         public double depthInfluence = 0.045;
@@ -105,8 +108,12 @@ public final class ShotAssist {
         public double reflectionCap = 6.0;
 
         /** Hard ceiling on the sideways component of the finished shot. Both a cone (degrees
-         *  off straight) and an absolute m/s -- whichever binds first. */
-        public double maxHorizontalDeviationDeg = 15.0;
+         *  off straight) and an absolute m/s -- whichever binds first. 20 degrees is what it
+         *  takes to reach the corner of the widened target box from a contact behind the end
+         *  line; at 15 the clamp was quietly overruling the aim before the validator ever saw
+         *  it. Widening it cannot make a shot illegal on its own -- every candidate is still
+         *  flown and graded. */
+        public double maxHorizontalDeviationDeg = 20.0;
         public double maxLateralVelocity = 3.0;
 
         /** Launch elevation band. This is a SANITY GUARD, not a shaping tool -- Aim owns the
@@ -132,9 +139,30 @@ public final class ShotAssist {
         /** Always at least this much pace toward the opponent. */
         public double minForwardVelocity = 4.5;
 
+        /**
+         * The slowest shot the MAIN search may consider, m/s -- as opposed to minShotSpeed,
+         * which is the slowest the swing may ASK for.
+         *
+         * These have to be separate numbers. A contact low over the table, or behind the end
+         * line off a ball that has already dropped, has no legal answer at 7 m/s at all: the
+         * shot has to be lifted, and a lifted shot is slow. With the floor at minShotSpeed the
+         * whole search failed on those contacts and they fell through to the rescue -- which
+         * re-aims down the middle, so EVERY such shot came back to the centre of the table no
+         * matter where the player swiped. That was the bug: not that the aim was weak, but that
+         * the aim was being discarded by a fallback nobody expected to be the normal path.
+         *
+         * Letting the ladder go this low costs nothing in feel, because the score still prefers
+         * the speed the swing asked for -- a slow candidate only wins when the fast ones are
+         * illegal, which is exactly when it should.
+         */
+        public double minSearchSpeed = 3.0;
+
         /** The target box on the opponent's half, as fractions of half-width / half-length.
-         *  Chosen so a shot that lands on target is comfortably inside the lines. */
-        public double targetHalfWidthFrac = 0.60;
+         *  Chosen so a shot that lands on target is comfortably inside the lines: 0.75 of the
+         *  half-width is 0.57 m, leaving 19 cm of table outside the box for the solve to be
+         *  wrong by. It was 0.60, which put the corners of the box so far inside the table
+         *  that a fully committed swipe still landed mid-court. */
+        public double targetHalfWidthFrac = 0.75;
         public double targetDepthMinFrac = 0.32;
         public double targetDepthMaxFrac = 0.80;
 
@@ -154,14 +182,25 @@ public final class ShotAssist {
         public double landingMargin = 0.05;
 
         /** The rescue search, used only when the normal search finds nothing legal. It is
-         *  allowed to go slower than minShotSpeed and to re-aim anywhere down the middle,
-         *  because some contacts genuinely have no fast answer: a ball met right at the net,
-         *  barely cord-high, can only be lifted softly over -- which is exactly what a real
-         *  player does with it. Without this the shot model has to pick between the net and
-         *  a wild trajectory, and it was picking the net. */
+         *  allowed to go slower than minShotSpeed and to re-aim, because some contacts
+         *  genuinely have no fast answer: a ball met right at the net, barely cord-high, can
+         *  only be lifted softly over -- which is exactly what a real player does with it.
+         *  Without this the shot model has to pick between the net and a wild trajectory, and
+         *  it was picking the net. */
         public double rescueMinSpeed = 3.0;
         public int rescueSpeedSteps = 9;
         public double[] rescueDepthFracs = {0.55, 0.72, 0.88, 0.40};
+
+        /**
+         * How much of the player's lateral aim the rescue keeps, tried in this order.
+         *
+         * It used to be {0} implicitly -- every rescued shot was re-aimed down the middle. That
+         * is a safe answer and a terrible one: the rescue turned out to be the path most player
+         * contacts take, so "the ball always comes back to the centre" was really "the aim is
+         * thrown away whenever the shot has to be lifted". Trying the full aim first and only
+         * giving it up if nothing there is legal keeps the guarantee and returns the aim.
+         */
+        public double[] rescueAimFracs = {1.0, 0.6, 0.3, 0.0};
 
         /** Spin, rev/s. Topspin comes from an upward swipe, sidespin from a sideways one.
          *  Capped so spin stays a secondary influence and never a source of chaos. */
@@ -289,11 +328,16 @@ public final class ShotAssist {
             double pace = wantSpeed * (1 - t.speedBackoffPerPass * pass);
 
             for (int k = 0; k < t.speedCandidates; k++) {
-                double speed = clamp(pace * speedFactor(k), t.minShotSpeed, t.maxShotSpeed);
+                double speed = clamp(pace * speedFactor(k), t.minSearchSpeed, t.maxShotSpeed);
 
                 Aim.Solution sol = Aim.atTarget(contact, target, speed, topRevs, sideRevs);
+                // Capped at the candidate's OWN speed, not at the band's top: a shot that only
+                // works slowly must be allowed to stay slow. Handing this the band's minimum
+                // forward pace instead would undo the solve that just found it -- the same
+                // reason the rescue passes its own cap.
                 Vec3 vel = constrain(
-                        Vec3.lerp(sol.state().vel(), reflect(reflect), t.physicalBlend), toOpp);
+                        Vec3.lerp(sol.state().vel(), reflect(reflect), t.physicalBlend),
+                        toOpp, speed);
                 Vec3 spin = Aim.spin(new Vec3(vel.x(), 0, vel.z()), topRevs, sideRevs);
 
                 Flight f = fly(contact, vel, spin, toOpp);
@@ -306,8 +350,13 @@ public final class ShotAssist {
                     bestScore = score; bestCost = cost;
                     bestVel = vel; bestTarget = target; bestFlight = f; passes = pass;
                 }
-                // Legal, on target, at the pace asked for: nothing later can beat it.
-                if (cost == 0 && pass == 0 && k == 0) break search;
+                // Legal: stop. The ladder tries the asked-for pace first and then alternates
+                // outward, so the first legal candidate in a pass is already the one closest to
+                // what the swing asked for -- finishing the pass can only find worse. This is
+                // not a micro-optimisation: every candidate costs an Aim solve, which is 60
+                // bisection steps each flying a trajectory, and the whole search runs inside
+                // the single frame the contact lands on.
+                if (cost == 0) break search;
             }
             if (bestCost == 0) break;
         }
@@ -321,9 +370,10 @@ public final class ShotAssist {
             // has to be rescued should still come back as a chop if any speed works with it.
             double[][] spins = {{topRevs, sideRevs}, {t.baseTopspin, 0}};
             rescue:
-            for (double[] sp : spins) {
+            for (double aimFrac : t.rescueAimFracs) {
+              for (double[] sp : spins) {
                 for (double depth : t.rescueDepthFracs) {
-                    Vec3 target = new Vec3(0, 0, toOpp * depth * halfLen);
+                    Vec3 target = new Vec3(wantX * aimFrac, 0, toOpp * depth * halfLen);
                     for (int k = 0; k < t.rescueSpeedSteps; k++) {
                         double speed = t.rescueMinSpeed + (t.maxShotSpeed - t.rescueMinSpeed)
                                 * k / (double) (t.rescueSpeedSteps - 1);
@@ -340,6 +390,7 @@ public final class ShotAssist {
                         if (cost == 0) break rescue;
                     }
                 }
+              }
             }
         }
 
@@ -412,6 +463,25 @@ public final class ShotAssist {
     private record Flight(double netHeight, Vec3 landing) {}
 
     /**
+     * Step size for the validation flights, seconds -- deliberately COARSER than the game's DT.
+     *
+     * This is the assist's whole cost. Every candidate is flown to its landing, and a search
+     * that gives ground can fly a hundred of them on the one frame a contact lands on; at the
+     * game's 1/480 s that measured 25.8 ms for an ordinary two-pass shot, which is longer than
+     * the 16.7 ms frame it happens inside. Nothing about the answer needs that resolution: the
+     * flight is asked two cm-scale questions (does it clear the cord, where does it pitch) and
+     * graded against a 5 cm landing margin.
+     *
+     * 1/120 s is a quarter of the steps. RK4's error is O(h^4), so four times the step is 256
+     * times the error -- off a per-flight error that SelfTest measures in tenths of a
+     * millimetre over three seconds, which lands it at millimetres. That is two orders below
+     * the margin it feeds. Do not take it coarser without redoing that arithmetic: at 1/60 the
+     * error is 16x again and starts to matter, and this is a validator -- a flight that
+     * disagrees with the simulation is worse than no flight at all.
+     */
+    private static final double VALIDATE_DT = 1.0 / 120;
+
+    /**
      * How illegal a flight is: 0 means it clears the net and lands inside the opponent's half.
      * Anything else is the size of the violation, so a correction pass can keep the least-bad
      * candidate if none is perfect.
@@ -448,8 +518,8 @@ public final class ShotAssist {
         double netHeight = Double.NaN;
         double prevZ = from.z();
 
-        for (int i = 0; i < 480 * 3; i++) {
-            BallState next = Integrator.step(s, DT);
+        for (int i = 0; i < (int) (3.0 / VALIDATE_DT); i++) {
+            BallState next = Integrator.step(s, VALIDATE_DT);
             Vec3 p = next.pos();
 
             if (Double.isNaN(netHeight)) {

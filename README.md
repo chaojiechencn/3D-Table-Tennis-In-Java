@@ -9,15 +9,20 @@ an AI opponent plays you for the point. Inspired by the mobile game *Ping Pong F
 
 ## Gameplay
 
-The paddle follows your mouse — the cursor sets where it is across and up the table, and it steps in
-over the table on its own to meet a short ball. How you move it through the ball aims the shot:
-**drive it forward** for pace and depth, **swipe it sideways** to send the ball that way (swipe
-right, ball goes right), **lift it** to loop the ball shorter and higher; a still paddle just
-blocks it back soft. The game then keeps that shot playable — the ball is aimed at a real spot
-on the other side, and the shot is checked all the way to the bounce before it is played, so it
-clears the net and lands in rather than flying off the end. It is assisted, arcade-style, more
-*Ping Pong Fury* than a physics sim (though a full physics simulation runs underneath — see
-below).
+The paddle follows your mouse, and only your mouse. It slides around on one flat plane at bat
+height: move the mouse **across** and the paddle goes across, move it **up the screen** and the
+paddle moves up the table toward the net, **down** and it comes back behind the baseline for a
+deep ball. That is the whole of it — the mouse cannot raise or lower the bat, only move it around
+the table, which is what keeps "reach in" and "step back" from fighting each other.
+
+How you move it through the ball aims the shot: **swipe it sideways** to send the ball that way
+(swipe right, ball goes right), **drive it up-table through the ball** for pace, depth and
+topspin — the face closes over the ball as you go forward — and **pull it back** through the ball
+to open the face and cut backspin under it. A still paddle just blocks it back soft. The game then
+keeps that shot playable — the ball is aimed at a real spot on the other side, and the shot is
+checked all the way to the bounce before it is played, so it clears the net and lands in rather
+than flying off the end. It is assisted, arcade-style, more *Ping Pong Fury* than a physics sim
+(though a full physics simulation runs underneath — see below).
 
 What that buys, measured over 75 different ways of swinging the paddle at the same ball: the raw
 physics puts 11 of them on the table and throws the ball up to 2.4 m wide at 24 m/s; through the
@@ -40,7 +45,8 @@ hits it; between hits it flies for real.
 
 **Playable now**
 
-- Mouse-controlled paddle that reaches in over the table for the ball
+- Mouse-controlled paddle that slides anywhere from over the table to well behind the baseline,
+  wherever YOU point it
 - Assisted arcade shots — drive for pace, swipe to aim; the game keeps the ball in play
 - Rallies against the AI, with the one-bounce rule and points that end on a net / long / double bounce
 - A two-view rally-cam that cuts on who last hit, plus five preset views, slow motion, single-step
@@ -61,17 +67,19 @@ hits it; between hits it flies for real.
 
 ## Controls
 
-Once the game exists:
+Playing the ball:
 
 | Input | Action |
 | --- | --- |
-| Mouse | Move the paddle (it reaches in over the table on its own) |
-| Drive the paddle forward through the ball | Pace and depth |
+| Mouse left / right | Moves the paddle across the table |
+| Mouse up / down | Moves the paddle up the table toward the net, or back behind the baseline |
 | Swipe the paddle sideways | Sends the ball that way — swipe right, ball goes right |
-| Lift the paddle up through the ball | Shorter, higher, more topspin |
+| Drive the paddle up-table through the ball | Pace, depth and topspin |
+| Pull the paddle back through the ball | Opens the face and cuts backspin |
 | Still paddle | Soft block back |
 
-There is no button to press — the shot is entirely in the mouse movement.
+There is no button to press — the shot is entirely in the mouse movement. The paddle stays at one
+height; the mouse moves it around the table, not up and down in the air.
 
 Other keys (carried over from the physics demo):
 
@@ -86,6 +94,7 @@ Other keys (carried over from the physics demo):
 | `F` | Rally-cam on / off |
 | `C` | Cycle the preset camera views (turns the rally-cam off) |
 | `V` | Shot-assist debug overlay (paddle and ball velocity, raw / intended / final shot, target, predicted landing) |
+| `D` | Control debug overlay (cursor, paddle and target position, legal paddle area, how far and how long the paddle has to travel, where the ball is and when it arrives, and whether you could have got there) |
 | `G` | Toggle the no-spin ghost trail |
 | `T` | Toggle the flight trail |
 | `B` | Draw the ball at 2× (physics still uses 40 mm) |
@@ -145,10 +154,16 @@ the table at smash speed.
 It prints PASS/FAIL per check and exits non-zero if anything fails. I run it from the
 **Physics SelfTest** configuration in IntelliJ.
 
-`play.RallyTest` is a second headless suite, 7 checks, covering the game rather than the physics:
+`play.RallyTest` is a second headless suite, 15 checks, covering the game rather than the physics:
 that the AI reaches every shot fed at it, puts every one back over the net, lands every one on the
 table, never returns the ball faster than the impulse could have sent it, never launches it out of
 the hall, and that flinging the mouse cannot move the paddle faster than a person carries a bat.
+
+It also grades the **controls**, which is harder to eyeball than it sounds: that no mouse position
+can change the paddle's height, that moving the mouse up the screen never sends the paddle
+backwards, that the paddle is allowed to go everywhere a returnable ball actually goes, that it has
+a human amount of time to get there, that it is fast enough to make the trip — and, playing nine
+full points end to end, that a player who simply points at the ball does return it over the net.
 
 ## Built with
 

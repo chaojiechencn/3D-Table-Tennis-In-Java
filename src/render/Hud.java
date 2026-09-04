@@ -34,6 +34,7 @@ public final class Hud {
     private final Label feed = panelLabel(15, "#eaf2ff");
     private final Label shot = panelLabel(12, "#ff9a3c");
     private final Label controls = panelLabel(12, "#8d9bab");
+    private final Label control = panelLabel(12, "#7fd4a8");
 
     public Hud() {
         controls.setText("""
@@ -42,12 +43,19 @@ public final class Hud {
                     LEFT drag orbits the camera      scroll zooms
             FEED    1-9,0 pick   N/P next,prev   R replay   A auto-replay
             TIME    SPACE pause   . step   [ ] slower,faster
-            VIEW    F rally-cam on/off   C preset view   V shot debug
+            VIEW    F rally-cam on/off   C preset view
+                    V shot debug   D control debug
                     G ghost   T trail   B ball x2   H hud   ESC quit""");
 
         setShot(null);
         root.getChildren().addAll(corner(Pos.TOP_LEFT, feed, shot),
+                                  corner(Pos.TOP_RIGHT, control),
                                   corner(Pos.BOTTOM_LEFT, controls));
+
+        // After the panels are built, not before: setControl hides the whole panel, which it
+        // reaches through the label's parent, and the label has no parent until corner() has
+        // wrapped it.
+        setControl(null);
         root.setPickOnBounds(false);      // clicks must reach the SubScene to orbit and aim
         root.setPadding(new Insets(14));
     }
@@ -66,6 +74,23 @@ public final class Hud {
         shot.setText(on ? text : "");
         shot.setVisible(on);
         shot.setManaged(on);
+    }
+
+    /**
+     * The control/reachability readout, or null to hide it (D off).
+     *
+     * Its own panel rather than another line under the feed, because it is nine lines of
+     * numbers refreshed every frame and it would otherwise shove the feed name around as it
+     * grew and shrank. Same unmanaged-when-hidden trick as the shot line: invisible alone
+     * leaves an empty panel sitting on the table.
+     */
+    public void setControl(String text) {
+        boolean on = text != null && !text.isEmpty();
+        control.setText(on ? text : "");
+        control.setVisible(on);
+        control.setManaged(on);
+        control.getParent().setVisible(on);
+        control.getParent().setManaged(on);
     }
 
     // ------------------------------------------------------------------ styling

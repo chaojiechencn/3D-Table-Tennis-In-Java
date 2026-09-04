@@ -21,10 +21,12 @@ so the milestones below are commitments with dates, not a wishlist.
       Not a game yet, just physics on screen. **Delivered and in the repo**: `src/MrPong.java`,
       `src/physics/`, `src/render/`, validated by `physics.SelfTest` (68 checks).
 - [ ] **Playable demo** — *Sep 17*. A full point against the AI: mouse control, spin, serving, scoring.
-      **Part-built.** The physics is done and validated (`SelfTest` 101, `RallyTest` 7). Both
-      rackets are wired into `MrPong`, the near one follows the mouse and reaches in over the
-      table for the ball, and the game opens on a gentle serve with a two-view rally-cam at
-      0.45x. What holds a rally together is `play/ShotAssist` (below). Scoring is not started.
+      **Part-built.** The physics is done and validated (`SelfTest` 101, `RallyTest` 15). Both
+      rackets are wired into `MrPong`, the near one follows the mouse and *only* the mouse
+      (see the Sep 4 entry below), and the game opens on a gentle serve with a two-view
+      rally-cam at 0.45x. What holds a rally together is `play/ShotAssist` (below). The
+      player's control envelope is `play/PlayerReach`: two cursor axes on one horizontal
+      plane, sized off measurements (Sep 4 later). Scoring is not started.
 
       *Design change (Sep 2):* two of them, and both move away from the contract's realistic
       model. (1) The charge-and-release stroke was pulled — the paddle just follows the cursor.
@@ -201,14 +203,16 @@ src/
     Shots.java           named launch presets, defined by intent and solved by Aim
     SelfTest.java        headless validation vs. published numbers
   play/                    game logic; plain Java, no javafx, so it can be tested headlessly
-    Stroke.java          the player's paddle: follows the cursor, reaches in for the ball
+    Stroke.java          the player's paddle: follows the cursor, and nothing else
+    PlayerReach.java     the control envelope: where the racket may be, and can it get there
     ShotAssist.java      arcade shot model: turns any racket contact into a playable shot
     Opponent.java        interface: look at the ball, move the blade, swing
     Follower.java        the current opponent - tracks the ball, unbeatable, does NOT predict
     RallyTest.java       headless validation of the opponent (second main, own run config)
   render/
     Xform.java           the ONLY physics<->scene conversion, now both directions
-    MouseAim.java        cursor -> ray -> point on the player's hitting plane (at the blade's z)
+    MouseAim.java        cursor -> ray -> point on ONE horizontal hitting plane. Geometry
+                         only; the envelope and the height belong to play/PlayerReach
     Court.java           table, net (real mesh), floor, legs, ITTF markings
     BallView.java        ball + procedural chequer texture that makes spin visible
     PaddleView.java      blade, red/black rubber, handle
@@ -249,6 +253,27 @@ Rules that keep this from rotting:
     "first in the list" and "the one it actually hit first" stop being the same answer.
   - A swept contact **flies the rest of the step** afterwards, and bounces the velocity the ball had
     *at impact*, not at the end of the step. Skipping either hands the ball free energy every bounce.
+- **The ball never moves the player's paddle.** `Stroke` is handed a cursor point and a
+  timestep, and that is all — deliberately not a `BallState`, so the rule is enforced by the
+  signature rather than by discipline. Ball position, velocity and `World.predict` are for the
+  opponent, the renderer and the assist; none of them may reach the near blade. The blade DOES
+  move in depth -- it reaches in over the table -- but that depth comes from the cursor's aim
+  ray in `render/MouseAim`, which is geometry the player drives. That is the only shape a reach
+  may ever take here.
+
+  The one sanctioned exception is **validation**: `PlayerReach.timeToDepth` /
+  `reachableInTime` and the `D` overlay read the ball to answer "could the player have got
+  there", and MrPong's `controlReadout()` calls them *after* the target has already been
+  computed and handed to `Stroke`. Read-only, downstream, and never on the path that sets the
+  blade's target. Anything that reads the ball *before* the target is chosen is auto-follow
+  wearing a different hat.
+- **Two cursor axes, three ball axes.** The player's racket moves on ONE horizontal plane:
+  cursor X → racket X, cursor Y → racket **Z**, racket Y pinned at `PlayerReach.HIT_Y`. The
+  ball is not flattened and never should be — it still flies in full 3D with Magnus and
+  spin-coupled bounces. Do not re-derive racket height from the cursor ray: one screen axis
+  meaning "reach deeper" and "lift the bat" at the same time is exactly the control bug the
+  Sep 4 (later) section below records, and neither gesture can be made alone once they share
+  an axis.
 - **Spin is core, not a bonus.** Magnus in flight, and spin transfer on table/paddle/net contact. It
   shapes the collision code, so design for it up front rather than bolting it on.
 - **The AI predicts, it does not follow — but the one in the repo right now follows.**
@@ -319,11 +344,19 @@ no contact ever adding energy; topspin kicking forward and backspin checking off
 killing a ball; in/out detection; every preset shot being legal; 10 simulated minutes of stability;
 no tunnelling from 20 to 60 m/s; and the whole paddle group below.
 
-`play.RallyTest` (**7 checks**) is separate and covers the game logic: the opponent reaches every
+`play.RallyTest` (**15 checks**) is separate and covers the game logic: the opponent reaches every
 shot fed at it, returns every one over the net, **lands every one on the table**, never sends the
 ball out faster than the impulse allows, and never launches it out of the hall; and a thrown mouse
 cannot move the player's blade faster than `Stroke.TRACK_SPEED`, which itself sits below a real
 swing.
+
+The last group is the **control envelope** (Sep 4, later): that no cursor aim at any height can
+move the racket off its hitting plane; that racket depth is monotone in the aim; that the depth
+range really does span the player's half and the ground behind it; that every return the
+opponent makes passes through a place the racket can reach, with a human amount of time to meet
+it; that the blade can cross to each one inside that time at `TRACK_SPEED`; and — end to end —
+that a player who simply points at the ball returns it over the net. It takes about 7 s, most of
+it in that last check, which plays nine full points.
 
 The landing check is new, and the reason it can exist now is worth keeping straight. It used to
 be a printout with a long comment explaining why it could not be a check: the follower's RAW
@@ -486,12 +519,136 @@ the blade parked mid-table and was out of position for everything.
 - **Face eased toward the ball** (`FACE_TAU`), **`Stroke.TRACK_SPEED` 8 → 13**, **`timeScale`
   0.45**, **default feed = `Serve`** (gentle no-spin corner to corner).
 
+## Sep 4 — the player's paddle no longer follows the ball
+
+Reported as a gameplay bug and fixed at the source: with the mouse completely still, the near
+blade was still moving, because `Stroke.advance` read the ball twice.
+
+- **Depth.** `wantZ` tracked the ball's own z within a reach band (`REACH_FWD` 1.2 m /
+  `REACH_BACK` 0.8 m) whenever the ball was on our side and approaching. The blade walked out
+  over the table to meet a short ball with no input at all.
+- **Face.** `faceToward` aimed the blade's normal at the ball, falling back to down-table only
+  once the ball was behind it. That is auto-aim: the face turned to track a ball the player had
+  not reacted to.
+
+Both are gone. `advance(Paddle, double)` no longer takes a `BallState` at all, so the rule is
+enforced by the signature. Measured: over every preset and a 30 m/s ball driven straight at it,
+with the cursor set once and then still, blade drift, face turn and blade speed are **exactly
+0**.
+
+### The reach came back as geometry — `render/MouseAim`
+
+> **Superseded on Sep 4 (later) — see the next section.** The reach surface described here fixed
+> auto-follow and did it correctly, but it bought the reach by deriving depth AND height from
+> the same cursor ray, and its depth curve doubled back on itself at full stretch. Both are
+> gone. The three properties it lists (never reads the ball; the blade is under the cursor; the
+> mapping is stateless) all still hold — they were the right properties, and the replacement
+> keeps every one of them. Kept for the reasoning, not as a description of the code.
+
+Pinning the blade to a plane cost the two things the ball-driven reach had been paying for: the
+player could not dig out a short ball, and ShotAssist reads forward drive off the blade's z, so
+there was no pace axis left either. Both are back, off the cursor, in `MouseAim.onReachSurface`.
+
+The blade stands **where the cursor's own ray meets the table**, and falls back to the rest plane
+only when the ray is not pointing at the near half at all. Point at your own end line and the
+blade is where the fixed plane had it; slide the cursor up-table and it walks out over the table
+riding at blade height; keep going and it comes back, rising, for a high or deep ball. Measured
+through the real camera (`ReachProbe`, scratch), sweeping the cursor down the wide rally view:
+
+| cursor, top → bottom | blade |
+| --- | --- |
+| 0.02 – 0.40 | rest plane, height 1.40 m falling to 0.90 m |
+| 0.42 – 0.52 | reaching in: z 1.45 → 0.70, height 0.82 → 0.29 |
+| 0.60 – 0.72 | skimming the table at y = 0.075, z 0.76 → 1.43 |
+| 0.80 – 0.98 | rest plane, low — exactly the old home position |
+
+Three properties make this legitimate rather than a second auto-follow:
+
+- **It never reads the ball.** It is the cursor ray and the camera, and nothing else.
+- **Every point of it is under the cursor**, because the depth is chosen along the aim ray. That
+  is what makes any depth choice honest — the blade always appears where you point, so the only
+  question the depth rule answers is *how far along the ray*, which the player cannot see anyway.
+- **It is stateless.** Depth is solved from the ray, then x and y are read on the plane that
+  solve chose. Reading the cursor on the plane the blade currently occupies — which is what the
+  old code did — is a loop WITH GAIN once depth is cursor-derived: the blade creeps forward, the
+  ray reads lower on the plane it just moved to, and it creeps further, to full stretch. Do not
+  reintroduce that by "simplifying" the two intersections into one.
+
+Reaching in is an UP-screen gesture, and that is geometry, not a choice: from a camera behind the
+near end, a blade reaching in is further away and therefore higher on screen. The gesture is
+"point at the ball", and a short ball you have to reach for is up-screen.
+
+**Coverage, measured** (`CoverageProbe`, scratch — the real camera's surface against the
+follower's actual returns): all **10 of 10** returns pass within 3 mm of a point the cursor can
+put the blade on, met at z = +0.69 to +1.57. Under the pinned plane, `Serve` and `Cross-court
+loop` arrived below the table top and could not be played at all.
+
+### The shot goes where the player aims it — `play/ShotAssist`
+
+The other half of the same report: the ball came back to the middle of the table however you
+swiped. It was not a weak aim. It was that **the rescue path had quietly become the normal
+path**, and the rescue re-aims down the middle by construction.
+
+`minShotSpeed` (7 m/s) was the floor for the whole search, and a contact low over the table or
+behind the end line off a dropping ball has *no* legal answer at 7 m/s — the shot has to be
+lifted, and a lifted shot is slow. So the main search failed, and every such shot was rescued
+and centred. Measured before: `passes = 4` (rescued) on seven of eight test swings, target x
+= 0.00 on every one of them, landing 0.09 m off centre *against* the swipe.
+
+Three changes, all in `Tuning` except the last:
+
+- **`minSearchSpeed` (new, 3.0 m/s)** — the slowest the SEARCH may consider, as against
+  `minShotSpeed`, the slowest the swing may ASK for. They were the same number and should never
+  have been: the score still prefers the speed the swing asked for, so a slow candidate only
+  wins when the fast ones are illegal, which is exactly when it should.
+- **The main ladder caps each candidate at its own speed** (`constrain(v, toOpp, speed)`), the
+  way the rescue always has. Without it, `minForwardVelocity` re-inflates a slow shot and undoes
+  the solve that just found it.
+- **The rescue carries the player's aim** (`rescueAimFracs = {1.0, 0.6, 0.3, 0.0}`) instead of
+  hard-centring. It tries the full aim first and gives it up only if nothing there is legal, so
+  the guarantee is unchanged and the aim survives.
+- Aim authority raised to match: `aimInfluence` 0.115 → 0.16, `targetHalfWidthFrac` 0.60 → 0.75
+  (the box's corners were so far inside the table that a committed swipe still landed mid-court),
+  `maxHorizontalDeviationDeg` 15 → 20 (at 15 the cone overruled the aim before the validator saw
+  it; widening it cannot make a shot illegal — every candidate is still flown and graded).
+
+Measured after, same swings: **`passes = 0`** — the normal search wins. Swipe right lands at
+x = +0.36, swipe left at −0.36, a hard swipe at +0.44, out of a 0.76 m half-table. Driving in
+deepens the shot from z = −0.56 to −0.77 and adds pace. The follower gained from the same fix
+without being touched: its returns went from 4.3–7.4 m/s landing at z = +0.34…+1.00 to
+**5.5–7.4 m/s landing at +0.70…+1.00**, which is most of the way through the first "not done"
+item below.
+
+### The assist was costing more than a frame
+
+Found while measuring the above, and worth keeping because the shape of it is not obvious: one
+`assist()` call took **25.8 ms** — longer than the 16.7 ms frame it happens inside, on the frame
+a contact lands. It was never the flights. It was `Aim.atTarget`: 60 bisection halvings, each
+flying a whole trajectory, called once per candidate shot, a dozen-plus times per contact.
+
+- **`Aim.ITERATIONS` 60 → 28** (`physics/`). 60 halvings of an 80-degree bracket is the last bit
+  of a double; 28 is 5e-9 rad, which is 14 nanometres of landing position on a 2.7 m shot. Free
+  when it solved twelve presets at startup, not free once the assist calls it per contact.
+  SelfTest grades every preset through this solver and is unchanged at 101/101.
+- **The search stops at the first legal candidate** rather than finishing the pass. The speed
+  ladder already tries the asked-for pace first and alternates outward, so the first legal
+  candidate is the one that would have won on score anyway.
+- **`ShotAssist.VALIDATE_DT` = 1/120**, four times the game's step, for validation flights only.
+  RK4 error is O(h⁴), so that is 256x an error SelfTest measures in tenths of a millimetre over
+  three seconds — millimetres, against the 5 cm landing margin it feeds. Not to be taken coarser
+  without redoing that arithmetic.
+
+**25.8 → 11.9 ms**, and an ordinary contact is now 2–3 ms; the worst case measured (a cord-high
+ball at the net, which does go through the rescue) is 12.4 ms. Note that this is the second
+change to `physics/` since the assist landed — `World.setState` is no longer the only one, though
+`Aim.ITERATIONS` is a cost knob with no effect on any answer the model gives.
+
 **Not done, next:**
 
-1. **Make the follower's returns less passive.** Rallies hold indefinitely now, but most of its
-   returns come back at 4.3 m/s through the assist's rescue path, because it still meets the
-   ball low near its own baseline and no fast shot is legal from there. That is a stroke-quality
-   problem, and the real answer is the October opponent choosing its stroke from the ball.
+1. **Make the follower's returns less passive.** Better than it was — the search floor fix
+   pulled its returns out of the rescue path too — but it still meets the ball low near its own
+   baseline and picks its stroke from nothing. The real answer is still the October opponent
+   choosing its stroke from the ball.
 2. **Scoring.** The point-ending events already fire and reset the rally; nothing counts points
    or tracks serve/receive turns.
 3. **Serving for real** — the player serving off their own blade, not a `launchShot` feed.
@@ -504,6 +661,79 @@ behaviour, not a regression — the before/after numbers are in the git history 
 One consequence of `timeScale = 0.45`: the game opens in slow motion. `[` and `]` still change it
 live (down to 0.02, up to 2.0). It is a pure display-rate knob — fewer fixed steps run per wall
 second, each identical to a full-speed step — so nothing under `physics/` sees it.
+
+## Sep 4 (later) — the cursor stopped meaning two things at once
+
+Reported as "after the ball bounces, about 0.3 s later it becomes nearly impossible to hit".
+Two separate defects behind one symptom, both in the control mapping, neither in the physics.
+
+### 1. One screen axis meant two things
+
+`MouseAim.onReachSurface` solved the blade's **depth** from where the cursor's ray crossed table
+height, then read the blade's **x and y** on the plane that depth had chosen. So cursor Y set
+the racket's depth and its height simultaneously, and neither could be moved alone. Worse, the
+depth curve was **not monotone**: sliding the cursor up-screen walked the blade out over the
+table to full stretch and then brought it *back* toward the baseline again, because past the
+reach limit the code ramped it backwards along a "step back for a high one" scale. One
+continuous motion of the hand reversed the blade's direction halfway through.
+
+Now: one **horizontal** plane. `MouseAim.onHittingPlane` intersects the cursor ray with it and
+returns a point whose Y *is the plane's* — the ray's own height is never read. `PlayerReach`
+then clamps X and Z independently.
+
+```
+cursor X -> racket X        cursor Y -> racket Z        racket Y = PlayerReach.HIT_Y
+```
+
+The ball is untouched by this and still flies in full 3D. Only the *control* is two-dimensional.
+
+### 2. The racket could not retreat past its own rest plane
+
+The real reachability bug. Depth was clamped to `[0.47, 1.57]`, and the end line is at 1.37 — so
+the blade could reach forward over the table but could never go more than 20 cm *behind* it. A
+ball that had crossed the end line and was still perfectly playable was unreachable at every
+cursor position, and since it is travelling at 2.5–4.4 m/s when it gets there, that is a few
+hundred milliseconds after the bounce. Hence "0.3 seconds".
+
+Measured over the nine feeds that produce a player-side bounce, sweeping the back limit against
+the **worst** feed's touchable window:
+
+| back limit | worst window | | hitting height | worst window |
+| --- | --- | --- | --- | --- |
+| 1.57 (old) | **98 ms** | | 0.14 | 258 ms |
+| 1.80 | 154 ms | | 0.16 | **302 ms** |
+| 2.00 | 206 ms | | 0.18 | 281 ms |
+| 2.20 | 260 ms | | 0.22 | 221 ms |
+| 2.40 | **281 ms** | | 0.26 | 135 ms |
+| 2.60 | 281 ms (no gain) | | | |
+
+So `Z_NEAR = 0.30`, `Z_FAR = 2.40`, `HIT_Y = 0.16` — every one of them read off a sweep, not
+chosen by eye. 2.40 is where the curve flattens: past it the ball has dropped out of the blade's
+vertical capture band anyway. Worst case went **98 ms → 302 ms**, which at the 0.45× default is
+671 ms of wall-clock.
+
+**`TRACK_SPEED` was deliberately left at 13 m/s.** Raising it was the tempting fix and the wrong
+one — the ball was unhittable because the envelope was wrong, not because the blade was slow.
+With the envelope corrected the worst dash is 1.34 m, 103 ms, against a 302 ms window: a 2.9×
+margin. RallyTest measures that margin every run, so if a future change eats it, that is a
+failing check rather than a game that quietly needs a faster mouse.
+
+### Consequence: the vertical brush moved onto the depth axis
+
+The blade now lives on a horizontal plane, so `strokeDir.y()` is identically zero and the old
+`faceToward` term that read it was dead code silently squaring every face. The gesture moved to
+the axis the player still has: **driving the bat up-table closes the face for topspin, pulling it
+back opens it for backspin**, sideways swipe unchanged. That is also closer to how a real drive
+works — forward and over, not straight up. Anything that wants the vertical brush back needs a
+second input axis, not the cursor's Y.
+
+### `D` — the control overlay
+
+Added because "I could not get there" and "that ball was unplayable" look identical on screen
+and have opposite fixes, and guessing wrong is how this bug survived a full checkpoint. It
+prints cursor, raw ray aim, racket and target positions, the legal bounds, the travel distance
+and its time at `TRACK_SPEED`, the ball, its arrival time at the racket's depth, and a
+reachable yes/no with the margin. `--controldebug=true` turns it on for a capture.
 
 ## Conventions
 

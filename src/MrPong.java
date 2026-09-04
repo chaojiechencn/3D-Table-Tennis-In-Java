@@ -13,6 +13,7 @@ import javafx.stage.Stage;
 import physics.*;
 import play.Follower;
 import play.Opponent;
+import play.PlayerReach;
 import play.ShotAssist;
 import play.Stroke;
 import render.*;
@@ -36,11 +37,17 @@ import static physics.Constants.MAX_FRAME;
  *
  * On top of it is an ARCADE game:
  *
- *   - a racket at each end: the near one follows the mouse and reaches in over the table for
- *     the ball, the far one is the AI
- *   - the shot is the mouse motion -- driving the blade forward sets the pace, swiping it
- *     across sets the direction. play.ShotAssist then constrains the outgoing trajectory to a
- *     playable target so the ball stays in and the rally holds. BOTH rackets go through it.
+ *   - a racket at each end: the near one follows the mouse, the far one is the AI
+ *   - the player's control is TWO-DIMENSIONAL and the ball's flight is three. The cursor moves
+ *     the blade on one horizontal plane -- cursor X across the table, cursor Y up and down it,
+ *     and the blade's height fixed at play.PlayerReach.HIT_Y. It is deliberately impossible
+ *     for the cursor to raise the bat: one screen axis meaning both "deeper" and "higher" was
+ *     the control bug this replaced. The BALL is untouched by any of that and still flies in
+ *     full 3D, with spin curving it and the bounce coupling spin to speed.
+ *   - the shot is the mouse motion -- driving the blade up-table sets the pace and closes the
+ *     face for topspin, pulling back opens it for backspin, swiping across sets the direction.
+ *     play.ShotAssist then constrains the outgoing trajectory to a playable target so the ball
+ *     stays in and the rally holds. BOTH rackets go through it.
  *   - the ITTF one-bounce rule: you may only return the ball after it has bounced on your
  *     side. Enforced by handing World a null racket until then. A double bounce, the net, or a
  *     ball past the end line decides the point and cuts to the next serve.
@@ -48,6 +55,11 @@ import static physics.Constants.MAX_FRAME;
  *     when the opponent did -- and a 0.45x slow-motion default
  *   - V shows a debug overlay of what ShotAssist did: the racket's velocity, the incoming
  *     ball, the raw bounce, the intended and final shot, the target and the predicted landing
+ *   - D shows the CONTROL overlay: cursor, racket and target positions, the legal racket
+ *     bounds, how far and how long the blade has to travel, where the ball is and when it
+ *     arrives, and whether the blade can be there in time. It is there to separate "I lost
+ *     because the controls could not express that" from "I lost because that ball was
+ *     unplayable", which look identical on screen and have opposite fixes.
  *
  * Still missing, and deliberately next: a real serve off the player's blade, and a scoreboard.
  *
@@ -73,11 +85,11 @@ public class MrPong extends Application {
      * rate, a slow machine would swing the same stroke harder.
      */
     private final Paddle playerPaddle =
-            new Paddle(new Vec3(0, 0.25, MouseAim.PLAYER_PLANE_Z), new Vec3(0, 0, -1));
+            new Paddle(PlayerReach.NEUTRAL, new Vec3(0, 0, -1));
     private final Paddle aiPaddle =
             new Paddle(new Vec3(0, 0.20, Follower.PLANE_Z), new Vec3(0, 0, 1));
 
-    private final Stroke stroke = new Stroke(new Vec3(0, 0.25, MouseAim.PLAYER_PLANE_Z));
+    private final Stroke stroke = new Stroke(PlayerReach.NEUTRAL);
     private final Opponent opponent = new Follower();
 
     /** Turns every racket contact into a playable shot -- see ShotAssist. */
@@ -147,6 +159,18 @@ public class MrPong extends Application {
      * moving the blade from the handler would be driving the physics at the frame rate.
      */
     private Vec3 pendingAim = null;
+
+    /**
+     * The cursor, and where its ray landed BEFORE the envelope clamped it. Debug-only: the
+     * control overlay needs to show what was asked for next to what was granted, because
+     * "the blade is not where I pointed" and "the blade cannot go where I pointed" look
+     * identical on screen and have completely different fixes.
+     */
+    private double cursorX = Double.NaN, cursorY = Double.NaN;
+    private Vec3 rawAim = null;
+
+    /** D toggles the control/reachability overlay -- see controlReadout(). */
+    private boolean showControlDebug = false;
 
     private final Deque<Vec3> trailPoints = new ArrayDeque<>();
     private int stepsSinceTrailPoint = 0;
@@ -338,7 +362,7 @@ public class MrPong extends Application {
         prevAiPose = aiPaddle.collider();
 
         if (pendingAim != null) stroke.aimAt(pendingAim);
-        stroke.advance(playerPaddle, world.state(), DT);
+        stroke.advance(playerPaddle, DT);
         opponent.advance(world.state(), aiPaddle, DT);
 
         // The one-bounce rule: only the racket that is currently ALLOWED to hit is in the
@@ -477,6 +501,11 @@ public class MrPong extends Application {
             shownMarks = world.tableBounces();
             marks.setMarks(world.bounceMarks());
         }
+
+        // Per frame, not per step: it is a readout, and it flies a 3 s prediction to work out
+        // the ball's arrival time. Once every 8 physics steps is already more often than a
+        // human can read it.
+        if (showControlDebug) hud.setControl(controlReadout());
     }
 
     /**
@@ -490,6 +519,63 @@ public class MrPong extends Application {
     private static void drawPaddle(PaddleView view, Paddle.Blade from, Paddle to, double alpha) {
         view.update(Vec3.lerp(from.centre(), to.pos(), alpha),
                     Vec3.lerp(from.normal(), to.normal(), alpha).normalized());
+    }
+
+    /**
+     * The control/reachability overlay, toggled with D.
+     *
+     * It exists to answer one question that is otherwise unanswerable from the screen: when a
+     * ball goes past, was that the CONTROL MAPPING failing to express where the player wanted
+     * the bat, or was the ball genuinely unplayable? Those look the same from the outside and
+     * have opposite fixes, and guessing wrong is how the reach bug survived as long as it did.
+     *
+     * So it prints both halves. The cursor and the raw aim say what was asked for; the bounds
+     * and the granted target say what the envelope allowed; the dash and the arrival say
+     * whether the blade could physically have got there in time.
+     *
+     * This is the ONE place ball position is allowed anywhere near the player's control path,
+     * and it is read-only and downstream of everything -- it validates, it never steers. The
+     * blade's target has already been computed and handed to Stroke by the time this runs.
+     */
+    private String controlReadout() {
+        BallState b = world.state();
+        Vec3 blade = playerPaddle.pos();
+        Vec3 target = pendingAim != null ? pendingAim : blade;
+
+        double dist = PlayerReach.travelDistance(blade, target);
+        double travel = PlayerReach.travelTime(blade, target);
+        double arrive = PlayerReach.timeToDepth(b, target.z());
+
+        // Clamped is not the same as unreachable: it is normal to point past the end of the
+        // legal region and be held at its edge. Worth showing, because a blade that seems
+        // stuck is usually a blade sitting on a clamp.
+        boolean clamped = rawAim != null
+                && (Math.abs(rawAim.x() - target.x()) > 1e-6 || Math.abs(rawAim.z() - target.z()) > 1e-6);
+
+        String verdict;
+        if (Double.isNaN(arrive))          verdict = "n/a  (ball not coming to this depth)";
+        else if (travel <= arrive)         verdict = String.format("YES  (%.0f ms to spare)", (arrive - travel) * 1000);
+        else                               verdict = String.format("NO   (%.0f ms short)", (travel - arrive) * 1000);
+
+        return String.format("""
+            CONTROL  [D]
+              cursor     %s px%s
+              racket     x %+.3f  y %+.3f  z %+.3f
+              target     x %+.3f  y %+.3f  z %+.3f%s
+              bounds     x [%+.2f, %+.2f]   y %.3f fixed   z [%.2f, %.2f]
+              travel     %.3f m  ->  %.0f ms at %.1f m/s
+              ball       x %+.3f  y %+.3f  z %+.3f
+              arrival    %s  (to racket depth z %+.3f)
+              reachable  %s""",
+            Double.isNaN(cursorX) ? "(none yet)" : String.format("(%4.0f,%4.0f)", cursorX, cursorY),
+            rawAim == null ? "" : String.format("   ray -> x %+.3f  z %+.3f", rawAim.x(), rawAim.z()),
+            blade.x(), blade.y(), blade.z(),
+            target.x(), target.y(), target.z(), clamped ? "   (clamped)" : "",
+            -PlayerReach.MAX_X, PlayerReach.MAX_X, PlayerReach.HIT_Y, PlayerReach.Z_NEAR, PlayerReach.Z_FAR,
+            dist, travel * 1000, Stroke.TRACK_SPEED,
+            b.pos().x(), b.pos().y(), b.pos().z(),
+            Double.isNaN(arrive) ? "  --  " : String.format("%.0f ms", arrive * 1000), target.z(),
+            verdict);
     }
 
     private Group lighting() {
@@ -532,10 +618,20 @@ public class MrPong extends Application {
     private void aim(SubScene sub, MouseEvent e) {
         Point2D p = sub.sceneToLocal(e.getSceneX(), e.getSceneY());
         Vec3 fallback = pendingAim != null ? pendingAim : playerPaddle.pos();
-        // Read the cursor on the plane the blade is CURRENTLY at -- it reaches in and out to
-        // meet the ball, and x/y measured on a stale plane would drift under camera parallax.
-        pendingAim = MouseAim.onPlayerPlane(sub, p.getX(), p.getY(),
-                                            playerPaddle.pos().z(), fallback);
+
+        // Two steps, deliberately separate. MouseAim answers a question of pure geometry --
+        // where does the cursor's ray meet the racket's horizontal hitting plane -- and knows
+        // nothing about where a racket may legally be. PlayerReach then applies the envelope,
+        // and in doing so throws the ray's height away and substitutes its own: that discard
+        // is what stops cursor height from ever reaching racket height again.
+        //
+        // The blade's own position goes in only as the fallback for a degenerate ray, never as
+        // an input. Reading the cursor against a plane derived from where the blade already is
+        // would be a loop with gain, and the blade would creep to the stop on its own.
+        cursorX = p.getX();
+        cursorY = p.getY();
+        rawAim = MouseAim.onHittingPlane(sub, p.getX(), p.getY(), PlayerReach.HIT_Y, fallback);
+        pendingAim = PlayerReach.clamp(rawAim);
     }
 
     private void onKey(KeyCode code) {
@@ -575,6 +671,10 @@ public class MrPong extends Application {
                 shotDebug.setShown(!shotDebug.isShown());
                 hud.setShot(shotDebug.isShown() ? shotDebug.readout() : null);
             }
+            case D -> {
+                showControlDebug = !showControlDebug;
+                hud.setControl(showControlDebug ? controlReadout() : null);
+            }
             case H -> { showHud = !showHud; hud.setShown(showHud); }
             case ESCAPE -> Platform.exit();
 
@@ -601,9 +701,16 @@ public class MrPong extends Application {
      *
      * Not a serve -- serving is the next piece of work. This is a feed: the ball appears just
      * behind the near end travelling down the table, as though the player had struck it, and
-     * the opponent answers it. The player's racket is left exactly where it is, because the
-     * hitting plane sits BEHIND every feed's launch point (see MouseAim.PLAYER_PLANE_Z) and
-     * the ball therefore flies away from the blade rather than into it.
+     * the opponent answers it. The player's racket is left exactly where it is.
+     *
+     * The feed launches from z = 1.52 (Shots.FROM), which is now INSIDE the legal racket
+     * region -- the blade may sit anywhere from 0.30 to 2.40. That used to matter: the old
+     * hitting plane was deliberately placed behind every launch point so a feed could not
+     * rebound off the player's own bat on its first step. What protects it now is the
+     * one-bounce rule rather than the geometry -- playerMayHit is false below, so World is
+     * handed a null player racket and the ball flies through where the blade is standing until
+     * it has bounced on this side. That is the stronger guarantee of the two, since it holds
+     * wherever the player happens to be pointing.
      */
     private void launchShot(Shots shot) {
         currentShot = shot;
@@ -662,6 +769,9 @@ public class MrPong extends Application {
                 case "--out"  -> screenshotPath = kv[1];
                 case "--view" -> rig.apply(CameraRig.View.valueOf(kv[1]));
                 case "--ball2x" -> ball.setMagnified(Boolean.parseBoolean(kv[1]));
+                // The same thing D does, from the command line -- so a capture can prove the
+                // control overlay actually renders, rather than only that it compiles.
+                case "--controldebug" -> showControlDebug = Boolean.parseBoolean(kv[1]);
                 default -> { }
             }
         }

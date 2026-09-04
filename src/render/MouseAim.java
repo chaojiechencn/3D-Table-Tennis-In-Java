@@ -5,18 +5,42 @@ import javafx.scene.Camera;
 import javafx.scene.SubScene;
 import physics.Vec3;
 
-import static physics.Constants.*;
-
 /**
- * Turns a mouse position into a point on the player's hitting plane.
+ * Turns a mouse position into the point on the racket's hitting plane the player is pointing
+ * at. Geometry only: one ray, one horizontal plane, one intersection.
  *
- * The problem: the cursor is two numbers on a screen and the paddle needs three in metres.
- * The naive fix is to map the cursor's fraction across the window straight onto a rectangle of
- * table, which is one line of code and feels correct from exactly one camera angle -- orbit
- * away from behind the near end and the paddle starts moving sideways when you move the mouse
- * up. So this does the real thing: build the ray the cursor points along, and intersect it
- * with the plane the paddle lives on. That works from any preset view and any orbit, because
- * it asks the camera where it actually is rather than assuming.
+ * The problem it solves is that the cursor is two numbers on a screen and the paddle needs
+ * three in metres. The naive fix is to map the cursor's fraction across the window straight
+ * onto a rectangle of table, which is one line of code and feels correct from exactly one
+ * camera angle -- orbit away from behind the near end and the paddle starts moving sideways
+ * when you move the mouse up. So this does the real thing: build the ray the cursor points
+ * along and intersect it with the world. That works from any preset view and any orbit,
+ * because it asks the camera where it actually is rather than assuming.
+ *
+ * <h2>One plane, and what that buys</h2>
+ *
+ * The plane is HORIZONTAL and its height is given by the caller. Because it is a plane of
+ * constant height rather than a surface that rises and falls, the two screen axes come apart
+ * cleanly:
+ *
+ * <pre>
+ *   cursor X  ->  world X       across the table
+ *   cursor Y  ->  world Z       up and down the table, monotonically
+ *   world Y                     is the plane's own height -- never read off the ray
+ * </pre>
+ *
+ * That last line is the point. This used to return a point on a "reach surface" whose depth
+ * came from where the ray crossed table height and whose height was then read on the plane
+ * that depth had chosen -- so one cursor axis meant "go deeper" and "go higher" at the same
+ * time, and the depth mapping doubled back on itself at full stretch. Both are gone. The
+ * height is a parameter now, the caller owns it, and moving the cursor up-screen can only move
+ * the blade up-table.
+ *
+ * <h2>What it deliberately does not do</h2>
+ *
+ * No clamping, no envelope, no idea where the racket is allowed to be -- {@link play.PlayerReach}
+ * owns all of that, and owns it in plain Java so it can be graded headlessly. And nothing here
+ * has ever seen the ball: the blade goes where the cursor points, never where the ball is.
  *
  * All the ray work happens in scene units and the result is converted once, through
  * {@link Xform}, which stays the only place the two spaces meet.
@@ -24,78 +48,97 @@ import static physics.Constants.*;
 public final class MouseAim {
 
     /**
-     * Where the player's paddle lives, in metres: just behind the near end of the table.
+     * How far along a ray to walk when it never meets the plane, in metres.
      *
-     * The near edge is at z = +1.37, so this sits 20 cm behind it -- close enough to reach a
-     * ball that has crossed the end line, far enough back that the blade is not permanently
-     * inside the table.
+     * A ray pointing at or above the horizon crosses the hitting plane at infinity, or behind
+     * the camera. Returning the fallback there would freeze the blade mid-motion the instant
+     * the cursor passed the horizon; walking a long way along the ray instead keeps the
+     * mapping continuous and monotone, and the caller's clamp pins the result to the far edge
+     * of the legal region -- which is exactly where "further up-table than the table goes"
+     * ought to land.
      *
-     * It was 12 cm, and 12 cm is wrong for a specific reason worth recording. The demo's feed
-     * shots launch from z = 1.52 (Shots.FROM), so a plane at 1.49 sat directly in FRONT of
-     * them: every feed crossed it on its first step and rebounded off the player's own bat
-     * before it had gone anywhere. At 1.57 the plane is BEHIND the launch point, so a feed
-     * flies away from the blade instead of into it -- the ball's centre starts 5.0 cm off the
-     * plane against the 2.75 cm (half blade thickness + ball radius) it takes to touch.
-     *
-     * The extra 8 cm costs about 8 ms of flight and a centimetre of drop on a 10 m/s return,
-     * which is nothing against the 83 cm of height the blade is allowed to cover.
+     * 30 m is well past any clamp the caller can reasonably apply, and small enough that the
+     * arithmetic stays nowhere near overflow.
      */
-    public static final double PLAYER_PLANE_Z = TABLE_LENGTH / 2 + 0.20;
-
-    /**
-     * How far the blade may stray from the table. Wide, so a ball driven to the corner can
-     * still be chased, but the bottom stays ON the table surface -- the blade dipping below
-     * the top looked like a bug and was one.
-     */
-    private static final double MAX_X = TABLE_WIDTH / 2 + 1.0;
-    private static final double MAX_Y = 1.40;     // stretch for a high one
-
-    /**
-     * The floor, and it is BLADE_R rather than the ball's resting height for a reason worth
-     * writing down, because the obvious value is wrong twice over.
-     *
-     * This bounds the blade's CENTRE. The blade is a disc of radius BLADE_R, so a centre at
-     * the ball's 0.02 m puts 5.5 cm of blade underneath the table top -- visibly through it,
-     * which is exactly the bug this constant was last changed to fix and did not. A centre at
-     * BLADE_R rests the bottom rim on the surface instead.
-     *
-     * It costs nothing in reach: the ball at rest sits 2 cm up and the disc still spans from
-     * 0 to 15 cm, so the lower half of the blade covers a ball scraping the table.
-     */
-    private static final double MIN_Y = BLADE_R;
+    private static final double HORIZON = 30.0;
 
     private MouseAim() {}
 
     /**
-     * The point the cursor is pointing at, on the plane of constant physics-Z {@code planeZ}.
+     * Where the cursor's ray meets the horizontal plane at {@code planeY} metres.
      *
-     * {@code planeZ} is the blade's CURRENT depth, not a fixed value: the blade reaches in and
-     * out to follow the ball (see play.Stroke), and the cursor's x/y have to be read on the
-     * plane the blade is actually on, or a stepped-in blade drifts sideways and high as the
-     * camera parallax builds up.
+     * No state, and no dependence on where the blade currently is: the answer is a function of
+     * the cursor and the camera alone. That matters more than it looks. Reading the cursor
+     * against a plane whose height or depth was itself derived from the blade's position is a
+     * loop WITH GAIN -- the blade creeps, the ray reads differently on the plane it just moved
+     * to, and it creeps further, all the way to the stop. A fixed plane cannot do that.
      *
-     * @param sub    the SubScene the 3D world is drawn in
-     * @param mouseX cursor position within that SubScene
-     * @param mouseY cursor position within that SubScene
-     * @param planeZ the physics-Z plane to intersect (the blade's current z)
-     * @param fallback returned unchanged if the ray runs parallel to the plane, which happens
-     *                 when the camera is looking along it from the TOP view
+     * @param sub      the SubScene the 3D world is drawn in
+     * @param mouseX   cursor position within that SubScene
+     * @param mouseY   cursor position within that SubScene
+     * @param planeY   the height of the hitting plane, in metres above the table
+     * @param fallback returned unchanged if the ray degenerates entirely
+     * @return a point at exactly {@code planeY}; its X and Z are the cursor's, unclamped
      */
-    public static Vec3 onPlayerPlane(SubScene sub, double mouseX, double mouseY,
-                                     double planeZ, Vec3 fallback) {
+    public static Vec3 onHittingPlane(SubScene sub, double mouseX, double mouseY,
+                                      double planeY, Vec3 fallback) {
         Camera cam = sub.getCamera();
         if (cam == null) return fallback;
 
-        // The camera is a PerspectiveCamera with fixedEyeAtCameraZero, so the eye is the
-        // camera's own origin and the view direction is +Z in ITS local space. Asking the
-        // node for those two points in scene coordinates is what makes this work at any orbit
-        // angle: the gimbal's rotations are already baked into the transform.
+        Ray ray = ray(cam, sub, mouseX, mouseY);
+        if (ray == null) return fallback;
+
+        // Convert the ray to physics space ONCE, then do the intersection there. Solving it in
+        // scene units and converting the answer would work equally well, but this way the
+        // plane test reads in the units the plane is quoted in, and no arithmetic anywhere
+        // outside Xform has to know what a scene unit is worth.
+        Vec3 eye = Xform.toPhysics(ray.eye());
+        Vec3 dir = Xform.toPhysics(ray.eye().add(ray.dir())).minus(eye);
+        if (!eye.isFinite() || !dir.isFinite()) return fallback;
+
+        double horizontal = Math.hypot(dir.x(), dir.z());
+
+        double s;
+        if (dir.y() < -1e-9) {
+            // Descending: it meets the plane. Cap the distance so a near-horizon ray produces
+            // a far point rather than an astronomical one.
+            s = (planeY - eye.y()) / dir.y();
+            if (s <= 0) return fallback;                       // the plane is behind the camera
+            if (horizontal > 1e-9) s = Math.min(s, HORIZON / horizontal);
+        } else if (horizontal > 1e-9) {
+            // Level or rising: the crossing is at infinity. Walk out to the horizon instead,
+            // which keeps the mapping monotone across the point where the cursor passes it.
+            s = HORIZON / horizontal;
+        } else {
+            return fallback;                                   // straight up: no depth at all
+        }
+
+        Vec3 hit = eye.plusScaled(dir, s);
+        if (!hit.isFinite()) return fallback;
+
+        // Y comes from the plane, never from the ray. This is the decoupling, in one line.
+        return new Vec3(hit.x(), planeY, hit.z());
+    }
+
+    /** The cursor's ray in SCENE units: where the eye is, and the way it is looking. */
+    private record Ray(Point3D eye, Point3D dir) {}
+
+    /**
+     * Build the ray the cursor points along.
+     *
+     * The camera is a PerspectiveCamera with fixedEyeAtCameraZero, so the eye is the camera's
+     * own origin and the view direction is +Z in ITS local space. Asking the node for those two
+     * points in scene coordinates is what makes this work at any orbit angle: the gimbal's
+     * rotations are already baked into the transform.
+     */
+    private static Ray ray(Camera cam, SubScene sub, double mouseX, double mouseY) {
+        double w = sub.getWidth(), h = sub.getHeight();
+        if (w <= 0 || h <= 0) return null;
+
         Point3D eye = cam.localToScene(0, 0, 0);
 
         double halfH = Math.tan(Math.toRadians(cam instanceof javafx.scene.PerspectiveCamera pc
                                                ? pc.getFieldOfView() / 2 : 20));
-        double w = sub.getWidth(), h = sub.getHeight();
-        if (w <= 0 || h <= 0) return fallback;
 
         // JavaFX measures field of view along the SHORTER side of the viewport.
         double scale = Math.min(w, h) / 2.0;
@@ -103,25 +146,6 @@ public final class MouseAim {
         double localY = (mouseY - h / 2) / scale * halfH;
 
         Point3D through = cam.localToScene(localX, localY, 1);
-        Point3D dir = through.subtract(eye);
-
-        // Intersect with the plane of constant physics-Z, which in scene units is a plane of
-        // constant scene-Z (the map is diagonal, so planes stay planes and axes stay axes).
-        double planeSceneZ = Xform.z(planeZ);
-        if (Math.abs(dir.getZ()) < 1e-9) return fallback;
-
-        double t = (planeSceneZ - eye.getZ()) / dir.getZ();
-        if (t <= 0) return fallback;              // the plane is behind the camera
-
-        Point3D hit = eye.add(dir.multiply(t));
-        Vec3 m = Xform.toPhysics(hit);
-
-        return new Vec3(clamp(m.x(), -MAX_X, MAX_X),
-                        clamp(m.y(), MIN_Y, MAX_Y),
-                        planeZ);
-    }
-
-    private static double clamp(double v, double lo, double hi) {
-        return v < lo ? lo : (v > hi ? hi : v);
+        return new Ray(eye, through.subtract(eye));
     }
 }

@@ -46,6 +46,10 @@ public final class RallyTest {
         aRallyStaysInTheRoom();
         reportedReturnQuality();
         aFlickOfTheMouseCannotOutrunACarriedBat();
+        theCursorCannotRaiseTheBat();
+        depthRunsOneWayOnly();
+        everyReturnIsActuallyReachable();
+        aPlayerPointingAtTheBallCanReturnIt();
 
         System.out.println("=".repeat(74));
         if (failures.isEmpty()) {
@@ -331,13 +335,9 @@ public final class RallyTest {
         // hand moves a mouse, and let the eight steps of one 60 Hz frame consume it.
         stroke.aimAt(start.plus(new Vec3(1.0, 0, 0)));
 
-        // A ball down the table heading away, so the reach and face logic have something sane
-        // to work with; the claim here is about blade SPEED, which does not depend on it.
-        BallState ball = BallState.at(new Vec3(0, 0.25, -0.5), new Vec3(0, 0, -8), Vec3.ZERO);
-
         double fastest = 0;
         for (int i = 0; i < 8; i++) {
-            stroke.advance(blade, ball, DT);
+            stroke.advance(blade, DT);
             fastest = Math.max(fastest, blade.vel().length());
         }
         check("a mouse flick cannot move the blade faster than a player carries a bat",
@@ -352,6 +352,259 @@ public final class RallyTest {
               Stroke.TRACK_SPEED < 17.8,
               String.format("%.1f m/s tracking against a measured 17.8 m/s swing",
                             Stroke.TRACK_SPEED));
+    }
+
+    // ---------------------------------------------------------------- the control envelope
+
+    /**
+     * The decoupling, stated as something that can fail.
+     *
+     * The bug this replaced was one screen axis meaning two things: the cursor's ray set the
+     * blade's depth AND its height, so "reach in" and "lift the bat" were the same gesture and
+     * neither could be done alone. The fix is structural rather than careful -- PlayerReach
+     * throws the incoming Y away -- so the check is simply that no aim, however extreme, can
+     * move the racket's height off the hitting plane.
+     */
+    private static void theCursorCannotRaiseTheBat() {
+        double worst = 0;
+        for (double y = -3.0; y <= 3.0; y += 0.05) {
+            for (double z : new double[]{-2.0, 0.3, 1.0, 1.9, 5.0}) {
+                Vec3 got = PlayerReach.clamp(new Vec3(0.4, y, z));
+                worst = Math.max(worst, Math.abs(got.y() - PlayerReach.HIT_Y));
+            }
+        }
+        check("no cursor aim, at any height, can move the racket off its hitting plane",
+              worst < 1e-12,
+              String.format("worst height deviation %.1e m over aims from y = -3 to +3 m", worst));
+
+        // And the other half of the same claim: the axes that ARE inputs still work.
+        Vec3 left  = PlayerReach.clamp(new Vec3(-0.5, 99, 1.5));
+        Vec3 right = PlayerReach.clamp(new Vec3(+0.5, -99, 1.5));
+        check("cursor X still moves the racket across the table",
+              right.x() - left.x() > 0.9,
+              String.format("x %+.2f -> %+.2f as the aim crosses the centre line", left.x(), right.x()));
+    }
+
+    /**
+     * Depth must run one way only.
+     *
+     * The old mapping was a V: sliding the cursor up-table walked the blade out over the table
+     * to full stretch and then brought it BACK toward the baseline again, because past the
+     * reach limit the code ramped it backwards along a "step back for a high one" scale. One
+     * continuous motion of the hand reversed the blade's direction halfway through, which is
+     * unlearnable. Monotone is the property that forbids it, so monotone is what gets checked.
+     */
+    private static void depthRunsOneWayOnly() {
+        double prev = Double.NEGATIVE_INFINITY;
+        boolean monotone = true;
+        double reversedAt = Double.NaN;
+        for (double z = -3.0; z <= 5.0; z += 0.01) {
+            double got = PlayerReach.clamp(new Vec3(0, 0, z)).z();
+            if (got < prev - 1e-12) { monotone = false; if (Double.isNaN(reversedAt)) reversedAt = z; }
+            prev = got;
+        }
+        check("racket depth is monotone in the aim -- pointing further up-table never brings it back",
+              monotone,
+              monotone ? "no reversal over aims from z = -3 to +5 m"
+                       : String.format("reverses at z = %.2f", reversedAt));
+
+        // Monotone alone would be satisfied by a constant, so the range has to be real too.
+        double span = PlayerReach.Z_FAR - PlayerReach.Z_NEAR;
+        check("the depth range spans the player's half and the ground behind it",
+              PlayerReach.Z_NEAR < 0.5 && PlayerReach.Z_FAR > TABLE_LENGTH / 2 + 0.5,
+              String.format("z %.2f..%.2f m (%.2f m of travel; the end line is at %.2f)",
+                            PlayerReach.Z_NEAR, PlayerReach.Z_FAR, span, TABLE_LENGTH / 2));
+    }
+
+    /**
+     * The bug, measured: can the player actually get to the ball?
+     *
+     * This is the check that would have caught it. It flies every feed the opponent returns,
+     * finds the stretch of the ball's path that the racket envelope can physically touch, and
+     * requires (a) that the stretch exists at all and (b) that the blade can cross to its
+     * start, from a neutral stance, in less time than the ball takes to get there.
+     *
+     * Both halves matter. The old envelope stopped 20 cm behind the end line, so for several
+     * feeds the touchable stretch lasted under 100 ms -- the ball was gone before any hand
+     * could arrive, and no amount of blade speed would have fixed it. Note what is NOT being
+     * asserted: nothing here says the racket moves toward the ball. It says the ball passes
+     * through a region the player is able to point at.
+     */
+    private static void everyReturnIsActuallyReachable() {
+        double worstWindow = Double.MAX_VALUE, worstMargin = Double.MAX_VALUE;
+        String worstWindowShot = "", worstMarginShot = "";
+        int playable = 0, fed = 0;
+
+        for (Shots shot : Shots.ALL) {
+            List<Vec3> path = pathAfterThePlayerSideBounce(shot);
+            if (path == null) continue;
+            fed++;
+
+            int steps = 0;
+            Vec3 first = null;
+            for (Vec3 p : path) {
+                if (!PlayerReach.canTouch(p)) continue;
+                steps++;
+                if (first == null) first = p;
+            }
+            if (first == null) continue;
+            playable++;
+
+            double window = steps * DT;
+            double dash = PlayerReach.travelTime(PlayerReach.NEUTRAL, new Vec3(first.x(), PlayerReach.HIT_Y, first.z()));
+            if (window < worstWindow) { worstWindow = window; worstWindowShot = shot.name(); }
+            if (window - dash < worstMargin) { worstMargin = window - dash; worstMarginShot = shot.name(); }
+        }
+
+        check("every return the opponent makes passes through a place the racket can reach",
+              playable == fed,
+              String.format("%d of %d returns reachable", playable, fed));
+
+        // 200 ms is the floor a human reaction time argues for: simple visual reaction is
+        // 200-250 ms, and the game runs at 0.45x by default, so 200 ms of simulated time is
+        // about 440 ms on the clock. The old envelope scored 98 ms here.
+        check("the racket has a human amount of time to meet each one",
+              worstWindow > 0.200,
+              String.format("worst touchable window %.0f ms (%s); %.0f ms of wall-clock at the 0.45x default",
+                            worstWindow * 1000, worstWindowShot, worstWindow * 1000 / 0.45));
+
+        // The point of check 5 in the brief: the blade must be fast enough for the envelope it
+        // has, and this is what says so -- rather than TRACK_SPEED being raised until the
+        // symptom went away.
+        check("the blade can cross to every one of them in the time the ball allows",
+              worstMargin > 0,
+              String.format("tightest case %s: %.0f ms of margin at TRACK_SPEED = %.1f m/s",
+                            worstMarginShot, worstMargin * 1000, Stroke.TRACK_SPEED));
+    }
+
+    /**
+     * The whole thing, end to end: can a player who simply points at the ball hit it back?
+     *
+     * The three checks above are geometric -- the ball passes through the legal region, and the
+     * blade could cross to it in time. This one closes the loop by actually playing the point:
+     * a stand-in hand drives the CURSOR at the ball each step, exactly through the public
+     * aimAt/advance pair a mouse uses, and the contact solver decides the rest.
+     *
+     * Read what this does and does not say. The hand is in the TEST; nothing in the shipped
+     * control path gains any knowledge of the ball. Stroke still has no BallState parameter, so
+     * the property that the player moves the racket is enforced by the signature and is not
+     * something this can quietly undo. What the check buys is the one claim the geometric
+     * checks cannot make: that a reachable ball is also a RETURNABLE one, contact, assist and
+     * all. Under the old envelope this failed for most feeds -- the blade was clamped 20 cm
+     * behind the end line and the ball went past behind it.
+     */
+    private static void aPlayerPointingAtTheBallCanReturnIt() {
+        int returned = 0, attempted = 0;
+        List<String> missed = new ArrayList<>();
+
+        for (Shots shot : Shots.ALL) {
+            if (pathAfterThePlayerSideBounce(shot) == null) continue;
+            attempted++;
+            if (playThePoint(shot)) returned++; else missed.add(shot.name());
+        }
+
+        check("a player who points at the ball returns it over the net",
+              returned == attempted,
+              String.format("%d of %d feeds returned%s", returned, attempted,
+                            missed.isEmpty() ? "" : "; missed: " + String.join(", ", missed)));
+    }
+
+    /**
+     * Play one point with a stand-in hand on the near racket. True if the player's blade struck
+     * the ball and sent it back over to the opponent's half.
+     */
+    private static boolean playThePoint(Shots shot) {
+        World world = new World();
+        Paddle ai = new Paddle(new Vec3(0, 0.20, Follower.PLANE_Z), new Vec3(0, 0, 1));
+        Paddle me = new Paddle(PlayerReach.NEUTRAL, new Vec3(0, 0, -1));
+        Stroke hand = new Stroke(PlayerReach.NEUTRAL);
+        Opponent bot = new Follower();
+        ShotAssist assist = new ShotAssist();
+        world.launch(shot.state());
+
+        boolean aiMayHit = false, playerMayHit = false, returned = false;
+        int lastHits = 0, lastSerial = world.bounceSerial(), lastHitSide = 0;
+        double lastHitTime = -1;
+
+        for (int i = 0; i < (int) (14.0 / DT); i++) {
+            // The stand-in hand: point the CURSOR at the ball, and let the envelope and the
+            // tracking speed decide whether the blade gets there. Both are the real ones.
+            hand.aimAt(PlayerReach.clamp(new Vec3(world.state().pos().x(), 0, world.state().pos().z())));
+            hand.advance(me, DT);
+            bot.advance(world.state(), ai, DT);
+            world.setPaddles(playerMayHit ? me : null, aiMayHit ? ai : null);
+
+            BallState before = world.state();
+            world.step();
+
+            if (world.paddleHits() > lastHits) {
+                lastHits = world.paddleHits();
+                boolean playerHit = before.pos().z() > 0;
+                world.setState(assist.assist(before, world.state(), playerHit ? me : ai, playerHit));
+                playerMayHit = aiMayHit = false;
+                lastHitSide = playerHit ? -1 : 1;
+                lastHitTime = world.time();
+                if (playerHit) returned = true;
+            }
+            if (world.bounceSerial() > lastSerial && world.time() - lastHitTime > DT * 2) {
+                lastSerial = world.bounceSerial();
+                if (world.state().pos().z() > 0) { if (lastHitSide >= 0) playerMayHit = true; }
+                else aiMayHit = true;
+            }
+            lastSerial = world.bounceSerial();
+
+            // Returned AND it got to the other side: a ball popped straight up is not a return.
+            if (returned && world.state().pos().z() < -0.1) return true;
+            if (world.state().pos().y() < -TABLE_HEIGHT) break;
+        }
+        return false;
+    }
+
+    /**
+     * One feed, flown until the opponent has returned it and the return has bounced on the
+     * player's half; the ball's path from that bounce onward, or null if no such rally happens.
+     *
+     * Deliberately built the same way MrPong builds it -- Follower, ShotAssist on every
+     * contact, the one-bounce rule gating the rackets -- because a reachability claim about a
+     * ball the game never actually produces would be worth nothing.
+     */
+    private static List<Vec3> pathAfterThePlayerSideBounce(Shots shot) {
+        World world = new World();
+        Paddle ai = new Paddle(new Vec3(0, 0.20, Follower.PLANE_Z), new Vec3(0, 0, 1));
+        Opponent bot = new Follower();
+        ShotAssist assist = new ShotAssist();
+        world.launch(shot.state());
+
+        boolean aiMayHit = false, returned = false, bounced = false;
+        int lastHits = 0, lastSerial = world.bounceSerial();
+        double lastHitTime = -1;
+        List<Vec3> path = new ArrayList<>();
+
+        for (int i = 0; i < (int) (14.0 / DT); i++) {
+            bot.advance(world.state(), ai, DT);
+            world.setPaddles(null, aiMayHit ? ai : null);      // the PLAYER never hits here
+
+            BallState before = world.state();
+            world.step();
+
+            if (world.paddleHits() > lastHits) {
+                lastHits = world.paddleHits();
+                world.setState(assist.assist(before, world.state(), ai, false));
+                aiMayHit = false;
+                lastHitTime = world.time();
+                returned = true;
+            }
+            if (world.bounceSerial() > lastSerial && world.time() - lastHitTime > DT * 2) {
+                lastSerial = world.bounceSerial();
+                if (world.state().pos().z() > 0) { if (returned) bounced = true; }
+                else aiMayHit = true;
+            }
+            lastSerial = world.bounceSerial();
+
+            if (bounced) path.add(world.state().pos());
+            if (world.state().pos().y() < -TABLE_HEIGHT) break;
+        }
+        return bounced ? path : null;
     }
 
     // ---------------------------------------------------------------- helpers
