@@ -21,11 +21,19 @@ so the milestones below are commitments with dates, not a wishlist.
       Not a game yet, just physics on screen. **Delivered and in the repo**: `src/MrPong.java`,
       `src/physics/`, `src/render/`, validated by `physics.SelfTest` (68 checks).
 - [ ] **Playable demo** — *Sep 17*. A full point against the AI: mouse control, spin, serving, scoring.
-      **Part-built.** The physics half is done and validated: a moving-paddle contact solver, a
-      `Paddle` collider, rubber with spin reversal, a charge-and-release `Stroke`, and an opponent
-      that returns everything (`play.RallyTest`, 3 checks). **Not yet wired into `MrPong`** — there
-      is no paddle on screen and the mouse does not drive one. Serving and scoring are not started
-      and are deliberately the next piece of work, not this one.
+      **Part-built.** The physics is done and validated (`SelfTest` 101, `RallyTest` 7). Both
+      rackets are wired into `MrPong`, the near one follows the mouse and reaches in over the
+      table for the ball, and the game opens on a gentle serve with a two-view rally-cam at
+      0.45x. What holds a rally together is `play/ShotAssist` (below). Scoring is not started.
+
+      *Design change (Sep 2):* two of them, and both move away from the contract's realistic
+      model. (1) The charge-and-release stroke was pulled — the paddle just follows the cursor.
+      (2) After any racket contact the raw impulse result is run through `ShotAssist`, which
+      constrains the outgoing trajectory to a playable area (arcade "assist", à la Ping Pong
+      Fury) — otherwise a fast brush sends the ball off the end of the room and no rally
+      survives. **The realistic solver in `physics/` is unchanged and still what `SelfTest`
+      grades; `ShotAssist` is a `play/` layer on top and can be switched off.** Which one to
+      demo depends on what the grade weights — the physics work, or a game you can play.
 - [ ] **Final demo** — *Oct 7*. Menus, AI opponent, and multiple paddles that play differently.
 
 **Scope — core:** mouse-controlled paddle with the ball reflecting off it; real physics (spin, shot speed
@@ -193,20 +201,23 @@ src/
     Shots.java           named launch presets, defined by intent and solved by Aim
     SelfTest.java        headless validation vs. published numbers
   play/                    game logic; plain Java, no javafx, so it can be tested headlessly
-    Stroke.java          the player's charge-and-release swing, advanced per physics step
+    Stroke.java          the player's paddle: follows the cursor, reaches in for the ball
+    ShotAssist.java      arcade shot model: turns any racket contact into a playable shot
     Opponent.java        interface: look at the ball, move the blade, swing
     Follower.java        the current opponent - tracks the ball, unbeatable, does NOT predict
     RallyTest.java       headless validation of the opponent (second main, own run config)
   render/
     Xform.java           the ONLY physics<->scene conversion, now both directions
-    MouseAim.java        cursor -> ray -> point on the player's hitting plane
+    MouseAim.java        cursor -> ray -> point on the player's hitting plane (at the blade's z)
     Court.java           table, net (real mesh), floor, legs, ITTF markings
     BallView.java        ball + procedural chequer texture that makes spin visible
     PaddleView.java      blade, red/black rubber, handle
     Trail.java           fading dot trail; used for both the live path and the ghost
     BounceMarks.java     discs left where the ball landed
-    CameraRig.java       orbit/zoom camera + preset views
-    Hud.java             live readouts -- SLATED FOR REMOVAL, see below
+    CameraRig.java       two-view rally-cam (default) + orbit/zoom + preset views
+    ShotDebug.java       V-toggled overlay: racket + ball velocity, raw / intended / final
+                         shot, target, predicted landing, legal target box
+    Hud.java             key legend, feed name, and the shot-assist readout while V is on
 ```
 
 **Two packages, one dependency direction.** `play` depends on `physics`; `physics` depends on
@@ -301,15 +312,30 @@ All constants live in `physics/Constants.java` with per-value citations. Summary
 - **Collisions are swept**, not overlap-only. At 60 m/s the ball moves 12.5 cm per step against a 6.5 cm
   crossing, so an overlap test alone drops the hardest shots straight through the table.
 
-What `SelfTest` anchors against (**97 checks**): terminal velocity vs. the closed form; free fall vs.
+What `SelfTest` anchors against (**101 checks**, +4 for the Serve preset): terminal velocity vs. the closed form; free fall vs.
 the exact `tanh`/`ln cosh` solution to 1 mm over 3 s; the ITTF drop test; RK4 convergence order;
 `C_d` and `C_L` vs. measured values; the lift crisis; Magnus direction for top, back and side spin;
 no contact ever adding energy; topspin kicking forward and backspin checking off the bounce; the net
 killing a ball; in/out detection; every preset shot being legal; 10 simulated minutes of stability;
 no tunnelling from 20 to 60 m/s; and the whole paddle group below.
 
-`play.RallyTest` (3 checks) is separate and covers the opponent: it reaches every shot fed at it,
-returns every one over the net, and never sends the ball out faster than the impulse allows.
+`play.RallyTest` (**7 checks**) is separate and covers the game logic: the opponent reaches every
+shot fed at it, returns every one over the net, **lands every one on the table**, never sends the
+ball out faster than the impulse allows, and never launches it out of the hall; and a thrown mouse
+cannot move the player's blade faster than `Stroke.TRACK_SPEED`, which itself sits below a real
+swing.
+
+The landing check is new, and the reason it can exist now is worth keeping straight. It used to
+be a printout with a long comment explaining why it could not be a check: the follower's RAW
+return cleared the net every time and put ONE of ten on the table, and a sweep of its face angle,
+swing speed and lift proved no fixed stroke could do both — settings that land three of ten
+cannot return all ten. That is still true of the raw stroke. What changed is that `MrPong` runs
+every contact, the follower's included, through `ShotAssist`, so **grading the raw return was
+grading a code path the game no longer takes.** `RallyTest` now feeds contacts through the assist
+exactly as the game does, and the answer went from 1 of 10 to **10 of 10**. The one number still
+taken from before the assist is the raw outgoing speed, because that is what the "does not cheat"
+check is actually about. This makes the follower *legal*, not intelligent — it still tracks the
+ball rather than reading it, and October still owes a predicting opponent.
 
 **Three things in `SelfTest` are load-bearing and easy to wreck by accident:**
 
@@ -334,36 +360,150 @@ leaving sixteen times faster than it arrived. Working back from the same paper's
 gives `k_p ≈ 0.0019`: a factor of ten. The model uses `e_t`, which is dimensionless and cannot hide
 a units error like that. The arithmetic is written out in `Constants.RACKET_MAT`.
 
-## Where this is up to (as of Aug 30)
+## Where this is up to (as of Sep 2) — the game turned into assisted arcade
 
-The physics for a playable game is **done and validated headlessly**; the wiring into the app is
-**not**. Both test suites are green (97 + 3). Concretely:
+The validated physics engine is **still there and still green** (SelfTest 101 + RallyTest 6 —
+the +4 SelfTest checks are the new `Serve` preset's own legality). But the game on top of it
+is now deliberately **arcade, not realistic**, because a rally you can actually keep needs it.
 
-**Done** — moving-surface contact solver, `Collider` seam, time-ordered resolution with sub-step
-re-integration, measured drag and lift, airspeed-dependent spin decay, velocity-dependent table
-restitution, `Paddle`/`Blade`, rubber with spin reversal, `Stroke`, `Opponent`/`Follower`,
-`RallyTest`, `Xform.toPhysics`, `MouseAim`, `PaddleView`.
+**The pivot: `play/ShotAssist.java`.** After the impulse solver resolves a paddle contact,
+`MrPong.advanceOne()` hands the raw result to `ShotAssist`, which turns it into an authored
+shot in one direction only: **solve → constrain → validate → correct.** Nothing is mutated
+after its last check, which is the rule the first version broke.
 
-**Not done, in the order it was going to be tackled:**
+1. **Intent.** Split the racket's motion into a **forward drive** (toward the opponent — a
+   still blade dinks, a driving blade hits), a **sideways swipe** (across the table; for the
+   player this is only the cursor, so *swipe right, ball goes right*) and a **lift**. Read the
+   blade's tilt and where on the face the ball struck as smaller aim contributions.
+2. **Target.** Build a point inside the opponent's court *by construction* — lateral from the
+   swipe, depth from the drive and lift — so the aim can never be absurd. `targetHalfWidth()`
+   / `targetNearDepth()` / `targetFarDepth()` expose the box, and the `V` overlay outlines it.
+3. **Strength.** Map the drive onto a fixed 7–13 m/s band through a saturating curve. It is
+   never `incoming + racket`, which is what stops a rally compounding.
+4. **Solve.** Ask `Aim` — the same solver the presets use — for the launch that LANDS there.
+5. **Constrain.** Minimum forward pace, a lateral cone *and* an absolute lateral cap, an
+   elevation band, a speed cap. About 6% of a hard-capped raw bounce is blended in for feel.
+6. **Validate.** Fly the finished velocity forward, contact-free, and measure its net height
+   and landing point. If it clears the cord and lands in, done.
+7. **Correct.** Otherwise try again: a spread of speeds around the one the swing asked for,
+   then targets pulled toward the middle. The winner is the *legal* candidate closest to the
+   player's intent. If nothing legal is found at all, a wider **rescue** search re-aims down
+   the middle at anything from 3 m/s up — because some contacts have no fast answer, and a
+   ball met right at the net can only be lifted softly over. That path is flagged in the
+   overlay so it is visible rather than mysterious.
 
-1. **Wire the paddles into `MrPong`.** They exist but nothing constructs them, so there is still no
-   paddle on screen. Needs: fields beside the other views; the nodes added to `world3d`; `Stroke` and
-   `Follower` advanced inside `advanceOne()` (**per `DT`, never per frame** — sample the mouse into a
-   field in the handler and consume it there); `PaddleView.update` in `render()` interpolated with the
-   same `alpha` as the ball.
-2. **Mouse buttons.** `CameraRig.attachControls` filters on *no* button, so today **any** drag orbits
-   — which collides head-on with hold-right-click-to-charge. Left drag should orbit, right press /
-   drag / release should charge and swing, bare movement should aim. `MOUSE_MOVED` is entirely free.
-   Use `addEventHandler`, **not** `setOnMouseDragged`: those are single-slot properties and assigning
-   one silently replaces the camera orbit.
-3. **HUD.** Delete the readouts, the event log and the status line; keep the key legend and extend it
-   with the new controls. Only six sites in `MrPong` reference `Hud` (`:80`, `:111`, `:150`,
-   `:268-270`, `:345`); nothing in `render/` or `physics/` does.
-4. **`RallyTest` run configuration** (see above), then `README.md`.
+Then `world.setState(...)` swaps it in. **Both rackets** go through it, so the follower's returns
+land too. `World.setState` is the only new `physics/` code — one setter, never called by SelfTest
+or `predict`, so the model underneath is untouched. The player's blade is still moved by the raw
+solver at contact; the *outgoing* trajectory is what gets civilised.
+
+**Every tuning number lives in `ShotAssist.Tuning`**, a public nested class with a field per
+knob — speeds, influences, clamps, the target box, the correction and rescue searches, spin.
+Nothing is hardcoded below it. (Restitution and friction are deliberately NOT duplicated there:
+they are measured values with citations, single-sourced in `physics/Constants`, and SelfTest
+grades them.)
+
+**What it measurably fixed.** `Sweep` (scratch) fires a realistic incoming ball at the blade
+over a 75-point grid of racket velocities and flies each result to its landing:
+
+| | lands on the table | worst sideways landing | fastest launch |
+| --- | --- | --- | --- |
+| raw impulse alone | 11 / 75 | 2.37 m (half-width is 0.76) | 24.5 m/s |
+| through `ShotAssist` | **75 / 75** | 0.38 m | 12.4 m/s |
+
+and the controls now separate: drive 0 / 3 / 6 / 10 / 14 m/s gives 6.9 / 7.9 / 8.9 / 9.9 /
+12.4 m/s of shot and depth from 0.66 m to 1.07 m; an 8 m/s swipe moves the landing 0.38 m to
+that side; twenty hard drives in a row stay between 9.9 and 10.0 m/s. Before the rewrite the
+racket's vertical motion did nothing at all and drives of 10 and 14 were identical.
+
+**Three measurement bugs were found and fixed while doing this, and they matter more than the
+tuning did.** All three came from asking a `World` — which has a table in it — where a shot
+lands. The table *bounces the ball out of the way* before the descent can be detected, so the
+first crossing reported is the SECOND descent, out past the end line. It made `Sweep` read
+0/75 when the real answer was 75/75, and made `RallyTest` call six good returns "long". The
+landing question has to be asked of a contact-free flight (`Aim.landingPoint`), and the code
+now says so in three places.
+
+**The one-bounce rule.** `MrPong` enforces ITTF's "return only after it has bounced on your
+side" by handing `World` a null racket for whoever may not hit yet — the blade still tracks the
+ball on screen, it just phases through. A table bounce opens the receiver's racket; a *second*
+bounce on the same side, a ball back on the hitter's own half, the net, or a ball past the end
+line calls `endPoint()`, which cuts to the next serve after `POINT_END_DELAY` (0.9 s) rather
+than waiting for the ball to trickle to a stop. There is no score counter yet — a point just
+resets the rally.
+
+One subtlety in there, `CONTACT_BOUNCE_WINDOW`: a ball may legally be struck while it is still
+touching the table (a push dug out at surface height is a real shot, and the blade reaches in
+over the table for it). The table contact then fires on the *same physics step* as the racket
+contact, and the rule above reads it as "your own shot bounced on your own half" and ends the
+point on a perfectly legal stroke. It killed every four-hit rally in the headless trace. A
+bounce within two steps of a racket hit is that contact's own table touch and is not a rally
+event — but the serial still has to advance, or the next real bounce is compared to a stale one.
+
+This is a real departure from the contract's "real physics (spin, shot speed from power applied)".
+The realistic solver is intact and could be switched back to (drop the `ShotAssist` call). Keeping
+both is the point — the graded physics work stands on its own in `physics/` + `SelfTest`, and the
+playable game is a `play/` layer on top. **If the grade cares more about the realistic model, that
+is the thing to demo; if it cares about a playable game, this is.**
+
+Tuning lives entirely in `ShotAssist.Tuning`. `play.Trace` (scratch) rallies a brain-dead autoplay
+bot — it lunges to every ball and parks, the worst case — against the follower. It used to manage
+about 3 exchanges per point; it now runs to the 40 s timeout on **every** feed (96 exchanges a
+point on Serve, Flat drive, Topspin loop and Heavy backspin push alike). A human who lets the ball
+come and drives through it does better still.
+
+**`V` toggles `ShotDebug`**, and it draws the whole decision now: the racket's own velocity
+(yellow), the incoming ball's (white), the raw physical reflection (grey), the intended shot
+(cyan), the final constrained shot (orange, length = speed), the target (magenta dot), the
+predicted landing (green dot) and the legal target box (blue outline), with speed / spin /
+correction passes / legal-or-rescued printed on the HUD. Reading it: magenta and green apart
+means the solve did not land where it aimed; cyan and orange apart means a clamp is fighting the
+solve; a green dot off the table means the rescue is in play.
+
+The `Follower` also picked up a fix this pass, and it is the one that unblocked the rally. It
+waited on `PLANE_Z` for every ball, so a soft return that landed short simply fell below the
+blade before it arrived — measured: a 4.3 m/s push bouncing at z = −0.62 was still descending
+through the blade's plane and hit the floor at z = −1.88, untouched, ending the rally at two
+hits. It now steps in to meet a LOW ball, over the last 55 cm only. Both guards are load-bearing:
+written without the range guard, RallyTest fell from 10 of 10 shots reached to 3 of 10, because
+the blade parked mid-table and was out of position for everything.
+
+**Also this pass:**
+
+- **`CameraRig` rally-cam** — no longer follows the ball. Two FIXED views (close / wide), and it
+  cuts between them on who last hit: IN on a player hit (or the feed), OUT on an opponent hit.
+  `F` toggles, `C` drops to the presets. "The camera is the most important tool for hitting the
+  ball", so it always sits behind the near end looking down-table.
+- **`Stroke` reach** — the blade tracks the ball's depth within a generous band (`REACH_FWD`
+  1.2 m out over the table, `REACH_BACK` 0.8 m behind the baseline). `MouseAim` bounds widened
+  (`MAX_X` +1 m, `MAX_Y` 1.4 m) and it reads the cursor at the blade's current z. `MIN_Y` is
+  **`BLADE_R`**, not the ball's 0.02: it bounds the blade's CENTRE, and a disc of radius
+  BLADE_R centred at 0.02 hangs 5.5 cm through the table top — which is the bug this constant
+  was previously changed to fix and did not. It costs no reach, since the disc still spans 0 to
+  15 cm and its lower half covers a ball scraping the surface.
+  The `gone` cutoff in `advanceOne` is y < -0.6 (near the floor), not -0.25, so a wide/long ball
+  stays chaseable.
+- **Face eased toward the ball** (`FACE_TAU`), **`Stroke.TRACK_SPEED` 8 → 13**, **`timeScale`
+  0.45**, **default feed = `Serve`** (gentle no-spin corner to corner).
+
+**Not done, next:**
+
+1. **Make the follower's returns less passive.** Rallies hold indefinitely now, but most of its
+   returns come back at 4.3 m/s through the assist's rescue path, because it still meets the
+   ball low near its own baseline and no fast shot is legal from there. That is a stroke-quality
+   problem, and the real answer is the October opponent choosing its stroke from the ball.
+2. **Scoring.** The point-ending events already fire and reset the rally; nothing counts points
+   or tracks serve/receive turns.
+3. **Serving for real** — the player serving off their own blade, not a `launchShot` feed.
+4. **`RallyTest` run configuration** (headless `main`, no `.idea/runConfigurations/` entry).
 
 One consequence of the aero change worth knowing before it surprises someone: **shots curve less than
 they used to.** Sidespin deflection dropped ~16% and backspin now floats more. That is the measured
 behaviour, not a regression — the before/after numbers are in the git history for this change.
+
+One consequence of `timeScale = 0.45`: the game opens in slow motion. `[` and `]` still change it
+live (down to 0.02, up to 2.0). It is a pure display-rate knob — fewer fixed steps run per wall
+second, each identical to a full-speed step — so nothing under `physics/` sees it.
 
 ## Conventions
 

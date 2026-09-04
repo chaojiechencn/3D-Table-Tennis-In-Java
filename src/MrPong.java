@@ -6,7 +6,6 @@ import javafx.geometry.Point2D;
 import javafx.scene.*;
 import javafx.scene.image.WritableImage;
 import javafx.scene.input.KeyCode;
-import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
@@ -14,6 +13,7 @@ import javafx.stage.Stage;
 import physics.*;
 import play.Follower;
 import play.Opponent;
+import play.ShotAssist;
 import play.Stroke;
 import render.*;
 
@@ -30,30 +30,38 @@ import static physics.Constants.MAX_FRAME;
  * Mr. Pong - a 3D table tennis game.
  *
  * Checkpoint 1 (27 August) was the physics on its own: a ball flying with spin, curving in the
- * air, bouncing off the table and dying in the net. That still runs, and the ghost trail and
- * camera presets that made the curve visible are still here.
+ * air, bouncing off the table and dying in the net. That still runs -- the ghost trail and the
+ * camera presets that made the curve visible are still here -- and physics.SelfTest still
+ * grades it.
  *
- * This is checkpoint 2, the playable half. What it adds:
+ * On top of it is an ARCADE game:
  *
- *   - a racket on the near end that follows the mouse, and one at the far end played by the AI
- *   - a charge-and-release stroke: hold the right button to wind up, drag to choose the
- *     direction you will swing through, let go to hit
- *   - spin that comes out of the CONTACT rather than out of a table of shot types. Nothing
- *     here tells the ball how fast to leave or how much spin to carry; the solver measures the
- *     blade's own velocity and the tilt of its face, and the shot falls out of that
+ *   - a racket at each end: the near one follows the mouse and reaches in over the table for
+ *     the ball, the far one is the AI
+ *   - the shot is the mouse motion -- driving the blade forward sets the pace, swiping it
+ *     across sets the direction. play.ShotAssist then constrains the outgoing trajectory to a
+ *     playable target so the ball stays in and the rally holds. BOTH rackets go through it.
+ *   - the ITTF one-bounce rule: you may only return the ball after it has bounced on your
+ *     side. Enforced by handing World a null racket until then. A double bounce, the net, or a
+ *     ball past the end line decides the point and cuts to the next serve.
+ *   - a rally-cam that cuts between two fixed views -- close when the player last hit, wide
+ *     when the opponent did -- and a 0.45x slow-motion default
+ *   - V shows a debug overlay of what ShotAssist did: the racket's velocity, the incoming
+ *     ball, the raw bounce, the intended and final shot, the target and the predicted landing
  *
- * Still missing, and deliberately next rather than now: serving and scoring.
+ * Still missing, and deliberately next: a real serve off the player's blade, and a scoreboard.
  *
  * The physics lives in the physics package and the game logic in play, and neither imports
- * JavaFX -- so both can be checked headlessly, and neither can accidentally start depending on
- * the frame rate. Run physics.SelfTest and play.RallyTest for that.
+ * JavaFX -- so both can be checked headlessly. Run physics.SelfTest and play.RallyTest.
  */
 public class MrPong extends Application {
 
     // ------------------------------------------------------------------ simulation
 
     private final World world = new World();
-    private Shots currentShot = Shots.byName("Topspin loop");
+    // Opens on a gentle no-spin corner-to-corner serve. Every hit after that -- both rackets --
+    // goes through ShotAssist, which keeps the ball in a playable area, so the rally holds.
+    private Shots currentShot = Shots.byName("Serve");
 
     /**
      * The two rackets.
@@ -72,6 +80,12 @@ public class MrPong extends Application {
     private final Stroke stroke = new Stroke(new Vec3(0, 0.25, MouseAim.PLAYER_PLANE_Z));
     private final Opponent opponent = new Follower();
 
+    /** Turns every racket contact into a playable shot -- see ShotAssist. */
+    private final ShotAssist shotAssist = new ShotAssist();
+
+    /** Paddle-contact count at the last step, so the assist and rally-cam fire once per hit. */
+    private int lastPaddleHits = 0;
+
     /**
      * Leftover time not yet consumed by a whole physics step.
      * The whole reason the loop is built this way (Gaffer On Games, "Fix Your Timestep!") is
@@ -82,7 +96,12 @@ public class MrPong extends Application {
     private double accumulator = 0;
     private long lastNanos = 0;
 
-    private double timeScale = 1.0;
+    // Runs the whole simulation well below real time. Table tennis at 1:1 is a blur on a first
+    // play -- the ball crosses the table in a third of a second -- so the game opens in slow
+    // motion that leaves time to actually move to the ball. [ and ] still walk it up and down
+    // (up to 2x), and it changes nothing in physics/: fewer fixed steps run per second, every
+    // one of them identical to a full-speed step.
+    private double timeScale = 0.45;
     private boolean paused = false;
     private int singleSteps = 0;
     private double fps = 0;
@@ -100,6 +119,7 @@ public class MrPong extends Application {
     private final BounceMarks marks = new BounceMarks(24);
     private final CameraRig rig = new CameraRig();
     private final Hud hud = new Hud();
+    private final ShotDebug shotDebug = new ShotDebug();   // V toggles it
 
     // Red rubber on the -normal side of both rackets. The player's blade faces down the table,
     // so its red side looks back at the camera; the opponent's faces the other way, so we see
@@ -172,6 +192,38 @@ public class MrPong extends Application {
     /** How long to keep watching after the ball has dropped past the table. */
     private static final double REPLAY_DELAY = 1.8;
 
+    /** Shorter pause after a *decided* point (net, out, double bounce) before the next serve —
+     *  the point is cut early rather than waiting for the ball to trickle to a stop. */
+    private static final double POINT_END_DELAY = 0.9;
+
+    // ------------------------------------------------------------------ the one-bounce rule
+    //
+    // ITTF: you may only return the ball after it has bounced once on your side. Enforced by
+    // handing World a null racket for whoever is not yet allowed to hit -- the blade still
+    // tracks the ball on screen, it just cannot make contact. A ball that bounces twice on one
+    // side, or into the net, or past the end line, decides the point and cuts to the next serve.
+
+    private boolean playerMayHit = false;
+    private boolean aiMayHit = false;
+    private int lastBounceSerial = 0;
+    /** Who put the ball in the air: 0 = the serve/feed, +1 = the opponent hit it, -1 = player. */
+    private int lastHitSide = 0;
+
+    /**
+     * When the last racket contact happened, and how long after one a table bounce is treated
+     * as part of that contact rather than as a shot falling back.
+     *
+     * A ball can legally be struck while it is still touching the table -- a push dug out at
+     * surface height is a real shot, and the paddle can reach in over the table for it. When
+     * that happens the table contact fires on the same physics step as the racket contact, and
+     * the rules below read it as "your own shot bounced on your own half", ending the point on
+     * a stroke that was perfectly legal. It ended a four-hit rally every single time in the
+     * headless rally trace. Two steps is enough: the ball is gone from the surface long before
+     * that at any speed the shot model can produce.
+     */
+    private double lastHitTime = -1;
+    private static final double CONTACT_BOUNCE_WINDOW = DT * 2;
+
     // ------------------------------------------------------------------ screenshot mode
 
     private String screenshotPath = null;
@@ -190,6 +242,7 @@ public class MrPong extends Application {
                 marks.node(),
                 ghost.node(),
                 trail.node(),
+                shotDebug.node(),
                 aiView.node(),
                 playerView.node(),
                 ball.node(),
@@ -201,7 +254,7 @@ public class MrPong extends Application {
         sub.setFill(Color.web("#0b0e13"));
         sub.setCamera(rig.camera());
         rig.attachControls(sub);
-        attachStrokeControls(sub);
+        attachPaddleControls(sub);
 
         StackPane layers = new StackPane(sub, hud.node());
         Scene scene = new Scene(layers, 1280, 780, Color.web("#0b0e13"));
@@ -238,7 +291,7 @@ public class MrPong extends Application {
                 frame = Math.min(frame, MAX_FRAME);
 
                 stepPhysics(frame);
-                render();
+                render(frame);
 
                 if (screenshotPath != null && world.time() >= screenshotAt) {
                     takeScreenshot(scene);
@@ -285,16 +338,73 @@ public class MrPong extends Application {
         prevAiPose = aiPaddle.collider();
 
         if (pendingAim != null) stroke.aimAt(pendingAim);
-        stroke.advance(playerPaddle, DT);
+        stroke.advance(playerPaddle, world.state(), DT);
         opponent.advance(world.state(), aiPaddle, DT);
 
+        // The one-bounce rule: only the racket that is currently ALLOWED to hit is in the
+        // collision set. The other blade still tracks the ball on screen, it just phases
+        // through it until the ball has bounced on that player's side.
+        world.setPaddles(playerMayHit ? playerPaddle : null, aiMayHit ? aiPaddle : null);
+
+        // The ball as it is just before this step -- ShotAssist wants the pre-contact velocity.
+        BallState beforeStep = world.state();
         world.step();
 
-        // The rally is over in one of two ways: the ball has dropped past the table and is
-        // never coming back, or it has died ON the table -- which is what the net shot and the
-        // ITTF drop test both do, and checking only for the first left those two sitting
-        // motionless forever.
-        boolean gone = world.state().pos().y() < -0.25;
+        // A racket just hit it: run the raw bounce through the arcade assist so the shot stays
+        // playable, cut the rally-cam, and hand the ball to the other side (which now waits for
+        // its own bounce before it may hit).
+        if (world.paddleHits() > lastPaddleHits) {
+            lastPaddleHits = world.paddleHits();
+            boolean playerHit = lastHitByPlayer();
+            Paddle racket = playerHit ? playerPaddle : aiPaddle;
+
+            world.setState(shotAssist.assist(beforeStep, world.state(), racket, playerHit));
+            rig.onRallyHit(playerHit);
+            lastHitSide = playerHit ? -1 : 1;
+            lastHitTime = world.time();
+            playerMayHit = false;
+            aiMayHit = false;
+
+            ShotAssist.Debug d = shotAssist.debug();
+            shotDebug.set(d.contact(), d.racketVel(), d.incomingVel(), d.reflectDir(),
+                          d.intendDir(), d.finalDir(), d.target(), d.landing(),
+                          d.speed(), d.spin(), d.passes(), d.legal());
+            shotDebug.setTargetArea(shotAssist.targetHalfWidth(), shotAssist.targetNearDepth(),
+                                    shotAssist.targetFarDepth(), !playerHit);
+            hud.setShot(shotDebug.isShown() ? shotDebug.readout() : null);
+        }
+
+        // A table bounce opens the receiver's racket -- unless it is the SECOND bounce on that
+        // side, or the ball has fallen back onto the hitter's own half, which decides the point.
+        if (world.bounceSerial() > lastBounceSerial
+                && world.time() - lastHitTime > CONTACT_BOUNCE_WINDOW) {
+            lastBounceSerial = world.bounceSerial();
+            boolean near = lastBounceSide() < 0;
+            if (near) {
+                if (lastHitSide >= 0) { if (playerMayHit) endPoint(); else playerMayHit = true; }
+                else endPoint();                       // player's own shot came back down near
+            } else {
+                if (lastHitSide <= 0) { if (aiMayHit) endPoint(); else aiMayHit = true; }
+                else endPoint();                       // opponent's shot fell on its own half
+            }
+        }
+
+        // A bounce inside the contact window is the racket contact's own table touch. It is not
+        // a rally event, but the serial still has to move on or the next real bounce is
+        // measured against a stale one.
+        lastBounceSerial = world.bounceSerial();
+
+        // The net killing a ball, a ball past the end line, or the floor -- all decide the point.
+        World.Event last = world.lastEvent();
+        if (last != null && world.time() - last.time() < DT * 2
+                && (last.type() == World.EventType.NET
+                 || last.type() == World.EventType.OUT_OF_BOUNDS
+                 || last.type() == World.EventType.FLOOR)) {
+            endPoint();
+        }
+
+        // Fallback: the ball dropped near the FLOOR without a clean event, or died on the table.
+        boolean gone = world.state().pos().y() < -0.60;
         boolean stopped = world.time() > 1.5 && world.state().speed() < 0.25;
         if (autoReplay && Double.isNaN(replayAt) && (gone || stopped)) {
             replayAt = world.time() + REPLAY_DELAY;
@@ -307,9 +417,33 @@ public class MrPong extends Application {
         }
     }
 
+    /** Whose racket the most recent contact was: near half (z &lt; 0) is the player. Scans the
+     *  event log back to front for the last PADDLE_HIT. */
+    private boolean lastHitByPlayer() {
+        List<World.Event> es = world.events();
+        for (int i = es.size() - 1; i >= 0; i--) {
+            if (es.get(i).type() == World.EventType.PADDLE_HIT) return es.get(i).side() < 0;
+        }
+        return true;
+    }
+
+    /** Side of the most recent table bounce: -1 near (player), +1 far (opponent), 0 if none. */
+    private int lastBounceSide() {
+        List<World.Event> es = world.events();
+        for (int i = es.size() - 1; i >= 0; i--) {
+            if (es.get(i).type() == World.EventType.TABLE_BOUNCE) return es.get(i).side();
+        }
+        return 0;
+    }
+
+    /** Cut the current point: schedule the next serve, sooner than the roll-to-a-stop fallback. */
+    private void endPoint() {
+        if (autoReplay && Double.isNaN(replayAt)) replayAt = world.time() + POINT_END_DELAY;
+    }
+
     // ------------------------------------------------------------------ rendering
 
-    private void render() {
+    private void render(double frameSeconds) {
         // Interpolate between the last two physics states. Without this the ball visibly
         // stutters whenever the frame rate is not an exact multiple of the physics rate,
         // which at 480 Hz against a 60 Hz display it never is.
@@ -323,6 +457,10 @@ public class MrPong extends Application {
                 Quat.slerp(a.orient(), b.orient(), alpha));
 
         ball.update(shown);
+
+        // Ease the rally-cam toward whichever fixed view the last hit picked. Real frame time
+        // -- it is a view, not physics.
+        rig.updateRally(frameSeconds);
 
         // The same alpha, so the blade and the ball never disagree about where they are at
         // the instant of contact -- which is the one frame anybody is looking closely at.
@@ -339,8 +477,6 @@ public class MrPong extends Application {
             shownMarks = world.tableBounces();
             marks.setMarks(world.bounceMarks());
         }
-
-        hud.setCharge(stroke.charge(), stroke.phase() == Stroke.Phase.CHARGING);
     }
 
     /**
@@ -371,34 +507,19 @@ public class MrPong extends Application {
     // ------------------------------------------------------------------ input
 
     /**
-     * Mouse control of the player's racket.
+     * Mouse control of the player's racket: bare movement aims, and that is all there is.
      *
-     * Three gestures on three separate signals, which is exactly why CameraRig had to be
-     * narrowed to the left button: bare movement aims, the right button charges and swings,
-     * and the left button orbits the camera. MOUSE_MOVED was entirely unused before this.
+     * The blade follows the cursor and the shot is in how you move it -- swing speed is pace,
+     * the direction you cut across the ball is spin, both measured by the contact solver. No
+     * buttons: the left button still belongs to the camera orbit in CameraRig, and there is no
+     * longer a charge gesture to give the right one.
      *
-     * addEventHandler throughout. setOnMouseMoved and friends are single-slot properties, so
-     * assigning one here would silently unhook the camera orbit that CameraRig just installed
-     * on this same SubScene.
+     * addEventHandler, not setOnMouseMoved. That is a single-slot property, so assigning it
+     * here would silently unhook the camera orbit that CameraRig just installed on this same
+     * SubScene.
      */
-    private void attachStrokeControls(SubScene sub) {
+    private void attachPaddleControls(SubScene sub) {
         sub.addEventHandler(MouseEvent.MOUSE_MOVED, e -> aim(sub, e));
-
-        sub.addEventHandler(MouseEvent.MOUSE_PRESSED, e -> {
-            if (e.getButton() != MouseButton.SECONDARY) return;
-            aim(sub, e);            // press where the cursor IS, not where it last moved
-            stroke.press();
-        });
-
-        // Dragging with the right button down IS the backswing. It keeps aiming, and Stroke
-        // reads the drag since the press as the direction the swing will travel through.
-        sub.addEventHandler(MouseEvent.MOUSE_DRAGGED, e -> {
-            if (e.isSecondaryButtonDown()) aim(sub, e);
-        });
-
-        sub.addEventHandler(MouseEvent.MOUSE_RELEASED, e -> {
-            if (e.getButton() == MouseButton.SECONDARY) stroke.release();
-        });
     }
 
     /**
@@ -411,7 +532,10 @@ public class MrPong extends Application {
     private void aim(SubScene sub, MouseEvent e) {
         Point2D p = sub.sceneToLocal(e.getSceneX(), e.getSceneY());
         Vec3 fallback = pendingAim != null ? pendingAim : playerPaddle.pos();
-        pendingAim = MouseAim.onPlayerPlane(sub, p.getX(), p.getY(), fallback);
+        // Read the cursor on the plane the blade is CURRENTLY at -- it reaches in and out to
+        // meet the ball, and x/y measured on a stale plane would drift under camera parallax.
+        pendingAim = MouseAim.onPlayerPlane(sub, p.getX(), p.getY(),
+                                            playerPaddle.pos().z(), fallback);
     }
 
     private void onKey(KeyCode code) {
@@ -445,7 +569,12 @@ public class MrPong extends Application {
             case T -> { showTrail = !showTrail; trail.setShown(showTrail); }
             case A -> { autoReplay = !autoReplay; replayAt = Double.NaN; }
             case B -> ball.setMagnified(!ball.isMagnified());
-            case C -> rig.next();
+            case F -> rig.toggleRallyCam();
+            case C -> rig.next();          // next() drops the rally-cam for a manual view
+            case V -> {
+                shotDebug.setShown(!shotDebug.isShown());
+                hud.setShot(shotDebug.isShown() ? shotDebug.readout() : null);
+            }
             case H -> { showHud = !showHud; hud.setShown(showHud); }
             case ESCAPE -> Platform.exit();
 
@@ -480,6 +609,18 @@ public class MrPong extends Application {
         currentShot = shot;
         world.launch(shot.state());
         hud.setFeed(shot.name());
+
+        // The feed stands in for the player's own serve, so the rally-cam opens zoomed IN; it
+        // will cut OUT when the opponent returns it.
+        lastPaddleHits = 0;
+        rig.onRallyHit(true);
+
+        // One-bounce state: the serve is in the air, nobody may hit until it has bounced.
+        playerMayHit = false;
+        aiMayHit = false;
+        lastHitSide = 0;
+        lastBounceSerial = world.bounceSerial();
+        lastHitTime = -1;
 
         accumulator = 0;
         replayAt = Double.NaN;
@@ -524,6 +665,11 @@ public class MrPong extends Application {
                 default -> { }
             }
         }
+
+        // A capture wants a fixed, predictable camera. --view already opts out of the
+        // rally-cam; this covers the default (no --view) case so a screenshot is not framed
+        // by whichever view the last hit had selected.
+        if (screenshotPath != null) rig.stopRallyCam();
     }
 
     private void takeScreenshot(Scene scene) {

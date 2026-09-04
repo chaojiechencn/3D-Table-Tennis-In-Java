@@ -6,8 +6,6 @@ import javafx.scene.control.Label;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
-import javafx.scene.paint.Color;
-import javafx.scene.shape.Rectangle;
 
 /**
  * The key legend, and the one readout the controls cannot work without.
@@ -19,50 +17,38 @@ import javafx.scene.shape.Rectangle;
  * physics.SelfTest checks them far harder than a human reading a panel ever could, against
  * published values rather than against plausibility.
  *
- * What survives is what a PLAYER needs. The legend, because the controls are not guessable.
- * The feed name, because N and P otherwise change something invisible. And the power meter,
- * because charge-and-release is a timed gesture with no other feedback at all -- without it
- * the player is holding a button and hoping.
+ * What survives is what a PLAYER needs: the legend, because the controls are not guessable, and
+ * the feed name, because N and P otherwise change something invisible. (There was a power meter
+ * here too, for the charge-and-release stroke. The stroke is gone -- the paddle just follows
+ * the mouse now -- and the meter went with it.)
+ *
+ * The one exception is the shot line, and it is only on while V is: it prints the numbers from
+ * the shot-assist overlay that cannot be drawn as an arrow in the 3D scene -- launch speed,
+ * spin, how many correction passes the shot needed, and whether it came out legal.
  */
 public final class Hud {
 
     private static final String MONO = "Consolas, 'DejaVu Sans Mono', monospace";
 
-    /** Power meter geometry, in pixels. */
-    private static final double BAR_W = 240, BAR_H = 9;
-
     private final StackPane root = new StackPane();
     private final Label feed = panelLabel(15, "#eaf2ff");
+    private final Label shot = panelLabel(12, "#ff9a3c");
     private final Label controls = panelLabel(12, "#8d9bab");
-    private final Label power = panelLabel(11.5, "#c9d6e4");
-    private final Rectangle fill = new Rectangle(0, BAR_H);
-    private final VBox meter;
 
     public Hud() {
         controls.setText("""
-            MOUSE   move to aim      hold RIGHT to charge, drag back to set the stroke, release to swing
+            MOUSE   move to move the paddle -- swing through the ball to hit
+                    (how you move through the ball aims the shot; the game keeps it in)
                     LEFT drag orbits the camera      scroll zooms
             FEED    1-9,0 pick   N/P next,prev   R replay   A auto-replay
             TIME    SPACE pause   . step   [ ] slower,faster
-            VIEW    C camera   G ghost (no-spin twin)   T trail   B ball x2   H hud   ESC quit""");
+            VIEW    F rally-cam on/off   C preset view   V shot debug
+                    G ghost   T trail   B ball x2   H hud   ESC quit""");
 
-        Rectangle track = new Rectangle(BAR_W, BAR_H);
-        track.setFill(Color.web("#1b2129"));
-        track.setStroke(Color.web("#8caacd", 0.35));
-        fill.setFill(Color.web("#ffc14d"));
-
-        StackPane bar = new StackPane(track, fill);
-        StackPane.setAlignment(fill, Pos.CENTER_LEFT);
-        bar.setMaxSize(BAR_W, BAR_H);
-
-        meter = corner(Pos.BOTTOM_CENTER, power);
-        meter.getChildren().add(bar);
-        meter.setVisible(false);
-
-        root.getChildren().addAll(corner(Pos.TOP_LEFT, feed),
-                                  corner(Pos.BOTTOM_LEFT, controls),
-                                  meter);
-        root.setPickOnBounds(false);      // clicks must reach the SubScene to orbit and swing
+        setShot(null);
+        root.getChildren().addAll(corner(Pos.TOP_LEFT, feed, shot),
+                                  corner(Pos.BOTTOM_LEFT, controls));
+        root.setPickOnBounds(false);      // clicks must reach the SubScene to orbit and aim
         root.setPadding(new Insets(14));
     }
 
@@ -73,22 +59,13 @@ public final class Hud {
     /** The feed currently selected with the number keys. */
     public void setFeed(String name) { feed.setText("feed: " + name); }
 
-    /**
-     * The power meter.
-     *
-     * @param charge   0 to 1, how far the stroke is wound up
-     * @param charging whether the button is still held -- the meter is hidden otherwise, so it
-     *                 never sits at 0% telling the player something they already know
-     */
-    public void setCharge(double charge, boolean charging) {
-        meter.setVisible(charging);
-        if (!charging) return;
-
-        fill.setWidth(BAR_W * Math.max(0, Math.min(1, charge)));
-        // Amber to red as it fills, so peak power is readable at a glance rather than by
-        // measuring the bar against its own track.
-        fill.setFill(Color.web("#ffc14d").interpolate(Color.web("#e04b2f"), charge));
-        power.setText(String.format("power %3.0f%%", charge * 100));
+    /** The shot-assist readout, or null to hide the line entirely (V off, or nothing hit yet).
+     *  It has to go unmanaged as well as invisible or it leaves a blank row in the panel. */
+    public void setShot(String text) {
+        boolean on = text != null && !text.isEmpty();
+        shot.setText(on ? text : "");
+        shot.setVisible(on);
+        shot.setManaged(on);
     }
 
     // ------------------------------------------------------------------ styling

@@ -361,6 +361,16 @@ public final class World {
 
     public BallState state()    { return state; }
     public BallState previous() { return previous; }
+
+    /**
+     * Replace the live ball state.
+     *
+     * The one caller is the arcade shot assist (`play.ShotAssist`): right after a paddle
+     * contact it swaps the raw impulse result for a trajectory the game can rally on. Nothing
+     * in `physics/` touches this -- SelfTest and {@link #predict} never call it, so the
+     * validated model is unchanged underneath.
+     */
+    public void setState(BallState s) { state = s; }
     public double time()        { return time; }
     public double apex()        { return apex; }
     public int tableBounces()   { return tableBounces; }

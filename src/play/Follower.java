@@ -59,6 +59,26 @@ public final class Follower implements Opponent {
     /** Where the blade waits before a rally and after it has played its shot. */
     private static final Vec3 READY = new Vec3(0, 0.20, PLANE_Z);
 
+    /**
+     * How far in over the table the blade will step to meet a dying ball, in metres.
+     *
+     * Without this the blade waits on PLANE_Z for every ball, and a soft return that lands
+     * short simply falls below it before it arrives -- measured: a 4.3 m/s push bouncing at
+     * z = -0.62 was still descending through the blade's plane and hit the floor at z = -1.88,
+     * untouched, ending the rally at two hits. It is not that the blade was too slow; it was
+     * in the right place at the wrong time.
+     *
+     * A player does not wait on the baseline for a short ball, they step in. So does this --
+     * but only over the last {@code REACH_FWD} metres, and only for a LOW ball (see
+     * {@link #STEP_IN_HEIGHT}). Both guards are load-bearing: stepping in from further out,
+     * or for every ball, leaves the blade parked in the middle of the table and out of
+     * position for everything, which RallyTest catches immediately.
+     */
+    private static final double REACH_FWD = 0.55;
+
+    /** Ball height, in metres, below which it is worth stepping in rather than waiting. */
+    private static final double STEP_IN_HEIGHT = 0.22;
+
     /** How close the ball has to get before it commits to a stroke. */
     private static final double SWING_RANGE = 0.30;
 
@@ -184,11 +204,12 @@ public final class Follower implements Opponent {
             double travel = SWING_TIME * s * 2 / Math.PI;
             want = new Vec3(swingAim.x(),
                             swingAim.y() + swingLift * travel,
-                            PLANE_Z + swingSpeed * travel);
+                            swingAim.z() + swingSpeed * travel);
             if (t >= 1) swinging = -1;
         } else if (incoming) {
             // Move to meet it. Still no prediction: this is where the ball IS, not where it
-            // is going, and that is the whole design.
+            // is going, and that is the whole design. The one concession is depth -- a ball
+            // already down near the table gets met further out, before it falls any lower.
             want = reachable(b);
         } else {
             // The ball is on its way back to the other end. Reset, rather than follow it --
@@ -214,9 +235,17 @@ public final class Follower implements Opponent {
      * chasing a dead ball, the ceiling so it cannot chase a lob into the roof.
      */
     private static Vec3 reachable(Vec3 b) {
+        // Step in only over the last stretch, and only for a ball that is already low. Doing
+        // it for every ball, or from further out, parks the blade in the middle of the table
+        // and it is out of position for everything -- measured: RallyTest dropped from 10 of
+        // 10 shots reached to 3 of 10 the first time this was written without the range guard.
+        double toPlane = b.z() - PLANE_Z;
+        double z = (b.y() < STEP_IN_HEIGHT && toPlane > 0 && toPlane < REACH_FWD)
+                 ? b.z()
+                 : PLANE_Z;
         return new Vec3(clamp(b.x(), -TABLE_WIDTH, TABLE_WIDTH),
                         clamp(b.y(), 0.04, MAX_REACH_Y),
-                        PLANE_Z);
+                        z);
     }
 
     private static double clamp(double v, double lo, double hi) {

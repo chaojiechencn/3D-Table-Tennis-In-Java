@@ -17,11 +17,16 @@ import static physics.Constants.*;
  *
  * What it is for: "impossible to beat" is a claim, and a claim about behaviour is worth
  * proving rather than asserting. These checks feed the opponent every preset shot in the menu
- * and require it to return each one over the net.
+ * and require it to reach each one, put it back over the net, and land it on the table.
  *
- * The second group covers the player's stroke, which has the same problem from the other side:
- * "charging harder hits harder" and "you cannot cheat by flicking the mouse" are both claims
- * about behaviour that nothing on screen would contradict loudly enough to notice.
+ * The contacts run through {@link ShotAssist}, because that is what MrPong does with every
+ * racket contact on both sides. The one number taken from before the assist is the raw
+ * outgoing speed, which is what the "does not cheat" check is actually about -- the impulse
+ * solver is still exactly as raw as SelfTest grades it.
+ *
+ * The second group covers the player's paddle, which has the same problem from the other side:
+ * "you cannot cheat by flinging the mouse" is a claim about behaviour that nothing on screen
+ * would contradict loudly enough to notice.
  *
  * Run: java -cp out/production/3D-Table-Tennis-In-Java play.RallyTest
  * Exits 0 if everything passes, 1 otherwise.
@@ -40,8 +45,7 @@ public final class RallyTest {
         theOpponentDoesNotCheat();
         aRallyStaysInTheRoom();
         reportedReturnQuality();
-        aFlickOfTheMouseCannotOutrunAStroke();
-        chargingASwingMakesItFaster();
+        aFlickOfTheMouseCannotOutrunACarriedBat();
 
         System.out.println("=".repeat(74));
         if (failures.isEmpty()) {
@@ -53,33 +57,46 @@ public final class RallyTest {
         }
     }
 
-    /** What happened when one shot was fed at the opponent. */
-    private record Rally(boolean touched, boolean returned, double maxZ, double outgoingSpeed) {}
+    /**
+     * What happened when one shot was fed at the opponent.
+     *
+     * {@code rawSpeed} is the speed straight out of the impulse solver, BEFORE the shot assist
+     * -- that is the number the "does not cheat" check needs, because the assist deliberately
+     * caps the outgoing speed and would make that check pass for the wrong reason.
+     */
+    private record Rally(boolean touched, boolean returned, double maxZ, double rawSpeed) {}
 
     /**
      * Feed one shot and let the follower play it.
      *
      * The player's end is left empty on purpose: this is testing the opponent alone, so the
      * ball is fed from the near end and the rally ends once the opponent has answered it.
+     *
+     * The contact goes through {@link ShotAssist}, because that is what MrPong does with every
+     * racket contact on BOTH sides. Grading the raw impulse here would be grading a code path
+     * the game no longer takes.
      */
     private static Rally feed(Shots shot) {
         World world = new World();
         Paddle blade = new Paddle(new Vec3(0, 0.20, Follower.PLANE_Z), new Vec3(0, 0, 1));
         Opponent ai = new Follower();
+        ShotAssist assist = new ShotAssist();
 
         world.setPaddles(null, blade);
         world.launch(shot.state());
 
         boolean touched = false;
-        double maxZ = -9, outSpeed = 0;
+        double maxZ = -9, rawSpeed = 0;
 
         for (int i = 0; i < (int) (4.0 / DT); i++) {
             ai.advance(world.state(), blade, DT);
+            BallState before = world.state();
             world.step();
 
             if (!touched && world.paddleHits() > 0) {
                 touched = true;
-                outSpeed = world.state().speed();
+                rawSpeed = world.state().speed();
+                world.setState(assist.assist(before, world.state(), blade, false));
             }
             if (touched) maxZ = Math.max(maxZ, world.state().pos().z());
 
@@ -87,7 +104,7 @@ public final class RallyTest {
             if (touched && world.state().pos().z() > 0.05) break;
             if (world.state().pos().y() < -TABLE_HEIGHT + 0.05 && touched) break;
         }
-        return new Rally(touched, touched && maxZ > 0.0, maxZ, outSpeed);
+        return new Rally(touched, touched && maxZ > 0.0, maxZ, rawSpeed);
     }
 
     /** Every shot in the menu has to be reached. A wall that misses is not a wall. */
@@ -138,7 +155,7 @@ public final class RallyTest {
         for (Shots shot : Shots.ALL) {
             if (!isFedAtTheOpponent(shot)) continue;
             Rally r = feed(shot);
-            if (r.outgoingSpeed() > fastest) { fastest = r.outgoingSpeed(); worst = shot.name(); }
+            if (r.rawSpeed() > fastest) { fastest = r.rawSpeed(); worst = shot.name(); }
         }
         // A ball can leave at (1+e) times the blade speed plus its own incoming speed. The
         // fastest preset arrives at 30 m/s, and the blade tops out at MAX_SPEED.
@@ -176,36 +193,48 @@ public final class RallyTest {
     }
 
     /**
-     * Not a check: print where every return actually lands.
+     * Where every return actually lands -- printed in full, and then asserted.
      *
-     * It is here because "the follower returns every shot" is true and misleading on its own.
-     * It clears the net every time; it puts one of nine ON the table.
+     * This used to be a report and not a check, and the comment explaining why is worth
+     * keeping because it is the measurement that forced the shot assist to exist. With the
+     * follower's RAW impulse return, "it returns every shot" was true and misleading: it
+     * cleared the net every time and put ONE of ten on the table. A sweep of the follower's
+     * face angle, swing speed and lift found a straight trade-off rather than an optimum --
+     * settings that land three of ten cannot get all ten back over the net, and of the 318
+     * settings that DO clear the net every time, the best lands one. The presets arrive
+     * between 3.5 and 18.4 m/s carrying 25 to 125 rev/s, and one fixed stroke cannot be the
+     * right answer to both ends of that.
      *
-     * That is not a tuning failure to be quietly improved away. A sweep of the follower's face
-     * angle, swing speed and lift finds a straight trade-off: settings that land three of nine
-     * cannot get all nine back over the net, and of the 318 settings that DO clear the net
-     * every time, the best lands one. The presets arrive between 3.5 and 18.4 m/s carrying 25
-     * to 125 rev/s, and a fixed stroke cannot be the right answer to both ends of that.
+     * What changed is not the tuning and not the threshold: it is that MrPong now runs every
+     * racket contact, the follower's included, through {@link ShotAssist}, which authors the
+     * outgoing trajectory instead of accepting the raw bounce. So the stroke no longer has to
+     * be the right answer to every incoming ball -- the assist is. That makes "the returns
+     * land" a claim the game can actually be held to, and holding it to a weaker one now
+     * would be letting a real regression through unnoticed.
      *
-     * Returning all nine legally means choosing the stroke from the ball, which means reading
-     * it -- World.predict, and the October opponent. Printed rather than asserted so the number
-     * stays in front of whoever runs this, instead of being rediscovered later.
+     * The October opponent is still owed: this makes the follower LEGAL, not intelligent. It
+     * still tracks the ball rather than reading it, and it is still unbeatable.
      */
     private static void reportedReturnQuality() {
         System.out.println();
-        System.out.println("  where the returns land (not a check -- see the October opponent):");
+        System.out.println("  where the returns land:");
 
         int in = 0, played = 0;
+        StringBuilder missed = new StringBuilder();
         for (Shots shot : Shots.ALL) {
             if (!isFedAtTheOpponent(shot)) continue;
             played++;
             Return r = playOut(shot);
-            boolean landed = r.landsOnTheTable();
-            if (landed) in++;
+            if (r.landsOnTheTable()) in++;
+            else missed.append(shot.name()).append(" (").append(r.verdict()).append("); ");
             System.out.printf("    %-24s out %5.1f m/s  apex %4.2f m  %s%n",
                     shot.name(), r.outSpeed(), r.apex(), r.verdict());
         }
-        System.out.printf("    -> %d of %d land on the table%n%n", in, played);
+        System.out.println();
+        check("every assisted return lands on the opponent's half of the table",
+              in == played,
+              String.format("%d of %d land%s", in, played,
+                            missed.length() == 0 ? "" : " -- missed: " + missed));
     }
 
     /** What became of one return. */
@@ -230,6 +259,18 @@ public final class RallyTest {
      *
      * Unlike {@link #feed}, this does NOT stop when the ball crosses back over the net -- that
      * early exit is exactly what hid both the runaway and the long returns.
+     *
+     * Two different flights, for two different questions, and mixing them up gives the wrong
+     * answer to both:
+     *
+     *   apex     comes from the REAL world flight, table and all, because "did this leave the
+     *            hall" is a question about what actually happens.
+     *   landing  comes from a contact-free flight ({@link Aim#landingPoint}), because the
+     *            question is where the shot first meets the plane of the table. Asking the
+     *            world instead is circular: the table bounces the ball out of the way before
+     *            the descent can be detected, so the first crossing reported is the SECOND
+     *            descent, out past the end line. That read a legal return landing at z = +0.9
+     *            as "long, z = +1.94", and made six good returns look like six bad ones.
      */
     private static Return playOut(Shots shot) {
         World world = new World();
@@ -239,47 +280,48 @@ public final class RallyTest {
         world.setPaddles(null, blade);
         world.launch(shot.state());
 
+        ShotAssist assist = new ShotAssist();
         boolean hit = false;
         double apex = 0, outSpeed = 0;
         int hitAt = -1;
+        Vec3 landing = null;
 
         for (int i = 0; i < (int) (6.0 / DT); i++) {
             ai.advance(world.state(), blade, DT);
-            double before = world.state().pos().y();
+            BallState prev = world.state();
+            double before = prev.pos().y();
             world.step();
 
             if (!hit && world.paddleHits() > 0) {
                 hit = true;
-                outSpeed = world.state().speed();
                 hitAt = i;
+                world.setState(assist.assist(prev, world.state(), blade, false));
+                outSpeed = world.state().speed();
+                landing = Aim.landingPoint(world.state());
             }
             if (!hit) continue;
 
             apex = Math.max(apex, world.state().pos().y());
 
-            // The first descent back through the plane of the table top is where it landed --
-            // whether or not there is any table underneath it at that point.
-            Vec3 p = world.state().pos();
-            if (i > hitAt + 20 && before > BALL_R + 0.001 && p.y() <= BALL_R + 0.001
-                    && world.state().vel().y() < 0) {
-                return new Return(apex, p.z(), p.x(), outSpeed);
-            }
+            // Nothing more to learn once it is on the floor or has left the far end.
+            if (i > hitAt + 20 && world.state().pos().y() < -TABLE_HEIGHT + 0.05) break;
         }
-        return new Return(apex, -99, -99, outSpeed);
+        return landing == null ? new Return(apex, -99, -99, outSpeed)
+                               : new Return(apex, landing.z(), landing.x(), outSpeed);
     }
 
-    // ---------------------------------------------------------------- the player's stroke
+    // ---------------------------------------------------------------- the player's paddle
 
     /**
-     * A flick of the mouse must not out-hit a stroke.
+     * A flick of the mouse must not out-hit a bat a player actually carries.
      *
      * The cursor is sampled once a FRAME and the blade advanced once a STEP, so a fast mouse
      * hands the blade a whole frame of travel to cover inside a single 1/480 s step. Paddle
      * measures its velocity by differencing its own pose, so with nothing holding it back a
-     * 30 cm flick reads as 144 m/s. That is not just unphysical, it inverts the mechanic:
-     * charging would be strictly worse than twitching.
+     * 30 cm flick reads as 144 m/s and sends the ball out at nearly 300. Stroke.TRACK_SPEED is
+     * the clamp that stops it; this checks the clamp holds and that it sits below a real swing.
      */
-    private static void aFlickOfTheMouseCannotOutrunAStroke() {
+    private static void aFlickOfTheMouseCannotOutrunACarriedBat() {
         // The position is arbitrary -- the claim is about speed, not about where the blade is.
         Vec3 start = new Vec3(0, 0.25, 1.57);
         Paddle blade = new Paddle(start, new Vec3(0, 0, -1));
@@ -289,9 +331,13 @@ public final class RallyTest {
         // hand moves a mouse, and let the eight steps of one 60 Hz frame consume it.
         stroke.aimAt(start.plus(new Vec3(1.0, 0, 0)));
 
+        // A ball down the table heading away, so the reach and face logic have something sane
+        // to work with; the claim here is about blade SPEED, which does not depend on it.
+        BallState ball = BallState.at(new Vec3(0, 0.25, -0.5), new Vec3(0, 0, -8), Vec3.ZERO);
+
         double fastest = 0;
         for (int i = 0; i < 8; i++) {
-            stroke.advance(blade, DT);
+            stroke.advance(blade, ball, DT);
             fastest = Math.max(fastest, blade.vel().length());
         }
         check("a mouse flick cannot move the blade faster than a player carries a bat",
@@ -299,59 +345,13 @@ public final class RallyTest {
               String.format("peak blade speed %.2f m/s against the %.1f m/s limit",
                             fastest, Stroke.TRACK_SPEED));
 
-        // The limit is only worth having if it sits below a real swing.
-        check("the tracking limit is slower than an intermediate player's swing",
-              Stroke.TRACK_SPEED < 12.4,
-              String.format("%.1f m/s tracking against a measured 12.4 m/s swing",
+        // The limit is only worth having if it sits below a real swing. An advanced player's
+        // mean racket speed is 17.8 m/s -- the blade must stay under that, so a thrown mouse
+        // cannot generate more pace than a hand does.
+        check("the tracking limit is slower than an advanced player's swing",
+              Stroke.TRACK_SPEED < 17.8,
+              String.format("%.1f m/s tracking against a measured 17.8 m/s swing",
                             Stroke.TRACK_SPEED));
-    }
-
-    /**
-     * Charging has to be worth doing, and it has to top out somewhere real.
-     *
-     * The stroke's peak speed is pi*L/(2T) for its half-sine profile, and the charge sets L.
-     * Fully wound up that is pi*1.00/(2*0.09) = 17.5 m/s against a measured mean racket speed
-     * of 17.8 m/s for advanced players; released instantly it is pi*0.15/(2*0.09) = 2.6 m/s.
-     *
-     * Deliberately a check on BLADE speed, not ball speed. Nothing anywhere scales the ball by
-     * the charge -- the charge only lengthens the swing, and the contact solver turns that into
-     * pace and spin on its own. Checking the ball here would be checking two things at once.
-     */
-    private static void chargingASwingMakesItFaster() {
-        double full = peakSwingSpeed(1.0);
-        double flick = peakSwingSpeed(0.0);
-
-        check("a fully charged swing reaches the speed an advanced player swings at",
-              full > 16.0 && full < 19.0,
-              String.format("%.1f m/s against a measured 17.8 m/s", full));
-
-        check("a swing released with no charge is far slower than a charged one",
-              flick < full / 3,
-              String.format("%.1f m/s uncharged against %.1f m/s charged", flick, full));
-    }
-
-    /**
-     * Wind up to {@code charge} of full, release, and report the fastest the blade ever moves.
-     *
-     * The whole swing is measured, not just its end, because the failure this is guarding
-     * against is a spike on ONE step -- which is invisible in the final pose and lethal to any
-     * ball nearby.
-     */
-    private static double peakSwingSpeed(double charge) {
-        Vec3 start = new Vec3(0, 0.25, 1.57);
-        Paddle blade = new Paddle(start, new Vec3(0, 0, -1));
-        Stroke stroke = new Stroke(start);
-
-        stroke.press();
-        for (int i = 0; i < (int) Math.round(charge * 0.70 / DT); i++) stroke.advance(blade, DT);
-        stroke.release();
-
-        double fastest = 0;
-        while (stroke.phase() == Stroke.Phase.SWINGING) {
-            stroke.advance(blade, DT);
-            fastest = Math.max(fastest, blade.vel().length());
-        }
-        return fastest;
     }
 
     // ---------------------------------------------------------------- helpers

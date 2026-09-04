@@ -9,30 +9,50 @@ an AI opponent plays you for the point. Inspired by the mobile game *Ping Pong F
 
 ## Gameplay
 
-The paddle follows your mouse — wherever the cursor is, that is where the paddle is. How you move
-through the ball is the shot: swing speed sets the power, and the direction you cut across it sets the
-spin. Hit it flat and it drives; brush up the back of it and it loops over the net and dips.
+The paddle follows your mouse — the cursor sets where it is across and up the table, and it steps in
+over the table on its own to meet a short ball. How you move it through the ball aims the shot:
+**drive it forward** for pace and depth, **swipe it sideways** to send the ball that way (swipe
+right, ball goes right), **lift it** to loop the ball shorter and higher; a still paddle just
+blocks it back soft. The game then keeps that shot playable — the ball is aimed at a real spot
+on the other side, and the shot is checked all the way to the bounce before it is played, so it
+clears the net and lands in rather than flying off the end. It is assisted, arcade-style, more
+*Ping Pong Fury* than a physics sim (though a full physics simulation runs underneath — see
+below).
 
-The ball is simulated rather than scripted. Spin curves it in the air, and it changes the bounce when
-the ball lands — a heavy topspin kicks forward off the table, backspin sits up and slows down.
+What that buys, measured over 75 different ways of swinging the paddle at the same ball: the raw
+physics puts 11 of them on the table and throws the ball up to 2.4 m wide at 24 m/s; through the
+assist all 75 land, none more than 0.38 m off centre, none faster than 12.4 m/s. Hitting harder
+always does a little more and never a lot more, so a long rally cannot spiral into a rocket.
+
+You can only return the ball **after it has bounced on your side** (real table-tennis rule). A ball
+that bounces twice, hits the net, or sails past the end line ends the point and the next serve is
+fed in. There's no scoreboard yet — the rally just restarts.
+
+The camera is your main tool for reading the ball: it cuts between a close view and a wide one
+depending on who last hit — close after your shot, wide after the opponent's.
+
+Under the arcade assist there is a full physics simulation: in flight the ball is simulated rather
+than scripted — spin curves it in the air, and it changes the bounce when the ball lands (heavy
+topspin kicks forward, backspin sits up). The assist shapes the ball only at the moment a racket
+hits it; between hits it flies for real.
 
 ## Features
 
-**Playable now — the physics demo**
+**Playable now**
 
-- Full ball flight simulation: spin, air drag, and Magnus curve
-- Bounces that couple spin and speed — topspin kicks forward, backspin checks up
-- A net that kills a ball instead of bouncing it back, and in/out calls against real ITTF dimensions
-- A menu of eleven shots that differ mainly in their spin, so what changes on screen is the spin
-- A grey "ghost" trail: the same shot with the spin deleted, flown alongside, so the curve is a
-  visible gap rather than a claim
-- Five camera views, slow motion, single-step, and live readouts of spin ratio, lift and drag
+- Mouse-controlled paddle that reaches in over the table for the ball
+- Assisted arcade shots — drive for pace, swipe to aim; the game keeps the ball in play
+- Rallies against the AI, with the one-bounce rule and points that end on a net / long / double bounce
+- A two-view rally-cam that cuts on who last hit, plus five preset views, slow motion, single-step
+- Full ball-flight simulation between hits: spin, air drag, Magnus curve, spin-coupled bounces
+- A menu of shots to feed in, a grey no-spin "ghost" trail, and a `V` debug overlay that shows
+  exactly how a shot was chosen
 
 **In progress**
 
-- Mouse-controlled paddle with spin on contact
-- Serving, scoring, and out-of-bounds calls
-- An AI opponent that reads where the ball is going and moves to meet it
+- Serving off your own blade (right now a ball is fed in each rally)
+- Scoring and rules
+- An AI opponent that reads where the ball is going rather than tracking it
 
 **Planned**
 
@@ -45,27 +65,34 @@ Once the game exists:
 
 | Input | Action |
 | --- | --- |
-| Mouse | Move the paddle |
-| Mouse movement through the ball | Sets shot power and spin |
+| Mouse | Move the paddle (it reaches in over the table on its own) |
+| Drive the paddle forward through the ball | Pace and depth |
+| Swipe the paddle sideways | Sends the ball that way — swipe right, ball goes right |
+| Lift the paddle up through the ball | Shorter, higher, more topspin |
+| Still paddle | Soft block back |
 
-In the physics demo as it stands:
+There is no button to press — the shot is entirely in the mouse movement.
+
+Other keys (carried over from the physics demo):
 
 | Key | Action |
 | --- | --- |
-| `1`–`9`, `0` | Pick a shot |
-| `N` / `P`, `←` `→` | Next / previous shot |
-| `R` | Replay the current shot |
+| `1`–`9`, `0` | Pick the feed shot |
+| `N` / `P`, `←` `→` | Next / previous feed |
+| `R` | Replay the current feed |
 | `Space` | Pause |
 | `.` | Single physics step |
-| `[` `]` | Slow down / speed up |
+| `[` `]` | Slow down / speed up (starts at 0.45×) |
+| `F` | Rally-cam on / off |
+| `C` | Cycle the preset camera views (turns the rally-cam off) |
+| `V` | Shot-assist debug overlay (paddle and ball velocity, raw / intended / final shot, target, predicted landing) |
 | `G` | Toggle the no-spin ghost trail |
 | `T` | Toggle the flight trail |
 | `B` | Draw the ball at 2× (physics still uses 40 mm) |
-| `C` | Cycle camera views |
 | `A` | Toggle auto-replay |
-| `H` | Toggle the readouts |
+| `H` | Toggle the on-screen legend |
 | `Esc` | Quit |
-| Drag / scroll | Orbit / zoom the camera |
+| Left-drag / scroll | Orbit / zoom the camera (turns the follow-cam off) |
 
 ## Requirements
 
@@ -104,7 +131,7 @@ Adjust the JDK path to wherever you installed it.
 
 ## Is the physics actually right?
 
-`physics.SelfTest` is a headless suite of 68 checks that compares the simulation against numbers that
+`physics.SelfTest` is a headless suite of 101 checks that compares the simulation against numbers that
 did not come from this program — closed-form solutions of the same equations, published measurements,
 and the ITTF Laws. It checks terminal velocity against the analytic result, free fall against the exact
 `tanh` solution, the ITTF drop test (30.5 cm in, 24–26 cm out), that RK4 really is fourth-order, that
@@ -117,6 +144,11 @@ the table at smash speed.
 
 It prints PASS/FAIL per check and exits non-zero if anything fails. I run it from the
 **Physics SelfTest** configuration in IntelliJ.
+
+`play.RallyTest` is a second headless suite, 7 checks, covering the game rather than the physics:
+that the AI reaches every shot fed at it, puts every one back over the net, lands every one on the
+table, never returns the ball faster than the impulse could have sent it, never launches it out of
+the hall, and that flinging the mouse cannot move the paddle faster than a person carries a bat.
 
 ## Built with
 

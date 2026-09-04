@@ -1,196 +1,131 @@
 package play;
 
+import physics.BallState;
 import physics.Paddle;
 import physics.Vec3;
 
 /**
- * The player's stroke: hold to charge, release to swing.
+ * The player's paddle: it follows the mouse, and that is the whole of it.
  *
- * Plain Java on purpose. It is advanced once per PHYSICS step, never per frame, so the swing
- * comes out the same on a 30 Hz laptop and a 240 Hz monitor -- and it can be exercised
- * headlessly. Nothing here knows what a mouse is; it is handed a point on the hitting plane
- * and a button state, and it produces a blade pose.
+ * There is no wind-up and no button. The cursor sets where the blade goes across and up the
+ * table; the DEPTH follows the ball, so the blade steps in over the table to meet a short one
+ * instead of being pinned to a plane behind the baseline. The shot is entirely in how you move
+ * through the ball -- swing speed sets the pace, the direction you cut across it sets the spin.
+ * Both fall out of the contact solver from the blade's own measured velocity; nothing here
+ * tells the ball how fast to leave or how much spin to carry.
  *
- * The three phases:
+ * (There used to be a charge-and-release swing here -- hold to wind up, drag back to aim the
+ * stroke, let go to hit. It was pulled: the timed gesture was more fiddly than fun, and the
+ * contact solver already turns plain mouse motion into pace and spin without it.)
  *
- *   IDLE      the blade sits at the cursor. Its velocity is whatever the mouse is doing, so a
- *             quick flick is still a real shot -- you are never forced to charge.
- *   CHARGING  the blade draws BACK along the stroke while charge builds. Where you drag the
- *             cursor while charging sets the direction it will swing.
- *   SWINGING  the blade sweeps forward through the cursor point and out the far side.
+ * The blade's face is eased toward the ball each step rather than held at a fixed angle, so a
+ * high ball is met with the face turned up at it and the tilt never snaps (which would also
+ * spike the spin -- see FACE_TAU).
  *
- * The slingshot reading is the intuitive one and it happens to be the real one: drag back and
- * down, release, and the blade comes up and forward -- which is a topspin loop. Drag back and
- * up and it comes down and forward, which is a chop.
- *
- * NOTHING HERE SETS THE BALL'S SPEED OR SPIN. It only moves a blade. The pace and spin come
- * out of the contact solver, from the blade's real velocity and the tilt of its face -- which
- * is why charging harder genuinely hits harder rather than selecting a bigger number.
+ * Plain Java on purpose. It is advanced once per PHYSICS step, never per frame, so the same
+ * mouse motion produces the same shot on a 30 Hz laptop and a 240 Hz monitor -- and it can be
+ * exercised headlessly by {@link RallyTest}. Nothing here knows what a mouse is; it is handed a
+ * point on the hitting plane and the ball, and it produces a blade pose.
  */
 public final class Stroke {
 
-    public enum Phase { IDLE, CHARGING, SWINGING }
-
-    /** Seconds of holding to reach a full-power swing. */
-    private static final double CHARGE_FULL = 0.70;
-
     /**
-     * How long the forward swing lasts, and how far the blade travels through it.
+     * How fast the blade may chase the cursor, m/s.
      *
-     * These two set the peak blade speed, and they are chosen so that it lands on a measured
-     * one. For a sine velocity profile the peak is pi*L/(2T) = pi*1.0/(2*0.09) = 17.5 m/s,
-     * against a measured mean racket speed of 17.8 m/s for advanced players (12.4 m/s for
-     * intermediates, which a half-charged swing lands on). So a fully charged stroke here is
-     * about as fast as a good player actually swings, and no faster.
+     * This is a sampling guard, not a feel knob. The mouse is sampled once a FRAME and the
+     * blade advanced once a STEP -- eight steps per frame at 60 Hz. Handed straight to the
+     * cursor point, the blade covers a whole frame of mouse travel inside a single 1/480 s
+     * step, and Paddle measures velocity by differencing its own pose: a 30 cm flick reads as
+     * 144 m/s and sends the ball out at nearly 300. The mouse took a frame to travel that far,
+     * so the blade has to take one too.
+     *
+     * TUNED: 13 m/s. It has to be quick enough to actually get across the table and into the
+     * ball -- 8 was too slow to chase a wide return -- while staying under a real racket's
+     * swing (an advanced player's is 17.8 m/s), so a thrown mouse still cannot out-hit a hand.
+     * RallyTest asserts both: the clamp holds, and it sits below a real swing.
      */
-    private static final double SWING_TIME = 0.09;
-    private static final double SWING_LENGTH = 1.00;
-
-    /** How far back the blade is drawn at full charge. Half the swing, so the cursor point
-     *  sits at the middle of the stroke, where the blade is moving fastest. */
-    private static final double DRAW_BACK = SWING_LENGTH / 2;
+    public static final double TRACK_SPEED = 13.0;
 
     /**
      * How much the face closes as the stroke steepens. A brushing stroke has the blade leaning
-     * over the ball; a flat one has it square. This is what turns swing DIRECTION into spin,
-     * and it is the only cosmetic-looking number in the class -- everything else is geometry.
+     * over the ball; a flat one has it square. This is what turns swing DIRECTION into spin.
      * TUNED: 0.55 puts a 30-degree upward brush at a face tilt of about 0.28, which is where
-     * SelfTest measures the loop coming out at the published 21 m/s and ~120 rev/s.
+     * SelfTest measures a loop coming out at the published 21 m/s and ~120 rev/s.
      */
     private static final double FACE_CLOSE = 0.55;
 
+    /** Below this blade speed there is no meaningful direction in the motion; the face sits
+     *  square to the incoming ball rather than chasing noise in a near-still cursor. */
+    private static final double STROKE_EPS = 0.20;
+
     /**
-     * How fast the blade may chase the cursor while it is NOT swinging, m/s.
+     * Time constant for easing the blade's face toward where it wants to point, in seconds.
      *
-     * This exists because of a sampling mismatch, not for feel. The mouse is sampled once a
-     * FRAME and the blade is advanced once a STEP -- eight steps per frame at 60 Hz. Handing
-     * the blade straight to the cursor point makes it cover a whole frame of mouse travel
-     * inside a single 1/480 s step, and Paddle measures velocity by differencing its own pose:
-     * a 30 cm flick reads as 144 m/s and sends the ball out at nearly 300. The mouse took a
-     * frame to travel that far, so the blade has to take one too.
+     * A real wrist does not flick between angles, and there is a physics reason as well as a
+     * cosmetic one: Paddle derives the blade's angular velocity from how far its normal turned
+     * in a single step, so a face that snapped from one orientation to another would read as an
+     * enormous spin and dump it on any ball in contact. Easing keeps that honest.
      *
-     * TUNED: 8 m/s stands in for the speed a player carries the bat around at between strokes.
-     * What matters is where it sits relative to the two ends -- above ordinary aiming, so
-     * tracking still feels one-to-one, and well below the 12.4 and 17.8 m/s measured SWING
-     * speeds, so flicking the mouse can never out-hit a charged stroke. RallyTest asserts
-     * both halves of that.
+     * TUNED: 0.04 s reaches a new angle in about an eighth of a second -- fast enough to feel
+     * responsive, slow enough that one frame's worth of turn is a fraction of a degree.
      */
-    public static final double TRACK_SPEED = 8.0;
+    private static final double FACE_TAU = 0.04;
 
-    /** Default stroke if the player charges without moving the mouse: a standard loop. */
-    private static final Vec3 DEFAULT_STROKE =
-            new Vec3(0, Math.sin(Math.toRadians(30)), -Math.cos(Math.toRadians(30)));
+    /**
+     * How far the blade may step off its rest plane to meet the ball, in metres: forward
+     * (toward the net) and back (chasing a deep one). Generous on purpose -- the rule is
+     * "you should always be able to reach it". While a ball is on our side and coming at us
+     * the blade tracks toward its depth within this band, then eases back to rest.
+     */
+    private static final double REACH_FWD  = 1.20;   // out over the table, nearly to the net
+    private static final double REACH_BACK = 0.80;   // behind the baseline for a long ball
 
-    private Phase phase = Phase.IDLE;
     private Vec3 target;
-    private Vec3 anchor = Vec3.ZERO;      // where the cursor was when the button went down
-    private Vec3 strokeDir = DEFAULT_STROKE;
-    private double charge;
-    private double swungFor;
-
-    /**
-     * Where the forward swing starts from, or null until the first step of one.
-     *
-     * Null rather than computed in release() for a reason that only shows up at low charge.
-     * It used to be set to {@code target - strokeDir * swingLength/2}, which is exactly where
-     * the backswing has drawn the blade to at FULL charge -- but the backswing draws back by
-     * DRAW_BACK*charge while the swing is sized by max(0.15, charge), so below 15% charge the
-     * two disagree and the blade teleported up to 7.5 cm backwards on the first step of the
-     * swing. Paddle differences its own pose, so that read as 36 m/s, in the one phase that
-     * is deliberately not speed-limited. A tap of the button was the hardest hit in the game.
-     *
-     * Taking it from the blade is also the more honest model: a stroke carries on from where
-     * the backswing left the bat.
-     */
-    private Vec3 swingOrigin;
-    private double swingLength;
+    private final double restZ;
+    private Vec3 strokeDir = new Vec3(0, 0, -1);   // square to the incoming ball until it moves
 
     public Stroke(Vec3 restingAt) {
         this.target = restingAt;
+        this.restZ = restingAt.z();
     }
 
     /** Where the cursor currently points on the hitting plane. */
     public void aimAt(Vec3 point) { target = point; }
 
-    /** Right button pressed: start winding up. */
-    public void press() {
-        if (phase == Phase.SWINGING) return;      // let the current swing finish
-        phase = Phase.CHARGING;
-        anchor = target;
-        charge = 0;
-    }
-
-    /** Right button released: swing. */
-    public void release() {
-        if (phase != Phase.CHARGING) return;
-        phase = Phase.SWINGING;
-        swungFor = 0;
-        swingLength = SWING_LENGTH * Math.max(0.15, charge);
-
-        // The blade is already drawn back, so the swing sweeps THROUGH the cursor rather than
-        // launching away from it: the backswing sits DRAW_BACK*charge behind the target and
-        // the stroke travels further than that, so it always passes the point being aimed at,
-        // and it passes it near the middle of the stroke where the blade is fastest. Aiming
-        // at the ball and aiming at maximum speed are the same act.
-        //
-        // Where it starts is taken from the blade on the first step -- see swingOrigin.
-        swingOrigin = null;
-    }
-
-    public Phase phase()  { return phase; }
-    public double charge() { return charge; }
-
     /**
-     * Advance one physics step and move the blade.
+     * Advance one physics step: carry the blade toward the cursor (across and up) and toward
+     * the ball's depth (in and out), held to one human tracking speed, and ease its face
+     * toward the ball.
      *
-     * @param dt the PHYSICS step, never a frame time -- Paddle derives its velocity from this,
-     *           and that velocity is what the ball is struck with
+     * @param ball the ball right now -- its position aims the face and its depth pulls the
+     *             blade in to meet it
+     * @param dt   the PHYSICS step, never a frame time -- Paddle derives its velocity from this,
+     *             and that velocity is what the ball is struck with
      */
-    public void advance(Paddle blade, double dt) {
-        Phase was = phase;
-        Vec3 pos;
+    public void advance(Paddle blade, BallState ball, double dt) {
+        Vec3 from = blade.pos();
 
-        switch (phase) {
-            case CHARGING -> {
-                charge = Math.min(1, charge + dt / CHARGE_FULL);
+        // Depth: track toward the ball's own depth while it is on our side (a little past the
+        // net counts) and heading at us, within the reach band; otherwise sit back on the rest
+        // plane the cursor is measured on.
+        double wantZ = (ball.pos().z() > -0.35 && ball.vel().z() > 0)
+                     ? clamp(ball.pos().z(), restZ - REACH_FWD, restZ + REACH_BACK)
+                     : restZ;
 
-                // The drag since the press IS the backswing, so the direction the blade will
-                // travel is the opposite of it. Below a centimetre of movement there is no
-                // meaningful direction in the gesture, so fall back to a standard loop.
-                Vec3 drag = target.minus(anchor);
-                if (drag.length() > 0.01) strokeDir = drag.normalized().negate();
+        Vec3 goal = new Vec3(target.x(), target.y(), wantZ);
+        Vec3 pos = towards(from, goal, TRACK_SPEED * dt);
 
-                pos = target.plusScaled(strokeDir, -DRAW_BACK * charge);
-            }
-            case SWINGING -> {
-                if (swingOrigin == null) swingOrigin = blade.pos();
-                swungFor += dt;
-                double t = Math.min(1, swungFor / SWING_TIME);
+        // The direction the blade is actually travelling IS the stroke, so the face leans the
+        // way you are cutting across the ball: move up through it and the face closes over the
+        // top, which brushes topspin; move down and it opens under, which cuts backspin.
+        Vec3 moved = pos.minus(from);
+        if (moved.length() > STROKE_EPS * dt) strokeDir = moved.normalized();
 
-                // Displacement profile whose derivative is a half sine: the blade accelerates
-                // from rest, peaks in the middle of the stroke, and decelerates to rest. A
-                // constant-velocity swing would start and stop with infinite acceleration, and
-                // since Paddle measures velocity by differencing the pose, that would read as
-                // a single impossible step.
-                double s = (1 - Math.cos(Math.PI * t)) / 2;
-                pos = swingOrigin.plusScaled(strokeDir, swingLength * s);
+        blade.moveTo(pos, faceToward(blade.normal(), ball.pos().minus(pos), dt), dt);
+    }
 
-                if (t >= 1) {
-                    phase = Phase.IDLE;
-                    charge = 0;
-                }
-            }
-            default -> pos = target;
-        }
-
-        // Hold the cursor-chasing phases to a human tracking speed. The swing itself is left
-        // alone: its half-sine profile is already a physical velocity, and clamping it would
-        // quietly cap how hard a charged stroke can hit. Tested against the phase on ENTRY,
-        // because the swing sets itself back to IDLE on its final step and that step's
-        // displacement is still part of the swing.
-        if (was != Phase.SWINGING) pos = towards(blade.pos(), pos, TRACK_SPEED * dt);
-
-        blade.moveTo(pos, faceFor(strokeDir), dt);
+    private static double clamp(double v, double lo, double hi) {
+        return v < lo ? lo : (v > hi ? hi : v);
     }
 
     /** Move from {@code from} toward {@code to}, by at most {@code maxStep}. */
@@ -201,14 +136,25 @@ public final class Stroke {
     }
 
     /**
-     * The face angle implied by a stroke direction.
-     *
-     * The blade always faces roughly down the table (-Z, at the incoming ball), but it leans
-     * according to how steep the stroke is: swing upward and the face closes over the ball,
-     * which brushes it into topspin; swing downward and the face opens, which cuts backspin
-     * under it. That single line is the whole of "how you move through the ball is the shot".
+     * The face for this step: aim at the ball, lean it the way the blade is travelling, and
+     * ease the current normal toward that target rather than snapping to it (see FACE_TAU).
      */
-    private static Vec3 faceFor(Vec3 stroke) {
-        return new Vec3(stroke.x() * 0.5, -stroke.y() * FACE_CLOSE, -1).normalized();
+    private Vec3 faceToward(Vec3 currentNormal, Vec3 toBall, double dt) {
+        // Point at the ball while it is genuinely down-table of the blade; otherwise just face
+        // down the table, so the blade sits sensibly between rallies and when a ball is behind
+        // it rather than swinging around to chase a dead one.
+        Vec3 aim = (toBall.z() < -0.05 && toBall.lengthSquared() > 1e-6)
+                 ? toBall.normalized()
+                 : new Vec3(0, 0, -1);
+
+        // Lean by the stroke: brushing up (strokeDir.y > 0) closes the face down over the ball
+        // for topspin, brushing down opens it under for backspin. Added onto the aim rather
+        // than onto a fixed -Z, so a high ball is met with the face actually turned up at it.
+        Vec3 desired = new Vec3(aim.x() + strokeDir.x() * 0.5,
+                                aim.y() - strokeDir.y() * FACE_CLOSE,
+                                aim.z()).normalized();
+
+        double k = 1 - Math.exp(-dt / FACE_TAU);
+        return Vec3.lerp(currentNormal, desired, k).normalized();
     }
 }

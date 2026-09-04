@@ -50,6 +50,12 @@ public record Shots(String name, String detail, BallState state, Aim.Solution so
 
     public static final Shots[] ALL = {
 
+        // The default rally starter: a gentle no-spin drive played corner to corner, near
+        // left to far right. Slower and flatter than the Flat drive so a first return is
+        // reachable; struck from FROM_HIGH so a spinless ball still clears the cord.
+        aimed("Serve", "13 m/s, no spin, corner to corner - the default",
+              new Vec3(-0.50, 0.45, 1.52), target(0.50, -0.95), 13.0, 0, 0),
+
         aimed("Flat drive", "18 m/s, no spin - the control case, drag only",
               FROM_HIGH, target(0, -0.95), 18.0, 0, 0),
 

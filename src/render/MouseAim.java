@@ -42,23 +42,47 @@ public final class MouseAim {
      */
     public static final double PLAYER_PLANE_Z = TABLE_LENGTH / 2 + 0.20;
 
-    /** How far the blade may stray, so a wild mouse cannot park the paddle in the ceiling. */
-    private static final double MAX_X = TABLE_WIDTH / 2 + 0.45;
-    private static final double MIN_Y = 0.02;
-    private static final double MAX_Y = 0.85;
+    /**
+     * How far the blade may stray from the table. Wide, so a ball driven to the corner can
+     * still be chased, but the bottom stays ON the table surface -- the blade dipping below
+     * the top looked like a bug and was one.
+     */
+    private static final double MAX_X = TABLE_WIDTH / 2 + 1.0;
+    private static final double MAX_Y = 1.40;     // stretch for a high one
+
+    /**
+     * The floor, and it is BLADE_R rather than the ball's resting height for a reason worth
+     * writing down, because the obvious value is wrong twice over.
+     *
+     * This bounds the blade's CENTRE. The blade is a disc of radius BLADE_R, so a centre at
+     * the ball's 0.02 m puts 5.5 cm of blade underneath the table top -- visibly through it,
+     * which is exactly the bug this constant was last changed to fix and did not. A centre at
+     * BLADE_R rests the bottom rim on the surface instead.
+     *
+     * It costs nothing in reach: the ball at rest sits 2 cm up and the disc still spans from
+     * 0 to 15 cm, so the lower half of the blade covers a ball scraping the table.
+     */
+    private static final double MIN_Y = BLADE_R;
 
     private MouseAim() {}
 
     /**
-     * The point on the hitting plane that the cursor is pointing at.
+     * The point the cursor is pointing at, on the plane of constant physics-Z {@code planeZ}.
+     *
+     * {@code planeZ} is the blade's CURRENT depth, not a fixed value: the blade reaches in and
+     * out to follow the ball (see play.Stroke), and the cursor's x/y have to be read on the
+     * plane the blade is actually on, or a stepped-in blade drifts sideways and high as the
+     * camera parallax builds up.
      *
      * @param sub    the SubScene the 3D world is drawn in
      * @param mouseX cursor position within that SubScene
      * @param mouseY cursor position within that SubScene
+     * @param planeZ the physics-Z plane to intersect (the blade's current z)
      * @param fallback returned unchanged if the ray runs parallel to the plane, which happens
      *                 when the camera is looking along it from the TOP view
      */
-    public static Vec3 onPlayerPlane(SubScene sub, double mouseX, double mouseY, Vec3 fallback) {
+    public static Vec3 onPlayerPlane(SubScene sub, double mouseX, double mouseY,
+                                     double planeZ, Vec3 fallback) {
         Camera cam = sub.getCamera();
         if (cam == null) return fallback;
 
@@ -83,7 +107,7 @@ public final class MouseAim {
 
         // Intersect with the plane of constant physics-Z, which in scene units is a plane of
         // constant scene-Z (the map is diagonal, so planes stay planes and axes stay axes).
-        double planeSceneZ = Xform.z(PLAYER_PLANE_Z);
+        double planeSceneZ = Xform.z(planeZ);
         if (Math.abs(dir.getZ()) < 1e-9) return fallback;
 
         double t = (planeSceneZ - eye.getZ()) / dir.getZ();
@@ -94,7 +118,7 @@ public final class MouseAim {
 
         return new Vec3(clamp(m.x(), -MAX_X, MAX_X),
                         clamp(m.y(), MIN_Y, MAX_Y),
-                        PLAYER_PLANE_Z);
+                        planeZ);
     }
 
     private static double clamp(double v, double lo, double hi) {
