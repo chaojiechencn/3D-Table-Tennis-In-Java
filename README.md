@@ -117,8 +117,22 @@ There are no other dependencies and no build script — this compiles with stock
 > tested. The terminal commands below are provided for reference and are not the path I use, so if
 > something there does not work for you, try it from the IDE first.
 
-In IntelliJ: open the project, set the project SDK to the Full JDK 21, and use the committed
-**MrPong** run configuration. **Physics SelfTest** runs the headless validation suite.
+In IntelliJ:
+
+1. Open the project folder and select **File > Project Structure** (`Ctrl+Alt+Shift+S`).
+2. Under **Project > SDK**, choose **Add SDK > JDK** and select the installed
+   **Liberica Full JDK 21** folder (the folder containing `bin`, not `bin` itself).
+   Select that SDK for the project and keep the language level at **21**.
+3. Under **Modules > Dependencies**, set **Module SDK** to **Project SDK**. Apply the changes.
+4. Select the committed **3D-Table-Tennis-In-Java** run configuration and click **Run**
+   (`Shift+F10`). It launches `Table_Tennis_In_3D` using the project SDK.
+
+**Physics SelfTest** runs the headless validation suite.
+
+If you see `package javafx... does not exist`, the compiler is using a JDK without JavaFX.
+The regular Liberica build is not the Full build. Changing only the JRE in a run configuration
+does not fix the compiler's project SDK. With Full JDK 21, no extra JavaFX libraries or VM
+options are needed.
 
 From a terminal (untested by me):
 
@@ -126,14 +140,14 @@ From a terminal (untested by me):
 # PowerShell
 $JDK = "$env:USERPROFILE\jdk\jdk-21.0.7-full\bin"
 & "$JDK\javac" -d out\production\3D-Table-Tennis-In-Java (Get-ChildItem -Recurse src -Filter *.java).FullName
-& "$JDK\java" -cp out\production\3D-Table-Tennis-In-Java MrPong
+& "$JDK\java" -cp out\production\3D-Table-Tennis-In-Java Table_Tennis_In_3D
 ```
 
 ```bash
 # bash
 JDK=~/jdk/jdk-21.0.7-full/bin
 "$JDK/javac" -d out/production/3D-Table-Tennis-In-Java $(find src -name '*.java')
-"$JDK/java" -cp out/production/3D-Table-Tennis-In-Java MrPong
+"$JDK/java" -cp out/production/3D-Table-Tennis-In-Java Table_Tennis_In_3D
 ```
 
 Adjust the JDK path to wherever you installed it.

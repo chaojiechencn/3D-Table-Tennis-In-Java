@@ -66,7 +66,7 @@ import static physics.Constants.MAX_FRAME;
  * The physics lives in the physics package and the game logic in play, and neither imports
  * JavaFX -- so both can be checked headlessly. Run physics.SelfTest and play.RallyTest.
  */
-public class MrPong extends Application {
+public class Table_Tennis_In_3D extends Application {
 
     // ------------------------------------------------------------------ simulation
 

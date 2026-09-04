@@ -21,12 +21,12 @@ so the milestones below are commitments with dates, not a wishlist.
       Not a game yet, just physics on screen. **Delivered and in the repo**: `src/MrPong.java`,
       `src/physics/`, `src/render/`, validated by `physics.SelfTest` (68 checks).
 - [ ] **Playable demo** — *Sep 17*. A full point against the AI: mouse control, spin, serving, scoring.
-      **Part-built.** The physics is done and validated (`SelfTest` 101, `RallyTest` 15). Both
-      rackets are wired into `MrPong`, the near one follows the mouse and *only* the mouse
-      (see the Sep 4 entry below), and the game opens on a gentle serve with a two-view
-      rally-cam at 0.45x. What holds a rally together is `play/ShotAssist` (below). The
-      player's control envelope is `play/PlayerReach`: two cursor axes on one horizontal
-      plane, sized off measurements (Sep 4 later). Scoring is not started.
+  **Part-built.** The physics is done and validated (`SelfTest` 101, `RallyTest` 15). Both
+  rackets are wired into `Table_Tennis_In_3D`, the near one follows the mouse and *only* the mouse
+  (see the Sep 4 entry below), and the game opens on a gentle serve with a two-view
+  rally-cam at 0.45x. What holds a rally together is `play/ShotAssist` (below). The
+  player's control envelope is `play/PlayerReach`: two cursor axes on one horizontal
+  plane, sized off measurements (Sep 4 later). Scoring is not started.
 
       *Design change (Sep 2):* two of them, and both move away from the contract's realistic
       model. (1) The charge-and-release stroke was pulled — the paddle just follows the cursor.
@@ -71,14 +71,14 @@ finished code):
 - **JavaFX for all rendering and input** — the 3D scene graph (`Group`, `Box`/`Sphere`/`Cylinder`,
   `PhongMaterial`, `PerspectiveCamera`, lights), `AnimationTimer` for the game loop, `Scene` mouse events
   for paddle control. Do not reach for Swing/AWT or Java2D. (`javafx.swing` appears in exactly one place:
-  `SwingFXUtils`, for PNG encoding in `MrPong`'s offline capture mode.)
+  `SwingFXUtils`, for PNG encoding in `Table_Tennis_In_3D`'s offline capture mode.)
 - **No external dependencies.** Everything must build with stock `javac`. Do not introduce Maven or
   Gradle without asking — the grader runs it from IntelliJ.
 
 ## Build & run
 
 There is deliberately no build system: the Full JDK removes the JavaFX module-path problem that would
-otherwise have forced one. IntelliJ has two committed run configurations, **MrPong** and
+otherwise have forced one. IntelliJ has two committed run configurations, **Table_Tennis_In_3D** and
 **Physics SelfTest**. The project SDK must stay `liberica-21`.
 
 > **`play.RallyTest` has no run configuration yet.** It is a second headless main and it needs a
@@ -104,7 +104,7 @@ not to `.idea/`.** So the content root is written as plain `$MODULE_DIR$` and th
 
 Do not "correct" those to `$MODULE_DIR$/..`. That resolves to the *parent* of this repo, which makes
 every sibling project a part of this one and points the source root at a `src` that does not exist. With
-no source root IntelliJ cannot see `MrPong` as a main class and **the Run button goes grey** — that is
+no source root IntelliJ cannot see `Table_Tennis_In_3D` as a main class and **the Run button goes grey** — that is
 the symptom to recognise if this file is ever edited.
 
 The module name comes from the `.iml` filename and must stay `3D-Table-Tennis-In-Java`, because both run
@@ -118,7 +118,7 @@ From a shell — PowerShell:
 ```powershell
 $JDK = "$env:USERPROFILE\jdk\jdk-21.0.7-full\bin"
 & "$JDK\javac" -d out\production\3D-Table-Tennis-In-Java (Get-ChildItem -Recurse src -Filter *.java).FullName
-& "$JDK\java" -cp out\production\3D-Table-Tennis-In-Java MrPong
+& "$JDK\java" -cp out\production\3D-Table-Tennis-In-Java Table_Tennis_In_3D
 & "$JDK\java" -cp out\production\3D-Table-Tennis-In-Java physics.SelfTest
 & "$JDK\java" -cp out\production\3D-Table-Tennis-In-Java play.RallyTest
 ```
@@ -128,7 +128,7 @@ bash (Git Bash) — note the different glob and the `;` → newline:
 ```bash
 JDK=~/jdk/jdk-21.0.7-full/bin
 "$JDK/javac" -d out/production/3D-Table-Tennis-In-Java $(find src -name '*.java')
-"$JDK/java" -cp out/production/3D-Table-Tennis-In-Java MrPong
+"$JDK/java" -cp out/production/3D-Table-Tennis-In-Java Table_Tennis_In_3D
 "$JDK/java" -cp out/production/3D-Table-Tennis-In-Java physics.SelfTest
 "$JDK/java" -cp out/production/3D-Table-Tennis-In-Java play.RallyTest
 ```
@@ -148,10 +148,10 @@ state what was actually measured — a PASS reading "(it clipped the cord)" cont
 Re-deriving a threshold because the model got more accurate is legitimate; widening one until a
 regression fits is not, and the comment is the only thing that tells those two apart later.
 
-`MrPong` also has an offline capture mode, for checking the rendering without a human watching:
+`Table_Tennis_In_3D` also has an offline capture mode, for checking the rendering without a human watching:
 
 ```
-java -cp out/... MrPong "--shot=Topspin loop" --at=0.18 --view=SIDE --ball2x=true --out=frame.png
+java -cp out/... Table_Tennis_In_3D "--shot=Topspin loop" --at=0.18 --view=SIDE --ball2x=true --out=frame.png
 ```
 
 `--shot` takes any name from `Shots.ALL` (quote it — they contain spaces), `--view` any name from
@@ -187,7 +187,7 @@ space.** Convert at the boundary and nowhere else.
 
 ```
 src/
-  MrPong.java            entry point; fixed-timestep loop, input, wiring, capture mode
+  Table_Tennis_In_3D.java            entry point; fixed-timestep loop, input, wiring, capture mode
   physics/                 no javafx imports, ever
     Vec3.java            immutable 3D vector (record)
     Quat.java            unit quaternion; carries the ball's VISUAL orientation only
@@ -263,7 +263,7 @@ Rules that keep this from rotting:
 
   The one sanctioned exception is **validation**: `PlayerReach.timeToDepth` /
   `reachableInTime` and the `D` overlay read the ball to answer "could the player have got
-  there", and MrPong's `controlReadout()` calls them *after* the target has already been
+  there", and Table_Tennis_In_3D's `controlReadout()` calls them *after* the target has already been
   computed and handed to `Stroke`. Read-only, downstream, and never on the path that sets the
   blade's target. Anything that reads the ball *before* the target is chosen is auto-follow
   wearing a different hat.
@@ -362,7 +362,7 @@ The landing check is new, and the reason it can exist now is worth keeping strai
 be a printout with a long comment explaining why it could not be a check: the follower's RAW
 return cleared the net every time and put ONE of ten on the table, and a sweep of its face angle,
 swing speed and lift proved no fixed stroke could do both — settings that land three of ten
-cannot return all ten. That is still true of the raw stroke. What changed is that `MrPong` runs
+cannot return all ten. That is still true of the raw stroke. What changed is that `Table_Tennis_In_3D` runs
 every contact, the follower's included, through `ShotAssist`, so **grading the raw return was
 grading a code path the game no longer takes.** `RallyTest` now feeds contacts through the assist
 exactly as the game does, and the answer went from 1 of 10 to **10 of 10**. The one number still
@@ -457,7 +457,7 @@ first crossing reported is the SECOND descent, out past the end line. It made `S
 landing question has to be asked of a contact-free flight (`Aim.landingPoint`), and the code
 now says so in three places.
 
-**The one-bounce rule.** `MrPong` enforces ITTF's "return only after it has bounced on your
+**The one-bounce rule.** `Table_Tennis_In_3D` enforces ITTF's "return only after it has bounced on your
 side" by handing `World` a null racket for whoever may not hit yet — the blade still tracks the
 ball on screen, it just phases through. A table bounce opens the receiver's racket; a *second*
 bounce on the same side, a ball back on the hitter's own half, the net, or a ball past the end
