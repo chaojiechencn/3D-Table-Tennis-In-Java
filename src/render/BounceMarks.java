@@ -8,7 +8,7 @@ import physics.Vec3;
 
 import java.util.List;
 
-import static render.Xform.SPM;
+import static physics.Constants.BALL_R;
 
 /**
  * Flat discs left where the ball touched down.
@@ -28,7 +28,8 @@ public final class BounceMarks {
             // Oldest marks fade toward the table colour rather than vanishing, so the order
             // of a rally stays readable.
             double age = capacity == 1 ? 1 : i / (double) (capacity - 1);
-            Cylinder c = new Cylinder(0.021 * SPM, 0.0008 * SPM, 16);
+            Cylinder c = new Cylinder(Xform.length(BALL_R * 1.05),
+                    Xform.length(BALL_R * 0.04), 16);
 
             PhongMaterial m = new PhongMaterial(
                     Color.web("#2f6da0").interpolate(Color.web("#ffd24a"), age));

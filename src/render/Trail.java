@@ -8,8 +8,6 @@ import physics.Vec3;
 
 import java.util.Collection;
 
-import static render.Xform.SPM;
-
 /**
  * A path through the air, drawn as a run of fading dots.
  *
@@ -45,7 +43,7 @@ public final class Trail {
             // 6 divisions, not the default 64. These are two-pixel dots and there are
             // hundreds of them per trail; at the default tessellation the trails alone cost
             // more triangles than the entire rest of the scene and the frame rate halves.
-            Sphere s = new Sphere(radiusM * SPM, 6);
+            Sphere s = new Sphere(Xform.length(radiusM), 6);
             PhongMaterial m = new PhongMaterial(oldest.interpolate(newest, age));
             // Trail dots are markers, not objects in the world: a specular highlight on them
             // reads as a second, smaller ball and is actively confusing.

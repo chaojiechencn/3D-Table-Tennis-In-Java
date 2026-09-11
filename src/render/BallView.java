@@ -10,7 +10,6 @@ import physics.BallState;
 import physics.Quat;
 
 import static physics.Constants.BALL_R;
-import static render.Xform.SPM;
 
 /**
  * The ball, painted so that its spin is visible.
@@ -27,17 +26,22 @@ public final class BallView {
 
     private final Group group = new Group();
     private final Sphere sphere;
+    private final BallShadow shadow = new BallShadow();
 
     /** Presentation-only magnification, off by default. See {@link #setMagnified}. */
     private boolean magnified = false;
 
     public BallView() {
-        sphere = new Sphere(BALL_R * SPM, 32);
+        sphere = new Sphere(Xform.length(BALL_R), 32);
 
         PhongMaterial mat = new PhongMaterial(Color.WHITE);
-        mat.setDiffuseMap(spinTexture());
-        mat.setSpecularColor(Color.web("#fff6e8"));
-        mat.setSpecularPower(28);
+        mat.setDiffuseMap(spinTexture(1));
+        // A small, pattern-coloured light floor stands in for diffuse room bounce. It keeps
+        // the underside trackable against the wall without flattening the key's shading or
+        // turning the orange training pattern into a white glow.
+        mat.setSelfIlluminationMap(spinTexture(0.14));
+        mat.setSpecularColor(Color.gray(0.32));
+        mat.setSpecularPower(42);
         sphere.setMaterial(mat);
 
         group.getChildren().add(sphere);
@@ -45,10 +49,14 @@ public final class BallView {
 
     public Group node() { return group; }
 
+    /** A sibling of the sphere's rotating group: shadows must never inherit ball spin. */
+    public Group shadowNode() { return shadow.node(); }
+
     /** Place and orient the ball from an interpolated state. */
     public void update(BallState s) {
         Xform.place(group, s.pos());
         group.getTransforms().setAll(Xform.toRotate(s.orient()));
+        shadow.update(s.pos(), magnified);
     }
 
     /** Orientation only, when position comes from an interpolated vector. */
@@ -84,7 +92,7 @@ public final class BallView {
      * the axis, which is what makes the rotation legible from behind the table AND from the
      * side view.
      */
-    private static WritableImage spinTexture() {
+    private static WritableImage spinTexture(double brightness) {
         final int w = 512, h = 256;
         final int uSegments = 6, vSegments = 3;
 
@@ -113,7 +121,7 @@ public final class BallView {
                 // lighting change, a drawn line cannot.
                 if (uEdge < 1.6 || vEdge < 1.6) c = c.interpolate(seam, 0.75);
 
-                px.setColor(x, y, c);
+                px.setColor(x, y, c.deriveColor(0, 1, brightness, 1));
             }
         }
         return img;
