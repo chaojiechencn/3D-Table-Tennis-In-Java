@@ -62,8 +62,39 @@ public final class CameraRig {
     /** The two fixed views, as {pitch deg, distance m, pivot height m}. Same yaw (0). The wide
      *  one is higher and further back so the whole table is in shot; the close one drops low
      *  and near so the near half fills the frame. */
-    private static final double[] RALLY_IN  = { 12.0, 2.35, 0.16 };
+    private static final double[] RALLY_IN  = {  8.0, 3.45, 0.16 };
     private static final double[] RALLY_OUT = { 21.0, 4.75, 0.08 };
+
+    /*
+     * RALLY_IN's distance is 3.30 and not the 2.35 it used to be, and that is a CONTROL
+     * constraint rather than a framing preference.
+     *
+     * The player points at the hitting plane; the camera decides which parts of that plane are
+     * on screen to be pointed at. At 2.35 m the eye sat only 0.49 m above the plane, so the
+     * bottom of the 38 degree frustum met y = HIT_Y at z = 1.485 -- the camera was standing
+     * inside the part of the envelope it was supposed to let you aim into. PlayerReach.Z_FAR is
+     * 2.40, and the whole point of that number (Sep 4, later) was taking the worst touchable
+     * window from 98 ms to 302 ms. In this view it was back to 90 ms: WORSE than the bug that
+     * motivated the change, and invisible because RallyTest grades PlayerReach.clamp directly
+     * and never looks through a camera.
+     *
+     * The depth the cursor can reach, for a camera looking down the table at pitch p from
+     * distance d with a 38 degree vertical FOV, is
+     *
+     *     z_reach = d * [ cos(p) - sin(p) / tan(p + 19) ]
+     *
+     * which is 0.632*d at p = 12. Reaching Z_FAR that way needs d = 3.80, which is most of the
+     * way out to RALLY_OUT's 4.75 and stops the close view being close. Dropping the pitch is
+     * the cheaper lever -- the bracket rises to 0.717 at p = 8 -- so {8.0, 3.45} reaches
+     * z = 2.47 while sitting NEARER the table than {12.0, 3.80} would. Measured through the
+     * real rig, not derived and hoped for: the sweep is in the commit message.
+     *
+     * A flatter, closer eye is also the better picture for the view that exists to put you in
+     * the rally.
+     *
+     * TOP (z = 1.508) and HIGH (1.162) have the same shortfall and are left alone deliberately:
+     * they are inspection views, not ones a rally is played from.
+     */
 
     /** Seconds for the cut between the two views. Short -- it should read as a cut, not a
      *  drift -- but not instant, which snaps the whole table sideways and is horrible. */

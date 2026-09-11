@@ -139,7 +139,33 @@ public final class Stroke {
         // way you are cutting across the ball: move up through it and the face closes over the
         // top, which brushes topspin; move down and it opens under, which cuts backspin.
         Vec3 moved = pos.minus(from);
-        if (moved.length() > STROKE_EPS * dt) strokeDir = moved.normalized();
+        if (moved.length() > STROKE_EPS * dt) {
+            strokeDir = moved.normalized();
+        } else {
+            /*
+             * A blade that has stopped moving relaxes back to square.
+             *
+             * strokeDir used to be written and never un-written, so the face kept whatever lean
+             * its last POSITIONING move gave it, for as long as the blade then sat still. The
+             * measured effect: the same ball met at the same point with the same incoming
+             * velocity came off at face.y = -0.480 if you had walked up-table to get there and
+             * +0.480 if you had backed up -- a 57 degree swing in blade angle, and 22% of pace,
+             * decided by a movement that finished hundreds of milliseconds earlier.
+             *
+             * That made depth mean two things again: it is the positioning axis AND the spin
+             * axis, so retreating to cover a deep ball -- which is exactly what Z_FAR = 2.40
+             * exists to allow -- locked the face open into a chop and you could not stand back
+             * and drive. Relaxing to square costs nothing that was wanted: the lean is meant to
+             * describe a stroke being played, not a walk that has already ended.
+             *
+             * This reads only the blade's own motion, so the rule that the blade never reads
+             * the ball is untouched. Note it does change the Sep 4 measurement from "with the
+             * cursor still, face turn is exactly 0" to "converges to 0" -- the face still
+             * settles and stops, it just settles square instead of wherever it was left.
+             */
+            strokeDir = Vec3.lerp(strokeDir, new Vec3(0, 0, -1),
+                                  1 - Math.exp(-dt / FACE_TAU)).normalized();
+        }
 
         blade.moveTo(pos, faceToward(blade.normal(), dt), dt);
     }

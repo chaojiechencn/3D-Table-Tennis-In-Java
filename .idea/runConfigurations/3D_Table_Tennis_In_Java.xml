@@ -1,6 +1,6 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="3D-Table-Tennis-In-Java" type="Application" factoryName="Application">
-    <option name="ALTERNATIVE_JRE_PATH" value="C:/Users/Chaojie/.jdks/jdk-21.0.12.1-full" />
+    <option name="ALTERNATIVE_JRE_PATH" value="$USER_HOME$/.jdks/jdk-21.0.12.1-full" />
     <option name="ALTERNATIVE_JRE_PATH_ENABLED" value="true" />
     <option name="MAIN_CLASS_NAME" value="Table_Tennis_In_3D" />
     <module name="3D-Table-Tennis-In-Java" />
