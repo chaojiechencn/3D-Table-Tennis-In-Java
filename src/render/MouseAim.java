@@ -57,10 +57,21 @@ public final class MouseAim {
      * of the legal region -- which is exactly where "further up-table than the table goes"
      * ought to land.
      *
-     * 30 m is well past any clamp the caller can reasonably apply, and small enough that the
-     * arithmetic stays nowhere near overflow.
+     * The distance matters more than "well past the clamp" suggests, because it sets the
+     * LATERAL behaviour too, and that was missed when this was 30 m.
+     *
+     * Walking a fixed distance along a near-horizontal ray gives x = eye.x + d*(dir.x/horiz),
+     * so the sideways aim saturates at asin(MAX_X / d). At 30 m that is 3.4 degrees: the whole
+     * band above the horizon collapsed into a two-state left/right switch with a knife edge
+     * between them, measured at 0.559 m of blade travel for ONE pixel of mouse movement in the
+     * LOW view, and 19.6 m of blade per screen height in the default rally view.
+     *
+     * 6 m puts the saturation angle at 16.9 degrees, a five-fold gentler ridge. The depth
+     * behaviour the paragraph above describes is unchanged, because every camera in the rig
+     * sits within about 4.5 m of PlayerReach.Z_FAR -- the horizon only has to out-run the
+     * clamp, and 6 m still does.
      */
-    private static final double HORIZON = 30.0;
+    private static final double HORIZON = 6.0;
 
     private MouseAim() {}
 
@@ -103,8 +114,21 @@ public final class MouseAim {
             // Descending: it meets the plane. Cap the distance so a near-horizon ray produces
             // a far point rather than an astronomical one.
             s = (planeY - eye.y()) / dir.y();
-            if (s <= 0) return fallback;                       // the plane is behind the camera
-            if (horizontal > 1e-9) s = Math.min(s, HORIZON / horizontal);
+            if (s <= 0) {
+                // The plane is ABOVE the eye, so a descending ray never reaches it. This
+                // happens for real: orbiting down drops the camera below the hitting plane,
+                // and from there every downward ray is in this case. Returning the caller's
+                // fallback froze the blade outright across the whole lower half of the
+                // viewport -- measured at 6 px of drag from the LOW view, and 50% of the
+                // screen dead -- with no indication anything had changed. Walking out to the
+                // horizon instead is the same answer the level-or-rising branch gives, so the
+                // mapping stays continuous through the moment the eye crosses the plane: the
+                // blade runs to its stop rather than stopping dead.
+                if (horizontal <= 1e-9) return fallback;
+                s = HORIZON / horizontal;
+            } else if (horizontal > 1e-9) {
+                s = Math.min(s, HORIZON / horizontal);
+            }
         } else if (horizontal > 1e-9) {
             // Level or rising: the crossing is at infinity. Walk out to the horizon instead,
             // which keeps the mapping monotone across the point where the cursor passes it.
