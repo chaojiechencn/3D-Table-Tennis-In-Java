@@ -6,6 +6,9 @@ import javafx.scene.SubScene;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.input.ScrollEvent;
 import javafx.scene.transform.Rotate;
+import physics.Vec3;
+
+import static physics.Constants.TABLE_LENGTH;
 
 /**
  * An orbiting camera on a gimbal, plus the preset views the demo actually needs.
@@ -104,6 +107,40 @@ public final class CameraRig {
     private double[] rallyTarget = RALLY_IN;
     private double rcPitch = RALLY_IN[0], rcDist = RALLY_IN[1], rcHeight = RALLY_IN[2];
 
+    // ------------------------------------------------------------------ the swing
+
+    /**
+     * The rally-cam now SWINGS: it keeps the camera, the ball and the centre of the opponent's
+     * half roughly in a line, so you are looking down the lane you are about to hit along.
+     *
+     * This is a partial reversal of the two-fixed-views decision, which was made because a
+     * ball-tracking camera is disorienting to hit from. What makes this different is that it
+     * does not track the ball's POSITION -- the camera never moves toward or away from the
+     * ball, and the framing presets are untouched. It only rotates about the table's centre so
+     * the shot line stays down-screen. The pivot, distance and pitch are still whatever
+     * RALLY_IN / RALLY_OUT say.
+     */
+    private static final double OPP_CENTRE_Z = -TABLE_LENGTH / 4;
+
+    /**
+     * Hard cap on the swing, degrees.
+     *
+     * There is a control constraint here, not a framing preference -- see the long comment on
+     * RALLY_IN's distance above. The player aims by casting the cursor's ray onto the hitting
+     * plane, so the camera decides which parts of PlayerReach's envelope are on screen to be
+     * pointed at, and this file has already shipped one bug where the camera quietly cost the
+     * player two thirds of their touchable window. Yaw slides the envelope across the frame
+     * the same way distance did. Measured through the real camera at this limit, the full
+     * depth range Z_NEAR 0.30 to Z_FAR 2.40 is still addressable.
+     */
+    private static final double MAX_SWING_DEG = 22.0;
+
+    /** Slower than the cut: the swing should feel like the camera following the play, not
+     *  snapping to it. RALLY_TAU is tuned to read as a CUT, which is wrong for a pan. */
+    private static final double SWING_TAU = 0.35;
+
+    private double rcYaw = 0;
+
     public CameraRig() {
         camera.setNearClip(1);
         camera.setFarClip(20000);
@@ -185,15 +222,37 @@ public final class CameraRig {
      * Nothing here tracks the ball: the camera only ever sits at RALLY_IN or RALLY_OUT (or
      * between them, mid-cut), both fixed behind the near end.
      */
-    public void updateRally(double frameDt) {
+    public void updateRally(double frameDt, Vec3 ball) {
         if (!rallyCam) return;
 
-        double k = 1 - Math.exp(-Math.max(1e-3, frameDt) / RALLY_TAU);
+        double dt = Math.max(1e-3, frameDt);
+        double k = 1 - Math.exp(-dt / RALLY_TAU);
         rcPitch  += (rallyTarget[0] - rcPitch)  * k;
         rcDist   += (rallyTarget[1] - rcDist)   * k;
         rcHeight += (rallyTarget[2] - rcHeight) * k;
 
-        yawRot.setAngle(0);
+        /*
+         * The swing: put the camera on the line from the opponent's half through the ball.
+         * atan2 of the horizontal offset, because yaw 0 already looks down the table.
+         *
+         * NEGATED, and not as a guess. Xform maps physics (x, y, z) to scene (x, -y, -z) --
+         * two axes flipped, which is a change of handedness. So a rotation about Y worked out
+         * in physics space describes the OPPOSITE rotation once it reaches the JavaFX gimbal,
+         * and an angle that is correct on paper swings the camera to the wrong side of the
+         * table. Measured before this negation: a ball at x = +1.20 put the camera at
+         * x = -1.28, mirrored about the centre line at every ball position.
+         *
+         * This is the conversion happening at the boundary, which is where it belongs -- the
+         * geometry above is all physics space, and only this one step speaks JavaFX.
+         */
+        double wantYaw = 0;
+        if (ball != null && ball.isFinite()) {
+            wantYaw = clamp(-Math.toDegrees(Math.atan2(ball.x(), ball.z() - OPP_CENTRE_Z)),
+                            -MAX_SWING_DEG, MAX_SWING_DEG);
+        }
+        rcYaw += (wantYaw - rcYaw) * (1 - Math.exp(-dt / SWING_TAU));
+
+        yawRot.setAngle(rcYaw);
         pitchRot.setAngle(-rcPitch);
         Xform.place(gimbal, 0, rcHeight, 0);
         camera.setTranslateZ(Xform.z(rcDist));

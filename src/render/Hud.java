@@ -48,7 +48,8 @@ public final class Hud {
             TIME    SPACE pause   . step   [ ] slower,faster
             VIEW    F rally-cam on/off   C preset view
                     V shot debug   D control debug
-                    G ghost   T trail   B ball x2   H hud   ESC quit""");
+                    G ghost   T trail   B ball x2   H hud   ESC quit
+            DEMO    M watch it play itself""");
 
         setShot(null);
         root.getChildren().addAll(corner(Pos.TOP_LEFT, feed, shot),

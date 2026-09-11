@@ -58,13 +58,20 @@ public final class ShotAssist {
 
     public static final class Tuning {
 
-        /** Shot strength, m/s. Swing speed is mapped onto this range and never beyond it. */
-        public double minShotSpeed = 7.0;
-        public double maxShotSpeed = 13.0;
+        /** Shot strength, m/s. Swing speed is mapped onto this range and never beyond it.
+         *
+         *  Widened from 7..13. That band was only 6 m/s wide, which is why a hard swing and a
+         *  soft one produced near-identical shots: measured over a drive sweep, driving 14 m/s
+         *  harder bought 1.0 m/s of extra shot speed. The floor now reaches a genuine touch
+         *  shot and the ceiling a genuine drive. Note that the ceiling is ASPIRATIONAL -- the
+         *  shot still has to land, and from a contact 1.1 m from the net at bat height the
+         *  geometry tops out around 9.5 m/s. Raising this further does nothing on its own. */
+        public double minShotSpeed = 5.0;
+        public double maxShotSpeed = 17.0;
 
         /** Racket speed, m/s, that produces a full-strength shot. Faster than this adds
          *  nothing -- this is what stops repeated hits from compounding. */
-        public double maxSwingSpeed = 12.0;
+        public double maxSwingSpeed = 16.0;
 
         /** How much a sideways or upward swipe counts toward shot STRENGTH, next to the
          *  forward drive. Low on purpose: driving the blade through the ball is what makes it
@@ -80,17 +87,28 @@ public final class ShotAssist {
         public double swingCurve = 0.7;
 
         /** How far a sideways swipe moves the aim, as a fraction of the target box per m/s.
-         *  0.16 puts a 6 m/s swipe on the edge of the box, which is a firm but ordinary sweep
+         *  0.20 puts a 5 m/s swipe on the edge of the box, which is a firm but ordinary sweep
          *  of the mouse -- the point of the number is that a player who swipes ACROSS the ball
          *  sees the ball go there, rather than seeing a hint of it. */
-        public double aimInfluence = 0.16;
+        public double aimInfluence = 0.20;
 
-        /** How much a forward drive deepens the target, per m/s. */
-        public double depthInfluence = 0.045;
+        /**
+         * How much a forward drive deepens the target, per m/s.
+         *
+         * This and `arcInfluence` below are the two halves of the same gesture and they PULL
+         * AGAINST EACH OTHER, which is the thing to understand before touching either. Driving
+         * forward deepens the target through this term, and simultaneously raises `brush`,
+         * which shortens it through `arcInfluence`. At the old 0.045 / 0.035 the second term
+         * cancelled most of the first: measured, driving 14 m/s harder moved the landing 13 cm
+         * and the depth control covered about a ninth of the table. It is now 51 cm over a
+         * smooth, monotone curve.
+         */
+        public double depthInfluence = 0.100;
 
         /** How much an up/down swipe arcs the shot: up = shorter and higher, down = flatter
-         *  and deeper. Fraction of the target depth range per m/s. */
-        public double arcInfluence = 0.035;
+         *  and deeper. Fraction of the target depth range per m/s. Lowered from 0.035 -- see
+         *  `depthInfluence`, which this was quietly cancelling. */
+        public double arcInfluence = 0.018;
 
         /** How much the racket's own tilt aims the shot, on top of where it is moving. */
         public double faceInfluence = 0.25;
@@ -99,9 +117,11 @@ public final class ShotAssist {
          *  contacts should feel different, not random. */
         public double contactPointInfluence = 0.30;
 
-        /** Fraction of the physical reflection blended into the authored shot. Small: it is
-         *  there so contacts feel alive, not so it can steer. */
-        public double physicalBlend = 0.06;
+        /** Fraction of the physical reflection blended into the authored shot. Raised from
+         *  0.06: at that level the ball was on rails, and the point of this pass was to let
+         *  the player's actual stroke through. Still a minority share -- it is there so the
+         *  contact feels like an impact, not so it can steer the shot on its own. */
+        public double physicalBlend = 0.15;
 
         // ---- contact quality -------------------------------------------------------------
         //
@@ -159,7 +179,7 @@ public final class ShotAssist {
          * ball met right at the net, where no fast shot is legal and the honest answer is a
          * soft lift -- but a contact off the rim no longer qualifies for it.
          */
-        public double rescueQualityFloor = 0.45;
+        public double rescueQualityFloor = 0.60;
 
         /**
          * How much forward drive counts as brushing over the ball.
@@ -174,13 +194,14 @@ public final class ShotAssist {
         public double reflectionCap = 6.0;
 
         /** Hard ceiling on the sideways component of the finished shot. Both a cone (degrees
-         *  off straight) and an absolute m/s -- whichever binds first. 20 degrees is what it
-         *  takes to reach the corner of the widened target box from a contact behind the end
-         *  line; at 15 the clamp was quietly overruling the aim before the validator ever saw
-         *  it. Widening it cannot make a shot illegal on its own -- every candidate is still
-         *  flown and graded. */
-        public double maxHorizontalDeviationDeg = 20.0;
-        public double maxLateralVelocity = 3.0;
+         *  off straight) and an absolute m/s -- whichever binds first. This clamp has now
+         *  overruled the aim twice: at 15 degrees, and again at 20 once the target box was
+         *  widened to 0.90 -- the box grew and the landing did not, because the cone was
+         *  binding first. 30 degrees and 4.5 m/s are what let the corner of the box actually
+         *  be reached. Widening it cannot make a shot illegal on its own -- every candidate is
+         *  still flown and graded. */
+        public double maxHorizontalDeviationDeg = 30.0;
+        public double maxLateralVelocity = 4.5;
 
         /** Launch elevation band. This is a SANITY GUARD, not a shaping tool -- Aim owns the
          *  elevation, and a real drive off a waist-high ball near the baseline genuinely
@@ -223,22 +244,55 @@ public final class ShotAssist {
          */
         public double minSearchSpeed = 3.0;
 
+        /**
+         * The search may not slow a shot below this fraction of the pace the swing ASKED for.
+         *
+         * Without it the ladder can turn any over-ambitious swing into a legal dink, because
+         * minSearchSpeed (3.0) is an absolute floor and there is nearly always SOME slow shot
+         * that lands. Measured before this existed: driving at 14 m/s produced a 4.75 m/s shot
+         * landing shorter than driving at 8 did -- swinging harder made a weaker shot, and the
+         * ball could not be put out however hard it was hit.
+         *
+         * A relative floor keeps the absolute one working for the case it was written for -- a
+         * contact low over the table that genuinely has no fast answer, where wantSpeed is
+         * itself small and 0.70 of it is still slow -- while refusing to disguise a swing for
+         * the fences as a touch shot. If the asked-for pace cannot land, the shot goes out,
+         * which is the point.
+         */
+        public double searchSpeedFloorFrac = 0.60;
+
+        /**
+         * Above this much swing, the rescue does not run at all.
+         *
+         * The rescue re-aims down the middle at any speed that works. It exists for the ball met
+         * right at the net, where no fast shot is legal and a soft lift is the honest answer --
+         * not for a player who swung as hard as they could at a ball that would not take it.
+         * Letting it cover that case is what kept the out-rate at zero on a grid of clean
+         * contacts.
+         */
+        public double rescueEffortCeiling = 0.75;
+
         /** The target box on the opponent's half, as fractions of half-width / half-length.
-         *  Chosen so a shot that lands on target is comfortably inside the lines: 0.75 of the
-         *  half-width is 0.57 m, leaving 19 cm of table outside the box for the solve to be
-         *  wrong by. It was 0.60, which put the corners of the box so far inside the table
-         *  that a fully committed swipe still landed mid-court. */
-        public double targetHalfWidthFrac = 0.75;
-        public double targetDepthMinFrac = 0.32;
-        public double targetDepthMaxFrac = 0.80;
+         *  0.90 of the half-width is 0.69 m, leaving 7 cm for the solve to be wrong by. It was
+         *  0.75, and before that 0.60; each widening was made for the same measured reason --
+         *  a fully committed swipe still landed short of the corner. Measured now: the widest
+         *  landing a swipe can reach is 0.583 m of a 0.763 m half-width, up from 0.484. It is
+         *  deliberately not the whole table: landing reliably ON the line should not be
+         *  available, and `landingMargin` keeps the last few centimetres out of reach. */
+        public double targetHalfWidthFrac = 0.90;
+        public double targetDepthMinFrac = 0.20;
+        public double targetDepthMaxFrac = 0.92;
 
         /** Where the "safe" shot goes when a correction pass has to give ground. */
         public double safeDepthFrac = 0.55;
 
         /** How far each correction pass pulls the target toward safe, and how much it slows
-         *  the shot. */
-        public int maxCorrectionPasses = 3;
-        public double targetAssist = 0.34;
+         *  the shot. Both reduced (3 passes at 0.34 before): the correction ladder is the
+         *  assist's most invisible form of help, and at the old settings it silently dragged
+         *  an over-ambitious shot back to the middle of the table rather than letting the
+         *  player see they had over-hit it. */
+        public int maxCorrectionPasses = 2;
+        public double targetAssist = 0.18;
         public double speedBackoffPerPass = 0.13;
 
         /** Clearance above the cord the validator insists on, metres. */
@@ -273,7 +327,49 @@ public final class ShotAssist {
         public double spinInfluence = 1.0;
         public double baseTopspin = 14.0;
         public double topspinPerLift = 2.6;
-        public double sidespinPerSwipe = 2.2;
+
+        /**
+         * TUNED, standing in for how hard a player brushes ACROSS the back of the ball.
+         *
+         * This was 2.2, which authored spin that existed on paper and did nothing you could
+         * see: measured over a swipe sweep, a hard 10 m/s sweep produced 22 rev/s and bent the
+         * ball 2.8 cm across the whole flight. (The lateral landing movement that came with it
+         * -- half a metre of it -- is the AIM, `aimInfluence` below, not the spin.) A real
+         * sidespin stroke carries 50-100 rev/s, so 2.2 was an order of magnitude short of the
+         * gesture it was supposed to represent.
+         *
+         * 4.5 puts that same hard swipe at ~45 rev/s. It is deliberately still under the real
+         * range: every candidate shot is flown WITH its spin and rejected if it does not land
+         * in, so spin that curves harder makes the validator reject more and fall through to
+         * the rescue -- and the rescue re-aims down the middle, which would make a committed
+         * swipe feel WORSE than a weak one. Going further than this needs that measured, not
+         * assumed.
+         *
+         * **This knob saturates, and that is the thing to know before reaching for it again.**
+         * Measured A/B at 2.2 against 4.5, as in-flight bend (against the same launch with the
+         * sidespin removed) and lateral travel over the 0.4 s after the bounce:
+         *
+         *   swipe m/s   2.2: bend / after     4.5: bend / after
+         *       2.5      -4.0 cm / 5.2 cm      -7.5 cm / 1.1 cm
+         *       5.0      -7.8 cm / 12.3 cm    -10.2 cm / 9.3 cm
+         *      10.0      -9.4 cm / 21.8 cm     -9.7 cm / 18.3 cm
+         *
+         * Doubling the spin doubles the bend for an ordinary swipe and does almost nothing for
+         * a hard one. The cause is not the aerodynamics -- it is that this class solves to a
+         * TARGET and then validates. Given more spin the correction loop simply selects a
+         * different launch that reaches the same legal landing, so the outcome is held roughly
+         * fixed by the very machinery that guarantees the rally. Anyone wanting a visibly
+         * bigger curve has to loosen what holds it (the lateral cone, the target box) or let
+         * spin bend the shot AFTER validation -- and that second one breaks the
+         * solve-constrain-validate-correct rule this class is built on. Do not just raise
+         * this number and expect to see it.
+         *
+         * Note also the sign, which is correct and looks wrong: a swipe to the right AIMS the
+         * ball right and SPINS it so it bends back left. That is real -- brushing across the
+         * ball curves it opposite to the brush -- and it means the two halves of the gesture
+         * partly oppose each other, exactly as they do on a real table.
+         */
+        public double sidespinPerSwipe = 4.5;
         public double maxSpin = 55.0;
     }
 
@@ -449,7 +545,9 @@ public final class ShotAssist {
             double pace = wantSpeed * (1 - t.speedBackoffPerPass * pass);
 
             for (int k = 0; k < t.speedCandidates; k++) {
-                double speed = clamp(pace * speedFactor(k), t.minSearchSpeed, t.maxShotSpeed);
+                double floor = Math.max(t.minSearchSpeed, wantSpeed * t.searchSpeedFloorFrac);
+                double speed = clamp(pace * speedFactor(k), Math.min(floor, t.maxShotSpeed),
+                                     t.maxShotSpeed);
 
                 Aim.Solution sol = Aim.atTarget(contact, target, speed, topRevs, sideRevs);
                 // Capped at the candidate's OWN speed, not at the band's top: a shot that only
@@ -486,7 +584,9 @@ public final class ShotAssist {
         // through -- the "ball must not fly everywhere" floor -- sweep the whole envelope:
         // every sensible depth down the middle, at speeds from a soft lift up to full pace.
         // Some contacts have no fast answer at all and the honest shot is a slow one.
-        if (bestCost > 0 && (!playerHit || quality >= t.rescueQualityFloor)) {
+        boolean mayRescue = !playerHit
+                || (quality >= t.rescueQualityFloor && swingAmount <= t.rescueEffortCeiling);
+        if (bestCost > 0 && mayRescue) {
             // The player's own spin first, plain topspin only as a last resort: a chop that
             // has to be rescued should still come back as a chop if any speed works with it.
             double[][] spins = {{topRevs, sideRevs}, {t.baseTopspin, 0}};

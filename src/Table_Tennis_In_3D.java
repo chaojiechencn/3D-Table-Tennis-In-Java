@@ -11,6 +11,7 @@ import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
 import javafx.stage.Stage;
 import physics.*;
+import play.DemoPlayer;
 import play.Follower;
 import play.Opponent;
 import play.PlayerReach;
@@ -92,6 +93,21 @@ public class Table_Tennis_In_3D extends Application {
             new Paddle(new Vec3(0, 0.20, Follower.PLANE_Z), new Vec3(0, 0, 1));
 
     private final Stroke stroke = new Stroke(PlayerReach.NEUTRAL);
+
+    /**
+     * The demo hand, and whether it is driving. `M` toggles it.
+     *
+     * It supplies the CURSOR, exactly as the mouse does, so the whole control path below it is
+     * unchanged -- same Stroke, same PlayerReach envelope, same TRACK_SPEED. It replaces the
+     * player rather than assisting one: while this is on, mouse movement is ignored, and the
+     * moment it were allowed to nudge a human's aim it would be auto-aim. See DemoPlayer.
+     */
+    private final DemoPlayer demo = new DemoPlayer();
+    private boolean demoMode = false;
+
+    /** Capture mode pins a fixed camera; this opts back into the rally-cam so an offline
+     *  frame can show the swing. Only meaningful alongside --out. */
+    private boolean keepRallyCam = false;
     private final Opponent opponent = new Follower();
 
     /** Turns every racket contact into a playable shot -- see ShotAssist. */
@@ -317,7 +333,7 @@ public class Table_Tennis_In_3D extends Application {
         sub.heightProperty().bind(scene.heightProperty());
 
         scene.setOnKeyPressed(e -> onKey(e.getCode()));
-
+//
         stage.setScene(scene);
         stage.setTitle("Mr. Pong");
         stage.show();
@@ -390,7 +406,10 @@ public class Table_Tennis_In_3D extends Application {
         prevPlayerPose = playerPaddle.collider();
         prevAiPose = aiPaddle.collider();
 
-        if (pendingAim != null) stroke.aimAt(pendingAim);
+        // The demo drives the cursor when it is on; otherwise the mouse does. Exactly one of
+        // them is ever the source, which is what keeps this from becoming an aim assist.
+        if (demoMode) stroke.aimAt(demo.cursorFor(world.state(), playerMayHit && !pointOver, DT));
+        else if (pendingAim != null) stroke.aimAt(pendingAim);
         stroke.advance(playerPaddle, DT);
         opponent.advance(world.state(), aiPaddle, DT);
 
@@ -554,7 +573,7 @@ public class Table_Tennis_In_3D extends Application {
 
         // Ease the rally-cam toward whichever fixed view the last hit picked. Real frame time
         // -- it is a view, not physics.
-        rig.updateRally(frameSeconds);
+        rig.updateRally(frameSeconds, world.state().pos());
 
         // The same alpha, so the blade and the ball never disagree about where they are at
         // the instant of contact -- which is the one frame anybody is looking closely at.
@@ -771,6 +790,11 @@ public class Table_Tennis_In_3D extends Application {
                 showControlDebug = !showControlDebug;
                 hud.setControl(showControlDebug ? controlReadout() : null);
             }
+            case M -> {
+                demoMode = !demoMode;
+                hud.setFeed(demoMode ? currentShot.name() + "   [DEMO -- M to take over]"
+                                     : currentShot.name());
+            }
             case H -> { showHud = !showHud; hud.setShown(showHud); }
             case ESCAPE -> Platform.exit();
 
@@ -870,14 +894,17 @@ public class Table_Tennis_In_3D extends Application {
                 // The same thing D does, from the command line -- so a capture can prove the
                 // control overlay actually renders, rather than only that it compiles.
                 case "--controldebug" -> showControlDebug = Boolean.parseBoolean(kv[1]);
+                case "--demo" -> demoMode = Boolean.parseBoolean(kv[1]);
+                case "--rallycam" -> keepRallyCam = Boolean.parseBoolean(kv[1]);
                 default -> { }
             }
         }
 
         // A capture wants a fixed, predictable camera. --view already opts out of the
         // rally-cam; this covers the default (no --view) case so a screenshot is not framed
-        // by whichever view the last hit had selected.
-        if (screenshotPath != null) rig.stopRallyCam();
+        // by whichever view the last hit had selected. --rallycam=true opts back IN, which is
+        // the only way to see the rally-cam's swing without a human watching.
+        if (screenshotPath != null && !keepRallyCam) rig.stopRallyCam();
     }
 
     private void takeScreenshot(Scene scene) {

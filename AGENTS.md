@@ -2,7 +2,7 @@
 
 Operating guide for coding agents (Codex, Claude Code) working in this repository.
 
-`CLAUDE.md` is the full project history and rationale — ~51 KB, and the authority when the two
+`CLAUDE.md` is the plan, the methodology and the full rationale — ~56 KB, and the authority when the two
 disagree. **This file is the short operational contract**: what you must not break, how to build,
 and how to prove you did not break it. Read `CLAUDE.md` when you need the *why* behind a rule.
 
@@ -11,15 +11,15 @@ and how to prove you did not break it. Read `CLAUDE.md` when you need the *why* 
 ## What this is
 
 A 3D table tennis game in Java 21 + JavaFX. Mouse-controlled paddle, a ball carrying real spin,
-and an AI opponent. Graded coursework — a validated physics engine (`physics/`) with an arcade
-game layer (`play/`) on top of it.
+and an AI opponent. A validated physics engine (`physics/`) with an arcade game layer (`play/`)
+on top of it.
 
 ---
 
 ## Build and run
 
 There is **no build system** and no dependencies. Stock `javac` only. Do not introduce Maven or
-Gradle — the grader runs this from IntelliJ.
+Gradle — this project is run from IntelliJ.
 
 The JDK must be **Liberica "Full" JDK 21**, which ships JavaFX as system modules. With it there is
 no `--module-path` and no `--add-modules`. A plain JDK has no JavaFX and fails at launch.
@@ -37,8 +37,9 @@ $JDK = "$env:USERPROFILE\.jdks\jdk-21.0.12.1-full\bin"
 & "$JDK\javac" -d out\production\3D-Table-Tennis-In-Java (Get-ChildItem -Recurse src -Filter *.java).FullName
 ```
 
-> **Note:** `CLAUDE.md` cites `~/jdk/jdk-21.0.7-full`. That path **no longer exists**. The real JDK
-> is `~/.jdks/jdk-21.0.12.1-full`, which is what the committed IntelliJ run configuration uses.
+> **Note:** there is a second, non-Full JDK beside it at `~/.jdks/liberica-21.0.12.1` with **zero**
+> JavaFX modules. Nothing points at it, but repointing the project SDK at it by hand is exactly what
+> produces the "no JavaFX, fails at launch" symptom.
 
 Never commit build output. `out/` is git-ignored; do not add new build directories to the repo.
 
@@ -50,7 +51,7 @@ Two headless suites. Both print PASS/FAIL per check and exit 0/1. **They must st
 
 ```bash
 "$JDK/java" -cp out/production/3D-Table-Tennis-In-Java physics.SelfTest   # 101 checks
-"$JDK/java" -cp out/production/3D-Table-Tennis-In-Java play.RallyTest     #  15 checks
+"$JDK/java" -cp out/production/3D-Table-Tennis-In-Java play.RallyTest     #  29 checks
 ```
 
 - Touched anything in `src/physics/` → run `physics.SelfTest`.
@@ -146,7 +147,7 @@ For a module file stored in `.idea/`, `$MODULE_DIR$` resolves to the PROJECT dir
 
 ---
 
-## Fixed on 2026-09-11 — do not undo these
+## Settled — do not undo these
 
 1. **Scoring exists.** `play/Scoreboard.java` keeps the ITTF rules (11, win by 2, no ceiling at
    deuce, service every 2 points and every 1 from 10-all, best of 5). It is derived from the
@@ -173,17 +174,17 @@ For a module file stored in `.idea/`, `$MODULE_DIR$` resolves to the PROJECT dir
 6. **A brush modifier exists.** Holding the right mouse button switches the cursor's Y axis from
    depth to blade height (`PlayerReach.clampBrushed`), freezing depth while held. This is modal,
    not simultaneous — which is the distinction that makes it legitimate rather than a return of
-   the Sep 4 two-meanings-on-one-axis bug. `PlayerReach.clamp` is untouched, so the "no aim at
+   the two-meanings-on-one-axis bug. `PlayerReach.clamp` is untouched, so the "no aim at
    any height leaves the hitting plane" invariant still holds literally for normal play, and is
    still checked. The downward half of the band stops at `BLADE_R` so the bat cannot cut through
    the table top.
 
-## Known open defects (verified 2026-09-11, not yet fixed)
+## Known open defects
 
 Do not "rediscover" these, and do not undo a fix for them.
 
 1. **The opponent still follows rather than predicts.** It is now losable *to*, because the
-   player can miss, but it never chooses a shot. Prediction is the October milestone.
+   player can miss, but it never chooses a shot. Prediction is the next piece of AI work.
 2. **`TOP` and `HIGH` cannot address the whole depth envelope** (z ≈ 1.51 and 1.16 against
    `Z_FAR = 2.40`). Left alone deliberately — they are inspection views, not ones a rally is
    played from. Both rally views now reach 2.400, measured through the real rig.

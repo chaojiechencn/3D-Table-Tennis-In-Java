@@ -18,7 +18,10 @@ the table, which is what keeps "reach in" and "step back" from fighting each oth
 How you move it through the ball aims the shot: **swipe it sideways** to send the ball that way
 (swipe right, ball goes right), **drive it up-table through the ball** for pace, depth and
 topspin — the face closes over the ball as you go forward — and **pull it back** through the ball
-to open the face and cut backspin under it. A still paddle just blocks it back soft. The game then
+to open the face and cut backspin under it. A still paddle just blocks it back soft. **Hold the
+right mouse button** and the up/down axis stops moving the paddle up the table and starts raising
+and lowering the bat instead, so you can brush up or down the back of the ball; depth freezes while
+you hold it. The game then
 keeps that shot playable — the ball is aimed at a real spot on the other side, and the shot is
 checked all the way to the bounce before it is played, so it clears the net and lands in rather
 than flying off the end. It is assisted, arcade-style, more *Ping Pong Fury* than a physics sim
@@ -29,9 +32,20 @@ physics puts 11 of them on the table and throws the ball up to 2.4 m wide at 24 
 assist all 75 land, none more than 0.38 m off centre, none faster than 12.4 m/s. Hitting harder
 always does a little more and never a lot more, so a long rally cannot spiral into a rocket.
 
+The assist is not a guarantee, though — **you can still miss.** Every contact is graded on where it
+struck the blade, and the further out toward the rim you catch the ball the more of the raw physics
+you get and the less of the aimed shot. A clean, centred contact goes where you aimed it; a shot off
+the edge mostly does what real physics says, which is usually to die. Against a 5 m/s ball you have
+about 0.6 of the blade's radius to play with, and about 0.3 of it against an 18 m/s one.
+
 You can only return the ball **after it has bounced on your side** (real table-tennis rule). A ball
-that bounces twice, hits the net, or sails past the end line ends the point and the next serve is
-fed in. There's no scoreboard yet — the rally just restarts.
+that bounces twice, comes back on your own half, or sails past the end line ends the point, and the
+next serve is fed in. Clipping the net is *not* an automatic loss — as in the real game, a ball that
+touches the cord and still lands in is a good shot.
+
+The match is scored to the real rules: **games to 11, win by two**, with no ceiling at deuce, so
+13–11 and 24–22 both finish a game. Service changes every two points, and every single point once
+the score reaches 10–all. A match is the best of five.
 
 The camera is your main tool for reading the ball: it cuts between a close view and a wide one
 depending on who last hit — close after your shot, wide after the opponent's.
@@ -48,7 +62,9 @@ hits it; between hits it flies for real.
 - Mouse-controlled paddle that slides anywhere from over the table to well behind the baseline,
   wherever YOU point it
 - Assisted arcade shots — drive for pace, swipe to aim; the game keeps the ball in play
-- Rallies against the AI, with the one-bounce rule and points that end on a net / long / double bounce
+- Rallies against the AI, with the one-bounce rule and points that end on a long ball or a double bounce
+- A match scored to the real rules — games to 11, win by two, service changing on the right points
+- Shots you can genuinely miss: catch the ball off the rim of the bat and real physics takes over
 - A two-view rally-cam that cuts on who last hit, plus five preset views, slow motion, single-step
 - Full ball-flight simulation between hits: spin, air drag, Magnus curve, spin-coupled bounces
 - A menu of shots to feed in, a grey no-spin "ghost" trail, and a `V` debug overlay that shows
@@ -57,8 +73,8 @@ hits it; between hits it flies for real.
 **In progress**
 
 - Serving off your own blade (right now a ball is fed in each rally)
-- Scoring and rules
 - An AI opponent that reads where the ball is going rather than tracking it
+- A menu, so the game is something you start rather than something you launch
 
 **Planned**
 
@@ -73,6 +89,7 @@ Playing the ball:
 | --- | --- |
 | Mouse left / right | Moves the paddle across the table |
 | Mouse up / down | Moves the paddle up the table toward the net, or back behind the baseline |
+| Hold right mouse | Switches up / down to raising and lowering the bat, for brushing up or down the ball. Depth is frozen while held |
 | Swipe the paddle sideways | Sends the ball that way — swipe right, ball goes right |
 | Drive the paddle up-table through the ball | Pace, depth and topspin |
 | Pull the paddle back through the ball | Opens the face and cuts backspin |
@@ -168,7 +185,7 @@ the table at smash speed.
 It prints PASS/FAIL per check and exits non-zero if anything fails. I run it from the
 **Physics SelfTest** configuration in IntelliJ.
 
-`play.RallyTest` is a second headless suite, 15 checks, covering the game rather than the physics:
+`play.RallyTest` is a second headless suite, 29 checks, covering the game rather than the physics:
 that the AI reaches every shot fed at it, puts every one back over the net, lands every one on the
 table, never returns the ball faster than the impulse could have sent it, never launches it out of
 the hall, and that flinging the mouse cannot move the paddle faster than a person carries a bat.
@@ -178,6 +195,11 @@ can change the paddle's height, that moving the mouse up the screen never sends 
 backwards, that the paddle is allowed to go everywhere a returnable ball actually goes, that it has
 a human amount of time to get there, that it is fast enough to make the trip — and, playing nine
 full points end to end, that a player who simply points at the ball does return it over the net.
+
+It grades the **scoring** too, since a scoreboard that can only be checked by playing a whole match
+is one that does not get checked: that 11–9 wins a game but 11–10 does not, that service changes on
+the right points either side of 10–all, and that the server is derived from the score rather than
+tracked by a flag that can drift out of step with it.
 
 ## Built with
 
