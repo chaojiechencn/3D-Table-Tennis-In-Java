@@ -31,6 +31,8 @@ public final class Hud {
     private static final String MONO = "Consolas, 'DejaVu Sans Mono', monospace";
 
     private final StackPane root = new StackPane();
+    /** Bigger and brighter than the rest: the score is the one number a player looks up for. */
+    private final Label score = panelLabel(20, "#ffffff");
     private final Label feed = panelLabel(15, "#eaf2ff");
     private final Label shot = panelLabel(12, "#ff9a3c");
     private final Label controls = panelLabel(12, "#8d9bab");
@@ -39,7 +41,8 @@ public final class Hud {
     public Hud() {
         controls.setText("""
             MOUSE   move to move the paddle -- swing through the ball to hit
-                    (how you move through the ball aims the shot; the game keeps it in)
+                    (how you move through the ball aims the shot; hit it CLEAN or it goes out)
+                    RIGHT hold = brush: mouse up/down lifts/cuts the bat for spin
                     LEFT drag orbits the camera      scroll zooms
             FEED    1-9,0 pick   N/P next,prev   R replay   A auto-replay
             TIME    SPACE pause   . step   [ ] slower,faster
@@ -49,6 +52,7 @@ public final class Hud {
 
         setShot(null);
         root.getChildren().addAll(corner(Pos.TOP_LEFT, feed, shot),
+                                  corner(Pos.TOP_CENTER, score),
                                   corner(Pos.TOP_RIGHT, control),
                                   corner(Pos.BOTTOM_LEFT, controls));
 
@@ -66,6 +70,9 @@ public final class Hud {
 
     /** The feed currently selected with the number keys. */
     public void setFeed(String name) { feed.setText("feed: " + name); }
+
+    /** The match score, already formatted by {@code play.Scoreboard.line()}. */
+    public void setScore(String text) { score.setText(text); }
 
     /** The shot-assist readout, or null to hide the line entirely (V off, or nothing hit yet).
      *  It has to go unmanaged as well as invisible or it leaves a blank row in the panel. */

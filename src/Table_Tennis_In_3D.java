@@ -14,9 +14,11 @@ import physics.*;
 import play.Follower;
 import play.Opponent;
 import play.PlayerReach;
+import play.Scoreboard;
 import play.ShotAssist;
 import play.Stroke;
 import render.*;
+
 
 import javax.imageio.ImageIO;
 import java.io.File;
@@ -169,6 +171,18 @@ public class Table_Tennis_In_3D extends Application {
     private double cursorX = Double.NaN, cursorY = Double.NaN;
     private Vec3 rawAim = null;
 
+    /**
+     * The brush modifier: hold the right mouse button and the cursor's Y stops meaning depth
+     * and means blade HEIGHT instead, so the bat can be carried up through the ball for topspin
+     * or cut down under it for backspin.
+     *
+     * The depth the blade had when the button went down is held for as long as it is held. That
+     * is what keeps this from being the Sep 4 bug again: the cursor's Y axis carries exactly one
+     * meaning at a time, and the button picks which.
+     */
+    private boolean brushing = false;
+    private double brushHoldZ = PlayerReach.NEUTRAL.z();
+
     /** D toggles the control/reachability overlay -- see controlReadout(). */
     private boolean showControlDebug = false;
 
@@ -230,6 +244,20 @@ public class Table_Tennis_In_3D extends Application {
     private boolean playerMayHit = false;
     private boolean aiMayHit = false;
     private int lastBounceSerial = 0;
+
+    /** The match score, kept to ITTF rules. See {@link Scoreboard}. */
+    private final Scoreboard score = new Scoreboard();
+
+    /**
+     * Latched the instant a point is decided, cleared when the next serve is fed.
+     *
+     * Without it the ball stays live for the whole {@link #POINT_END_DELAY}: the rackets keep
+     * making contact, every one of those contacts runs through ShotAssist and cuts the camera,
+     * and -- now that there is a score -- a second point-ending event would be counted as a
+     * second point. A decided point has to stop being playable at the moment it is decided, not
+     * when the replay timer happens to fire.
+     */
+    private boolean pointOver = false;
     /** Who put the ball in the air: 0 = the serve/feed, +1 = the opponent hit it, -1 = player. */
     private int lastHitSide = 0;
 
@@ -263,6 +291,7 @@ public class Table_Tennis_In_3D extends Application {
 
         Group world3d = new Group(
                 Court.build(),
+                ball.shadowNode(),
                 marks.node(),
                 ghost.node(),
                 trail.node(),
@@ -275,13 +304,13 @@ public class Table_Tennis_In_3D extends Application {
         Group root3d = new Group(world3d, rig.gimbal());
 
         SubScene sub = new SubScene(root3d, 1280, 780, true, SceneAntialiasing.BALANCED);
-        sub.setFill(Color.web("#0b0e13"));
+        sub.setFill(Color.web("#17232e"));
         sub.setCamera(rig.camera());
         rig.attachControls(sub);
         attachPaddleControls(sub);
 
         StackPane layers = new StackPane(sub, hud.node());
-        Scene scene = new Scene(layers, 1280, 780, Color.web("#0b0e13"));
+        Scene scene = new Scene(layers, 1280, 780, Color.web("#17232e"));
 
         // Keep the 3D viewport matched to the window instead of letterboxing it.
         sub.widthProperty().bind(scene.widthProperty());
@@ -368,7 +397,10 @@ public class Table_Tennis_In_3D extends Application {
         // The one-bounce rule: only the racket that is currently ALLOWED to hit is in the
         // collision set. The other blade still tracks the ball on screen, it just phases
         // through it until the ball has bounced on that player's side.
-        world.setPaddles(playerMayHit ? playerPaddle : null, aiMayHit ? aiPaddle : null);
+        // A decided point withdraws BOTH rackets. The blades still track on screen; they just
+        // stop being able to touch a ball whose point has already been awarded.
+        world.setPaddles(playerMayHit && !pointOver ? playerPaddle : null,
+                         aiMayHit     && !pointOver ? aiPaddle     : null);
 
         // The ball as it is just before this step -- ShotAssist wants the pre-contact velocity.
         BallState beforeStep = world.state();
@@ -405,11 +437,22 @@ public class Table_Tennis_In_3D extends Application {
             lastBounceSerial = world.bounceSerial();
             boolean near = lastBounceSide() < 0;
             if (near) {
-                if (lastHitSide >= 0) { if (playerMayHit) endPoint(); else playerMayHit = true; }
-                else endPoint();                       // player's own shot came back down near
+                if (lastHitSide >= 0) {
+                    // The opponent's ball (or the serve) has bounced on our side. The first
+                    // bounce opens our racket; a second one means we never got to it.
+                    if (playerMayHit) endPoint(Scoreboard.Side.OPPONENT);
+                    else playerMayHit = true;
+                } else {
+                    // Our own shot came back down on our own half: it never crossed.
+                    endPoint(Scoreboard.Side.OPPONENT);
+                }
             } else {
-                if (lastHitSide <= 0) { if (aiMayHit) endPoint(); else aiMayHit = true; }
-                else endPoint();                       // opponent's shot fell on its own half
+                if (lastHitSide <= 0) {
+                    if (aiMayHit) endPoint(Scoreboard.Side.PLAYER);
+                    else aiMayHit = true;
+                } else {
+                    endPoint(Scoreboard.Side.PLAYER);
+                }
             }
         }
 
@@ -418,13 +461,23 @@ public class Table_Tennis_In_3D extends Application {
         // measured against a stale one.
         lastBounceSerial = world.bounceSerial();
 
-        // The net killing a ball, a ball past the end line, or the floor -- all decide the point.
+        // A ball past the end line, or one that reached the floor, decides the point against
+        // whoever hit it last. The serve counts as the player's, so a feed that never lands is
+        // the player's fault, the same way a missed service toss is.
+        //
+        // NET is deliberately NOT in this list. World emits a NET event for ANY contact with the
+        // cord above 0.05 m/s, and under ITTF a rally ball that clips the net and still crosses
+        // and lands legally is a perfectly good shot -- often a lucky one, never a lost point.
+        // (Only a SERVICE that touches the net is special, and that is a let, replayed rather
+        // than scored; it belongs with serving, which is not built yet.) Ending on every NET
+        // event scored legal winners as errors. A net cord that genuinely kills the ball still
+        // decides the point here -- it just does so a moment later, through the rule that
+        // catches a shot falling back on its hitter's own half, or through the floor.
         World.Event last = world.lastEvent();
         if (last != null && world.time() - last.time() < DT * 2
-                && (last.type() == World.EventType.NET
-                 || last.type() == World.EventType.OUT_OF_BOUNDS
+                && (last.type() == World.EventType.OUT_OF_BOUNDS
                  || last.type() == World.EventType.FLOOR)) {
-            endPoint();
+            endPoint(lastHitSide > 0 ? Scoreboard.Side.PLAYER : Scoreboard.Side.OPPONENT);
         }
 
         // Fallback: the ball dropped near the FLOOR without a clean event, or died on the table.
@@ -460,8 +513,25 @@ public class Table_Tennis_In_3D extends Application {
         return 0;
     }
 
-    /** Cut the current point: schedule the next serve, sooner than the roll-to-a-stop fallback. */
-    private void endPoint() {
+    /**
+     * Decide the current point: award it, kill the ball, and schedule the next serve.
+     *
+     * The latch is the whole point of the method. Several rules can fire on the same step -- a
+     * ball can be long AND land on the floor a moment later -- and every one of them is a
+     * legitimate reason to end the rally, but only the FIRST of them says who won it. Awarding
+     * on each would score a single rally two or three times.
+     *
+     * The next serve is still scheduled only when auto-replay is on, but the point is awarded
+     * either way: with replay off the rally is being inspected, not played, and a score that
+     * silently stopped counting in that mode would be a trap.
+     */
+    private void endPoint(Scoreboard.Side winner) {
+        if (pointOver) return;
+        pointOver = true;
+
+        score.pointTo(winner);
+        hud.setScore(score.line());
+
         if (autoReplay && Double.isNaN(replayAt)) replayAt = world.time() + POINT_END_DELAY;
     }
 
@@ -578,16 +648,19 @@ public class Table_Tennis_In_3D extends Application {
             verdict);
     }
 
+    /**
+     * TUNED broad overhead lighting for a sports hall. Directional sources keep incidence
+     * uniform along the table, avoiding a bright far end as the camera cuts. A warm key and
+     * weaker cool cross-fill model the room's ceiling light and reflected light; the coloured
+     * ambient lifts the ball's underside without washing away its spherical shading.
+     * Directions are dimensionless physics-space vectors and cross the usual Xform boundary.
+     */
     private Group lighting() {
-        // Two lights over the table plus a soft ambient. A single light leaves the underside
-        // of the ball fully black, which reads as a hole punched in the table.
-        PointLight key = new PointLight(Color.web("#fff3e0"));
-        Xform.place(key, 0.6, 2.2, 1.2);
-
-        PointLight fill = new PointLight(Color.web("#9fc4ff").deriveColor(0, 1, 0.55, 1));
-        Xform.place(fill, -1.2, 1.8, -1.6);
-
-        return new Group(key, fill, new AmbientLight(Color.gray(0.32)));
+        DirectionalLight key = new DirectionalLight(Color.web("#b9b1a4"));
+        key.setDirection(Xform.toScene(new Vec3(0.35, -1, -0.28)).normalize());
+        DirectionalLight fill = new DirectionalLight(Color.web("#435c78"));
+        fill.setDirection(Xform.toScene(new Vec3(-0.8, -0.55, 0.4)).normalize());
+        return new Group(key, fill, new AmbientLight(Color.web("#303944")));
     }
 
     // ------------------------------------------------------------------ input
@@ -606,6 +679,24 @@ public class Table_Tennis_In_3D extends Application {
      */
     private void attachPaddleControls(SubScene sub) {
         sub.addEventHandler(MouseEvent.MOUSE_MOVED, e -> aim(sub, e));
+
+        // MOUSE_MOVED stops firing the moment any button is down, so the brush needs DRAGGED as
+        // well or the blade would freeze completely for as long as the modifier is held.
+        sub.addEventHandler(MouseEvent.MOUSE_DRAGGED, e -> { if (brushing) aim(sub, e); });
+
+        sub.addEventHandler(MouseEvent.MOUSE_PRESSED, e -> {
+            if (e.isSecondaryButtonDown()) {
+                brushing = true;
+                brushHoldZ = playerPaddle.pos().z();   // freeze the depth we are standing at
+                aim(sub, e);
+            }
+        });
+        sub.addEventHandler(MouseEvent.MOUSE_RELEASED, e -> {
+            if (brushing && !e.isSecondaryButtonDown()) {
+                brushing = false;
+                aim(sub, e);                           // hand the axis straight back to depth
+            }
+        });
     }
 
     /**
@@ -631,7 +722,12 @@ public class Table_Tennis_In_3D extends Application {
         cursorX = p.getX();
         cursorY = p.getY();
         rawAim = MouseAim.onHittingPlane(sub, p.getX(), p.getY(), PlayerReach.HIT_Y, fallback);
-        pendingAim = PlayerReach.clamp(rawAim);
+
+        // While the brush modifier is held the ray still supplies X, but the cursor's height on
+        // screen supplies the blade's height and the depth is the one frozen at button-down.
+        pendingAim = brushing
+                ? PlayerReach.clampBrushed(rawAim, p.getY() / Math.max(1, sub.getHeight()), brushHoldZ)
+                : PlayerReach.clamp(rawAim);
     }
 
     private void onKey(KeyCode code) {
@@ -716,6 +812,7 @@ public class Table_Tennis_In_3D extends Application {
         currentShot = shot;
         world.launch(shot.state());
         hud.setFeed(shot.name());
+        hud.setScore(score.line());      // also puts 0-0 on screen for the opening serve
 
         // The feed stands in for the player's own serve, so the rally-cam opens zoomed IN; it
         // will cut OUT when the opponent returns it.
@@ -725,6 +822,7 @@ public class Table_Tennis_In_3D extends Application {
         // One-bounce state: the serve is in the air, nobody may hit until it has bounced.
         playerMayHit = false;
         aiMayHit = false;
+        pointOver = false;
         lastHitSide = 0;
         lastBounceSerial = world.bounceSerial();
         lastHitTime = -1;

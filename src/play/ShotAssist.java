@@ -103,6 +103,72 @@ public final class ShotAssist {
          *  there so contacts feel alive, not so it can steer. */
         public double physicalBlend = 0.06;
 
+        // ---- contact quality -------------------------------------------------------------
+        //
+        // How well the ball was struck, and therefore how much help the shot earns. Before
+        // these existed the assist corrected EVERY contact equally and the rescue caught
+        // anything it could not correct, which meant the ball could not be put out however
+        // badly it was hit -- so the only way to lose a point was to miss entirely, and a
+        // rally could not be won or lost on skill. These turn the assist into something the
+        // player earns rather than something they are given.
+
+        /**
+         * The clean core of the blade, as a fraction of its radius: inside this the contact
+         * counts as fully struck and earns the whole assist.
+         *
+         * 0.50 is measured, not chosen. A player pointing the cursor straight at the ball --
+         * RallyTest's `aPlayerPointingAtTheBallCanReturnIt`, which is what competent play looks
+         * like here -- lands the ball at 0.34 to 0.52 of the blade radius from centre, never at
+         * zero. That offset is inherent: the ball is off the hitting plane in height, so the
+         * cursor ray crosses the plane a little short of it (about 0.18-0.33 m, measured). A
+         * core any tighter than this grades ordinary competent play as a mishit, which is
+         * exactly what the first calibration did -- it failed 8 of 9 feeds.
+         */
+        public double qualityCore = 0.50;
+
+        /** How far past the core the quality falls from 1 to 0. Core + this is the rim, beyond
+         *  which a contact earns nothing but the floor. */
+        public double qualityFalloff = 0.42;
+
+        /** Incoming speed (m/s) at which the core starts shrinking, and the span over which it
+         *  shrinks the whole way. A fast ball has to be met more precisely than a slow one. */
+        public double qualityPaceFrom = 6.0;
+        public double qualityPaceSpan = 12.0;
+
+        /** How much of the core the fastest ball takes away, and the floor it cannot shrink
+         *  below -- past which even a perfect player could not connect cleanly. */
+        public double qualityPaceLoss = 0.22;
+        public double qualityCoreMin = 0.26;
+
+        /**
+         * The assist a zero-quality contact still gets.
+         *
+         * Not zero, deliberately. At zero the rim of the blade returns the raw impulse, which
+         * the project's own sweep puts on the table 11 times in 75 -- a shank would be fatal
+         * every single time and the game would read as broken rather than hard. At 0.25 a badly
+         * struck ball is usually lost and occasionally survives, which is what a mishit does in
+         * the real game.
+         */
+        public double assistFloor = 0.25;
+
+        /**
+         * The quality below which the rescue search does not run at all.
+         *
+         * The rescue re-aims down the middle at any speed that works, and it was the reason no
+         * contact could ever be punished. It still exists for the case it was written for -- a
+         * ball met right at the net, where no fast shot is legal and the honest answer is a
+         * soft lift -- but a contact off the rim no longer qualifies for it.
+         */
+        public double rescueQualityFloor = 0.45;
+
+        /**
+         * How much forward drive counts as brushing over the ball.
+         *
+         * See the derivation where `brush` is computed: 0.8 is what lets a hard pull-back reach
+         * genuine backspin rather than merely less topspin.
+         */
+        public double driveBrush = 0.8;
+
         /** The reflection is capped at this speed before blending, so a violent impulse cannot
          *  leak through even at 6%. */
         public double reflectionCap = 6.0;
@@ -258,6 +324,30 @@ public final class ShotAssist {
         double swipeX  = swing.x();              // + to the player's right
         double lift    = swing.y();              // + upward
 
+        /*
+         * The BRUSH -- how much the blade is rolling over the ball rather than pushing through
+         * it -- is what authors spin, and it comes from two places.
+         *
+         * `lift` is the true vertical one. It used to be identically zero for the player, whose
+         * blade was pinned to PlayerReach.HIT_Y, so every term reading it silently evaluated to
+         * a constant and the player's topspin never varied however they swung. (The same
+         * dead-axis mistake had already been found and fixed once, in Stroke.faceToward.) It is
+         * live again now that the brush modifier can lift the blade, but only while that button
+         * is held.
+         *
+         * `drive` is the other one, and it is the brush the player always has: driving up-table
+         * rolls the face over the ball, pulling back opens it and cuts underneath. That is the
+         * gesture the README advertises and it is closer to a real drive anyway -- forward and
+         * over, not straight up.
+         *
+         * The gain is set so the gesture can actually reach backspin rather than merely less
+         * topspin. A still blade authors baseTopspin (14 rev/s). A hard pull-back is about
+         * -8 m/s of drive, which at 0.8 gives a brush of -6.4, and 14 + (-6.4 * 2.6) = -2.6
+         * rev/s -- just past square, into a genuine chop. Anything less than about 0.7 here and
+         * the whole backspin half of the gesture is unreachable.
+         */
+        double brush = lift + drive * t.driveBrush;
+
         // Strength comes from the FORWARD drive, not the blade's total speed -- a still blade
         // dinks, a blade driven through the ball hits. The curve below 1 gives a quick early
         // response then diminishing returns, so swinging harder always does a little more and
@@ -275,6 +365,37 @@ public final class ShotAssist {
         // Which way the racket face is pointing, sideways, as a fraction.
         double faceX = clamp(racket.normal().x() * -toOpp, -1, 1);
 
+        /*
+         * ---- contact quality -------------------------------------------------------------
+         *
+         * How cleanly this ball was struck, 1 in the middle of the blade and 0 at the rim, with
+         * the usable middle shrinking as the ball arrives faster. It is measured IN THE FACE'S
+         * OWN PLANE (offX, offY above), so it counts being late or early the same way it counts
+         * being wide -- on a face-on disc those are the same error seen from different sides.
+         *
+         * Everything downstream scales off this: how much of the authored shot the player gets
+         * instead of the raw bounce, and whether the rescue is willing to run at all.
+         */
+        double offR = Math.min(1, Math.hypot(offX, offY));
+        double paceFrac = clamp((incoming.speed() - t.qualityPaceFrom) / t.qualityPaceSpan, 0, 1);
+        double core = Math.max(t.qualityCoreMin, t.qualityCore - t.qualityPaceLoss * paceFrac);
+        double rim  = core + t.qualityFalloff;
+        double quality = clamp((rim - offR) / (rim - core), 0, 1);
+
+        /*
+         * The share of the authored shot this contact has earned. The floor is why a shank is
+         * usually -- not always -- fatal; see Tuning.assistFloor.
+         *
+         * Only the PLAYER is graded. The opponent in the repo is `Follower`, which tracks the
+         * ball's current position rather than reading where it is going, so where on its blade
+         * the ball lands is an artefact of that placeholder and not a skill it is exercising.
+         * Grading it made it shank four of ten ordinary feeds straight into the net, which
+         * reads as a broken opponent rather than a beatable one -- difficulty has to come from
+         * what the opponent CHOOSES to do, which is the October predicting opponent's job. When
+         * that one arrives it can earn its assist on exactly these terms.
+         */
+        double assist = playerHit ? t.assistFloor + (1 - t.assistFloor) * quality : 1.0;
+
         // ---- 2. target -------------------------------------------------------------------
         // Built inside the box by construction, so the aim can never be absurd.
         double aim = swipeX * t.aimInfluence
@@ -284,7 +405,7 @@ public final class ShotAssist {
 
         double depthFrac = t.targetDepthMinFrac
                 + (t.targetDepthMaxFrac - t.targetDepthMinFrac)
-                  * clamp(0.35 + drive * t.depthInfluence - lift * t.arcInfluence
+                  * clamp(0.35 + drive * t.depthInfluence - brush * t.arcInfluence
                                - offY * t.contactPointInfluence * 0.5, 0, 1);
         double wantZ = toOpp * clamp(depthFrac, t.targetDepthMinFrac, t.targetDepthMaxFrac) * halfLen;
 
@@ -299,7 +420,7 @@ public final class ShotAssist {
         wantSpeed = clamp(wantSpeed, t.minShotSpeed, t.maxShotSpeed);
 
         // ---- 4. spin ---------------------------------------------------------------------
-        double topRevs  = clamp((t.baseTopspin + lift * t.topspinPerLift) * t.spinInfluence,
+        double topRevs  = clamp((t.baseTopspin + brush * t.topspinPerLift) * t.spinInfluence,
                                 -t.maxSpin, t.maxSpin);
         double sideRevs = clamp(swipeX * t.sidespinPerSwipe * t.spinInfluence,
                                 -t.maxSpin, t.maxSpin);
@@ -365,7 +486,7 @@ public final class ShotAssist {
         // through -- the "ball must not fly everywhere" floor -- sweep the whole envelope:
         // every sensible depth down the middle, at speeds from a soft lift up to full pace.
         // Some contacts have no fast answer at all and the honest shot is a slow one.
-        if (bestCost > 0) {
+        if (bestCost > 0 && (!playerHit || quality >= t.rescueQualityFloor)) {
             // The player's own spin first, plain topspin only as a last resort: a chop that
             // has to be rescued should still come back as a chop if any speed works with it.
             double[][] spins = {{topRevs, sideRevs}, {t.baseTopspin, 0}};
@@ -394,8 +515,25 @@ public final class ShotAssist {
             }
         }
 
-        Vec3 finalVel = bestVel;
-        Vec3 finalSpin = Aim.spin(new Vec3(finalVel.x(), 0, finalVel.z()), topRevs, sideRevs);
+        /*
+         * The authored shot is what the player gets for hitting it properly; the raw bounce is
+         * what they get for shanking it. A clean contact is almost all authored and lands where
+         * it was aimed. A contact off the rim is mostly the real impulse off a real blade,
+         * which goes wherever the geometry sends it -- usually off the table.
+         *
+         * This is also what stops the ball looking wrong coming off the bat. The authored
+         * velocity is chosen by a solver rather than by the impact, so on a bad contact it used
+         * to leave in a direction the visible collision plainly did not imply. Now the contacts
+         * where the two disagree most are exactly the ones that keep the most real physics.
+         *
+         * The spin is blended on the same fraction, or a mishit would still come off carrying
+         * an authored 14 rev/s of topspin it did nothing to earn.
+         */
+        Vec3 authoredVel = bestVel;
+        Vec3 authoredSpin = Aim.spin(new Vec3(authoredVel.x(), 0, authoredVel.z()), topRevs, sideRevs);
+
+        Vec3 finalVel  = Vec3.lerp(reflect(reflect), authoredVel, assist);
+        Vec3 finalSpin = Vec3.lerp(physical.spin(), authoredSpin, assist);
 
         debug = new Debug(contact, swing, incoming.vel(), safeDir(reflect),
                           safeDir(new Vec3(bestTarget.x() - contact.x(), 0,

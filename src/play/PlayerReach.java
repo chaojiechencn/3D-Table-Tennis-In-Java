@@ -158,6 +158,50 @@ public final class PlayerReach {
                         clamp(rawAim.z(), Z_NEAR, Z_FAR));
     }
 
+    /**
+     * How far above and below the hitting plane the brush may carry the blade.
+     *
+     * 0.18 m is a stroke, not a reposition: it is roughly the vertical travel of a real brushing
+     * forehand through the ball, and it is small enough that the blade cannot use the brush to
+     * get to a ball it could not otherwise reach. That matters -- if the brush extended the
+     * player's REACH it would be a second control axis for position, and the whole point of
+     * {@link #HIT_Y} is that position lives on one plane.
+     */
+    public static final double BRUSH_BAND = 0.18;
+
+    /**
+     * The blade while the brush modifier is held: height comes from the cursor, depth is frozen.
+     *
+     * This is the second input axis the Sep 4 (later) note said a vertical brush would need. It
+     * is emphatically NOT the old bug coming back. That bug had cursor Y meaning depth and
+     * height *at the same time*, inseparably, so neither gesture could be made alone. Here the
+     * two meanings are MODAL: the button chooses which one the axis carries, and whichever is
+     * not selected is held still. One axis, one meaning, at any given moment.
+     *
+     * Depth is frozen at the value it had when the button went down rather than tracked, because
+     * a brush that also walked the blade up-table would be back to two meanings on one axis.
+     *
+     * @param rawAim     the cursor's aim on the hitting plane, for its X only
+     * @param heightFrac 0 at the bottom of the viewport, 1 at the top
+     * @param holdZ      the depth the blade had when the brush began
+     */
+    public static Vec3 clampBrushed(Vec3 rawAim, double heightFrac, double holdZ) {
+        if (rawAim == null || !rawAim.isFinite()) return NEUTRAL;
+        // Screen Y grows downward, so the top of the viewport is the high blade.
+        double up = 1 - 2 * clamp(heightFrac, 0, 1);
+
+        // The downward half of the band is cut short by the table. This bounds the blade's
+        // CENTRE, and the blade is a disc of radius BLADE_R, so a centre below BLADE_R hangs the
+        // bottom of the bat through the table top -- the same mistake MIN_Y was introduced to
+        // fix in the cursor mapping, and just as wrong when a brush causes it. The full band is
+        // available upward; downward it stops where the bat would start cutting the table.
+        double y = Math.max(BLADE_R, HIT_Y + up * BRUSH_BAND);
+
+        return new Vec3(clamp(rawAim.x(), -MAX_X, MAX_X),
+                        y,
+                        clamp(holdZ, Z_NEAR, Z_FAR));
+    }
+
     /** Whether a point is inside the legal racket region (on the hitting plane, to 1 mm). */
     public static boolean contains(Vec3 p) {
         return Math.abs(p.y() - HIT_Y) < 1e-3

@@ -7,8 +7,6 @@ import javafx.scene.input.MouseEvent;
 import javafx.scene.input.ScrollEvent;
 import javafx.scene.transform.Rotate;
 
-import static render.Xform.SPM;
-
 /**
  * An orbiting camera on a gimbal, plus the preset views the demo actually needs.
  *
@@ -167,7 +165,7 @@ public final class CameraRig {
         yawRot.setAngle(0);
         pitchRot.setAngle(-rcPitch);
         Xform.place(gimbal, 0, rcHeight, 0);
-        camera.setTranslateZ(-rcDist * SPM);
+        camera.setTranslateZ(Xform.z(rcDist));
     }
 
     private void refresh() {
@@ -179,7 +177,7 @@ public final class CameraRig {
         // The gimbal pivots a little above the table surface rather than on it, so raising
         // the view does not push the table out of frame.
         Xform.place(gimbal, 0, height, 0);
-        camera.setTranslateZ(-distance * SPM);
+        camera.setTranslateZ(Xform.z(distance));
     }
 
     /**

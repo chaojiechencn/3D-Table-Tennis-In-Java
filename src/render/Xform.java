@@ -35,6 +35,10 @@ public final class Xform {
      */
     public static final double SPM = 300.0;
 
+    /** Unsigned lengths need the same scale as positions, without an axis flip. Keeping
+     *  primitive sizes here prevents a second conversion convention growing in the views. */
+    public static double length(double metres) { return metres * SPM; }
+
     public static double x(double metres) { return  metres * SPM; }
     public static double y(double metres) { return -metres * SPM; }
     public static double z(double metres) { return -metres * SPM; }

@@ -9,8 +9,6 @@ import javafx.scene.shape.Sphere;
 import javafx.scene.transform.Rotate;
 import physics.Vec3;
 
-import static render.Xform.SPM;
-
 /**
  * Debug overlay for the assisted shot model (toggle with V).
  *
@@ -136,12 +134,14 @@ public final class ShotDebug {
         if (d.lengthSquared() < 1e-9 || lenM < 1e-4) { c.setVisible(false); return; }
         c.setVisible(true);
 
-        double len = lenM * SPM;
+        double len = Xform.length(lenM);
         c.setHeight(len);
 
         // Linear part of the physics->scene map is diag(1, -1, -1); it carries directions too.
-        double dx = d.x(), dy = -d.y(), dz = -d.z();
-        double fx = fromM.x() * SPM, fy = -fromM.y() * SPM, fz = -fromM.z() * SPM;
+        Point3D direction = Xform.toScene(d).normalize();
+        double dx = direction.getX(), dy = direction.getY(), dz = direction.getZ();
+        Point3D start = Xform.toScene(fromM);
+        double fx = start.getX(), fy = start.getY(), fz = start.getZ();
 
         c.setTranslateX(fx + dx * len / 2);
         c.setTranslateY(fy + dy * len / 2);

@@ -10,7 +10,6 @@ import javafx.scene.transform.Rotate;
 import physics.Paddle;
 import physics.Vec3;
 
-import static render.Xform.SPM;
 import static physics.Constants.*;
 
 /**
@@ -49,7 +48,7 @@ public final class PaddleView {
     public PaddleView(boolean redFacingAway) {
         // The blade: three flat cylinders sharing one axis -- the wooden edge, and a sheet of
         // rubber on each side of it.
-        Cylinder blade = new Cylinder(BLADE_R * SPM, BLADE_THICK * SPM, 36);
+        Cylinder blade = new Cylinder(Xform.length(BLADE_R), Xform.length(BLADE_THICK), 36);
         blade.setMaterial(matte(BLADE_EDGE));
 
         Cylinder front = face(redFacingAway ? RUBBER_RED : RUBBER_BLACK, +1);
@@ -67,18 +66,20 @@ public final class PaddleView {
 
         // Handle, hanging below the blade. Scene +Y is DOWN (see Xform), so a positive offset
         // is downward -- and staying OUT of the rotation above is what keeps it there.
-        Cylinder handle = new Cylinder(0.014 * SPM, 0.10 * SPM, 12);
+        Cylinder handle = new Cylinder(Xform.length(BALL_R * 0.7), Xform.length(BALL_R * 5), 12);
         handle.setMaterial(matte(HANDLE));
-        handle.setTranslateY((BLADE_R + 0.045) * SPM);
+        handle.setTranslateY(Xform.length(BLADE_R + BALL_R * 2.25));
 
         group.getChildren().addAll(discs, handle);
     }
 
     /** One rubber sheet, a hair proud of the blade so it does not z-fight with it. */
     private static Cylinder face(Color colour, int side) {
-        Cylinder c = new Cylinder(BLADE_R * SPM * 0.97, BLADE_THICK * SPM * 0.35, 36);
-        c.setMaterial(matte(colour));
-        c.setTranslateY(side * BLADE_THICK * SPM * 0.5);
+        Cylinder c = new Cylinder(Xform.length(BLADE_R * 0.97), Xform.length(BLADE_THICK * 0.35), 36);
+        // Fine rubber grain breaks the plastic highlight, while red/black retain the same
+        // face meaning as before. The maps are created only when each racket is built.
+        c.setMaterial(SurfaceMaterials.rubber(colour));
+        c.setTranslateY(Xform.length(side * BLADE_THICK * 0.5));
         return c;
     }
 
