@@ -182,22 +182,21 @@ For a module file stored in `.idea/`, `$MODULE_DIR$` resolves to the PROJECT dir
 
 Do not "rediscover" these, and do not undo a fix for them.
 
-1. **Aim is strongly asymmetric.** A +8 m/s swipe lands the ball at x = +0.511; an identical −8 m/s
-   swipe reaches only x = −0.103. Right swipes have roughly 4× the authority of left ones.
-2. **The camera, not `PlayerReach`, sets the usable envelope.** `RallyTest` never calls `MouseAim`;
-   it feeds world coordinates straight into `PlayerReach.clamp`. Swept through the real rig, the
-   `RALLY_IN` and `TOP` views can only reach z ≈ 1.49 against `Z_FAR = 2.40`, giving 90–94 ms
-   touch windows — worse than the original reported bug.
-3. **`MouseAim` freezes when the camera eye drops below the hitting plane.** `MouseAim.java:106`
-   returns the caller's fallback for every descending ray, so the blade stops responding across
-   roughly half the viewport until the player orbits back up.
-4. **`Stroke`'s face never decays.** The blade keeps whatever lean its last positioning move gave
-   it, indefinitely — measured, a 0.96 swing in face normal Y from the approach direction alone.
-   Retreating to cover a deep ball locks the face open into a chop.
-5. **The opponent still follows rather than predicts,** and its returns are near-identical
-   (4.6–7.4 m/s, landing z +0.70…+1.00). It is now losable *to*, because the player can miss,
-   but it never attacks. Difficulty has to come from prediction and shot selection — the
-   October milestone.
+1. **The opponent still follows rather than predicts.** It is now losable *to*, because the
+   player can miss, but it never chooses a shot. Prediction is the October milestone.
+2. **`TOP` and `HIGH` cannot address the whole depth envelope** (z ≈ 1.51 and 1.16 against
+   `Z_FAR = 2.40`). Left alone deliberately — they are inspection views, not ones a rally is
+   played from. Both rally views now reach 2.400, measured through the real rig.
+
+### Retracted — do NOT re-report these
+
+**"Aim is asymmetric, right swipes have 4× the authority of left."** Not real. It was an
+artefact of the probe that found it, and the artefact is worth knowing because it is easy to
+reproduce by accident: if a probe calls `ShotAssist.assist` directly with a blade that has been
+`moveTo`'d sideways, the blade centre travels `swipe × dt` while the ball stays put, so a 10 m/s
+swipe puts the contact 8.3 cm off a 7.5 cm blade radius and registers as a rim hit. Place the
+ball at `racket.pos()` *after* the move. Measured correctly, the aim is exactly symmetric and
+monotone: ±2.5 m/s of swipe lands at ±0.098 m, ±5 at ±0.220, ±10 at ±0.398.
 
 ---
 
