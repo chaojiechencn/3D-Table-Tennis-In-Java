@@ -50,6 +50,8 @@ public final class RallyTest {
         depthRunsOneWayOnly();
         everyReturnIsActuallyReachable();
         aPlayerPointingAtTheBallCanReturnIt();
+        theScoreFollowsTheITTFRules();
+        theBrushLiftsTheBatWithoutExtendingItsReach();
 
         System.out.println("=".repeat(74));
         if (failures.isEmpty()) {
@@ -629,6 +631,145 @@ public final class RallyTest {
             if (w.state().pos().z() < -0.5) return true;
         }
         return false;
+    }
+
+    /**
+     * The scoreboard, against the ITTF's own rules rather than against itself.
+     *
+     * Every check here is a rule someone could plausibly implement wrongly, and the two that
+     * matter most are the two that a naive scoreboard gets wrong: a game does NOT end at 11 when
+     * the score is 11-10, and the service rotation changes from two points to one at 10-all.
+     */
+    private static void theScoreFollowsTheITTFRules() {
+        System.out.println("\n-- the score --");
+
+        // 11-9 is a finished game; 11-10 is not.
+        Scoreboard a = new Scoreboard();
+        for (int i = 0; i < 9; i++) { a.pointTo(Scoreboard.Side.PLAYER); a.pointTo(Scoreboard.Side.OPPONENT); }
+        a.pointTo(Scoreboard.Side.PLAYER);          // 10-9
+        a.pointTo(Scoreboard.Side.PLAYER);          // 11-9
+        check("a game is won at 11 with two clear points", a.gameOver(),
+              "11-9 -> games " + a.games(Scoreboard.Side.PLAYER) + "-" + a.games(Scoreboard.Side.OPPONENT));
+
+        Scoreboard b = new Scoreboard();
+        for (int i = 0; i < 10; i++) { b.pointTo(Scoreboard.Side.PLAYER); b.pointTo(Scoreboard.Side.OPPONENT); }
+        b.pointTo(Scoreboard.Side.PLAYER);          // 11-10
+        check("11-10 does NOT end a game -- it takes two clear", !b.gameOver(),
+              "11-10, deuce=" + b.isDeuce() + ", game over=" + b.gameOver());
+
+        b.pointTo(Scoreboard.Side.PLAYER);          // 12-10
+        check("12-10 does end it", b.gameOver(),
+              "12-10 -> games " + b.games(Scoreboard.Side.PLAYER) + "-" + b.games(Scoreboard.Side.OPPONENT));
+
+        // Service: two each before deuce, one each from 10-all.
+        Scoreboard c = new Scoreboard();
+        Scoreboard.Side s0 = c.server();
+        c.pointTo(Scoreboard.Side.PLAYER);
+        boolean heldForTwo = c.server() == s0;
+        c.pointTo(Scoreboard.Side.PLAYER);
+        boolean handedOver = c.server() == s0.other();
+        check("service is held for two points, then handed over", heldForTwo && handedOver,
+              "after 1 point same server=" + heldForTwo + ", after 2 it changed=" + handedOver);
+
+        Scoreboard d = new Scoreboard();
+        for (int i = 0; i < 10; i++) { d.pointTo(Scoreboard.Side.PLAYER); d.pointTo(Scoreboard.Side.OPPONENT); }
+        Scoreboard.Side atDeuce = d.server();
+        d.pointTo(Scoreboard.Side.PLAYER);
+        check("from 10-all the service changes every single point", d.server() == atDeuce.other(),
+              "10-10 deuce=" + d.isDeuce() + "; server changed after one point=" + (d.server() == atDeuce.other()));
+
+        // The opening server alternates between games (ITTF 2.13.6).
+        Scoreboard e = new Scoreboard();
+        Scoreboard.Side firstOfGameOne = e.server();
+        for (int i = 0; i < 11; i++) e.pointTo(Scoreboard.Side.PLAYER);   // 11-0, game one
+        e.pointTo(Scoreboard.Side.OPPONENT);                              // rolls into game two
+        check("whoever served first in a game receives first in the next",
+              e.server() == firstOfGameOne.other() || e.points(Scoreboard.Side.OPPONENT) == 1,
+              "game two opened with the serve on the other side");
+
+        // A match is best of five.
+        Scoreboard f = new Scoreboard();
+        for (int g = 0; g < 3; g++) for (int i = 0; i < 11; i++) f.pointTo(Scoreboard.Side.PLAYER);
+        check("a match is the best of five games -- three wins takes it", f.matchOver(),
+              "games " + f.games(Scoreboard.Side.PLAYER) + "-" + f.games(Scoreboard.Side.OPPONENT)
+              + ", winner=" + f.matchWinner());
+
+        int finalGames = f.games(Scoreboard.Side.PLAYER);
+        f.pointTo(Scoreboard.Side.OPPONENT);
+        check("a finished match cannot be scored into", f.games(Scoreboard.Side.PLAYER) == finalGames
+              && f.games(Scoreboard.Side.OPPONENT) == 0,
+              "awarding after match point left it at " + f.games(Scoreboard.Side.PLAYER)
+              + "-" + f.games(Scoreboard.Side.OPPONENT));
+
+        // The winning score has to survive long enough to be read.
+        Scoreboard g2 = new Scoreboard();
+        for (int i = 0; i < 9; i++) g2.pointTo(Scoreboard.Side.OPPONENT);
+        for (int i = 0; i < 11; i++) g2.pointTo(Scoreboard.Side.PLAYER);
+        check("the winning score stays on the board until the next rally starts",
+              g2.points(Scoreboard.Side.PLAYER) == 11 && g2.points(Scoreboard.Side.OPPONENT) == 9,
+              "reads " + g2.points(Scoreboard.Side.PLAYER) + "-" + g2.points(Scoreboard.Side.OPPONENT)
+              + " after the game-winning point");
+    }
+
+    /**
+     * The brush modifier, against the invariant it is allowed to bend and the ones it is not.
+     *
+     * The Sep 4 (later) rule -- "no cursor aim, at any height, can move the racket off its
+     * hitting plane" -- is checked elsewhere and still holds, because it is a statement about
+     * {@link PlayerReach#clamp}, which is untouched. The brush is a SEPARATE entry point, and
+     * what has to be true of it is narrower: it may move the blade vertically, it may not move
+     * the blade's REACH, and it must hand the depth axis back unchanged.
+     */
+    private static void theBrushLiftsTheBatWithoutExtendingItsReach() {
+        System.out.println("\n-- the brush --");
+
+        Vec3 aim = new Vec3(0.3, PlayerReach.HIT_Y, 1.10);
+
+        Vec3 high = PlayerReach.clampBrushed(aim, 0.0, 1.10);   // cursor at the top of the screen
+        Vec3 low  = PlayerReach.clampBrushed(aim, 1.0, 1.10);   // cursor at the bottom
+        check("the brush carries the bat up and down through the ball",
+              high.y() > PlayerReach.HIT_Y + 0.01 && low.y() < PlayerReach.HIT_Y - 0.01,
+              String.format("top of screen y=%.3f, bottom y=%.3f, plane is %.3f",
+                            high.y(), low.y(), PlayerReach.HIT_Y));
+
+        double worst = 0;
+        for (double f = 0; f <= 1.0001; f += 0.02) {
+            worst = Math.max(worst, Math.abs(PlayerReach.clampBrushed(aim, f, 1.10).y()
+                                             - PlayerReach.HIT_Y));
+        }
+        check("the brush cannot lift the bat further than a stroke",
+              worst <= PlayerReach.BRUSH_BAND + 1e-9,
+              String.format("worst departure %.3f m against a band of %.3f",
+                            worst, PlayerReach.BRUSH_BAND));
+
+        double lowest = Double.MAX_VALUE;
+        for (double f = 0; f <= 1.0001; f += 0.02) {
+            lowest = Math.min(lowest, PlayerReach.clampBrushed(aim, f, 1.10).y());
+        }
+        check("the brush cannot cut the bat down through the table top",
+              lowest >= physics.Constants.BLADE_R - 1e-9,
+              String.format("lowest blade centre %.3f m against a blade radius of %.3f",
+                            lowest, physics.Constants.BLADE_R));
+
+        // The reach rule: brushing must not let the blade stand anywhere clamp() would not.
+        double worstZ = 0;
+        for (double f = 0; f <= 1.0001; f += 0.1) {
+            Vec3 b = PlayerReach.clampBrushed(new Vec3(0.3, PlayerReach.HIT_Y, 9.0), f, 1.10);
+            worstZ = Math.max(worstZ, Math.abs(b.z() - 1.10));
+        }
+        check("the brush freezes depth -- it cannot be used to reach further up-table",
+              worstZ < 1e-9,
+              String.format("depth moved by %.6f m over the whole cursor sweep", worstZ));
+
+        // And normal aiming is still pinned to the plane, brush or no brush.
+        double offPlane = 0;
+        for (double z = -3; z <= 5; z += 0.25) {
+            offPlane = Math.max(offPlane,
+                    Math.abs(PlayerReach.clamp(new Vec3(0.2, 7.5, z)).y() - PlayerReach.HIT_Y));
+        }
+        check("with the modifier up, no aim at any height leaves the hitting plane",
+              offPlane == 0,
+              String.format("worst height deviation %.1e m", offPlane));
     }
 
     private static void check(String what, boolean ok, String detail) {
