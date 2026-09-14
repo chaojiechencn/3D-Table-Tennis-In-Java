@@ -1,0 +1,19 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Run game",
+      "type": "shell",
+      "command": "./gradlew run",
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Physics SelfTest",
+      "type": "shell",
+      "command": "./gradlew selfTest",
+      "group": "test",
+      "problemMatcher": []
+    }
+  ]
+}
