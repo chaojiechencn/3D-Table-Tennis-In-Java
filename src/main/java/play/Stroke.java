@@ -36,7 +36,7 @@ import physics.Vec3;
  *
  * Plain Java on purpose. It is advanced once per PHYSICS step, never per frame, so the same
  * mouse motion produces the same shot on a 30 Hz laptop and a 240 Hz monitor -- and it can be
- * exercised headlessly by {@link RallyTest}. Nothing here knows what a mouse is; it is handed a
+ * exercised headlessly by {@code play.RallyTest}. Nothing here knows what a mouse is; it is handed a
  * point on the hitting plane and a timestep, and it produces a blade pose.
  */
 public final class Stroke {
@@ -109,12 +109,41 @@ public final class Stroke {
     private Vec3 target;
     private Vec3 strokeDir = new Vec3(0, 0, -1);   // square to the incoming ball until it moves
 
+    /**
+     * Seconds since {@link #aimAt} last received a point that actually differed from the one
+     * before it.
+     *
+     * {@code advance} runs once a PHYSICS step -- 480 Hz -- but a mouse only produces a new
+     * point whenever the OS delivers a move event, which is coarser than that: a mouse polling
+     * at 125 Hz reports every ~8 ms, and even a fast poll rate leaves several physics steps
+     * between events during a slow, deliberate drag. Once the blade closes the remaining
+     * distance to the current target -- which it usually does well inside one of those gaps,
+     * since {@link #TRACK_SPEED} only has to beat a human hand -- {@code moved} reads as zero on
+     * every step until the next real event, and without this the face started easing back to
+     * square (FACE_TAU) on each of those in-between steps and got yanked forward again the
+     * instant the next event landed. That sawtooth, repeating at the mouse's own event rate, is
+     * what read as a wobbling racket. This does not change what FACE_TAU does -- smooth a real
+     * change of direction -- it only stops "no new event yet" from being mistaken for "the hand
+     * has stopped".
+     */
+    private double idleTime = 0;
+
+    /** TUNED: comfortably longer than a slow mouse's event interval, short enough that a hand
+     *  that has genuinely stopped still relaxes to square almost at once. */
+    private static final double AIM_STILL_DELAY = 0.05;
+
+    /** Below this, two aim points count as the same point rather than motion. */
+    private static final double AIM_MOVE_EPS = 1e-3;
+
     public Stroke(Vec3 restingAt) {
         this.target = restingAt;
     }
 
     /** Where the cursor currently points on the hitting plane. */
-    public void aimAt(Vec3 point) { target = point; }
+    public void aimAt(Vec3 point) {
+        if (point.minus(target).length() > AIM_MOVE_EPS) idleTime = 0;
+        target = point;
+    }
 
     /**
      * Advance one physics step: carry the blade toward the cursor, held to one human tracking
@@ -129,6 +158,7 @@ public final class Stroke {
      */
     public void advance(Paddle blade, double dt) {
         Vec3 from = blade.pos();
+        idleTime += dt;
 
         // Straight at the cursor's point, depth and all, at one human tracking speed. The
         // speed clamp covers the reach too: a cursor flung from the baseline to over the table
@@ -141,7 +171,7 @@ public final class Stroke {
         Vec3 moved = pos.minus(from);
         if (moved.length() > STROKE_EPS * dt) {
             strokeDir = moved.normalized();
-        } else {
+        } else if (idleTime > AIM_STILL_DELAY) {
             /*
              * A blade that has stopped moving relaxes back to square.
              *
@@ -166,6 +196,9 @@ public final class Stroke {
             strokeDir = Vec3.lerp(strokeDir, new Vec3(0, 0, -1),
                                   1 - Math.exp(-dt / FACE_TAU)).normalized();
         }
+        // else: the blade reached this step's target early, but the hand moved recently enough
+        // that this is still the middle of a stroke, not the end of one -- hold the lean rather
+        // than let it sag before the next real aim update arrives.
 
         blade.moveTo(pos, faceToward(blade.normal(), dt), dt);
     }

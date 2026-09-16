@@ -136,19 +136,30 @@ public final class ShotAssist {
          * The clean core of the blade, as a fraction of its radius: inside this the contact
          * counts as fully struck and earns the whole assist.
          *
-         * 0.50 is measured, not chosen. A player pointing the cursor straight at the ball --
+         * 0.50 was measured, not chosen: a player pointing the cursor straight at the ball --
          * RallyTest's `aPlayerPointingAtTheBallCanReturnIt`, which is what competent play looks
          * like here -- lands the ball at 0.34 to 0.52 of the blade radius from centre, never at
          * zero. That offset is inherent: the ball is off the hitting plane in height, so the
          * cursor ray crosses the plane a little short of it (about 0.18-0.33 m, measured). A
          * core any tighter than this grades ordinary competent play as a mishit, which is
-         * exactly what the first calibration did -- it failed 8 of 9 feeds.
+         * exactly what the first calibration did -- it failed 8 of 9 feeds. That measurement is
+         * still the FLOOR this may not go under.
+         *
+         * TUNED up to 0.58, above that floor, for an average player rather than a bot that
+         * always points exactly at the ball: it turns a contact that is close but not clean --
+         * the common case for someone still learning the cursor-to-blade mapping -- into a full
+         * hit instead of a graded one. Skill still shows up past this radius and in how well the
+         * player's swing lines up the shot itself; this only widens the margin for "aimed at it
+         * and basically got there".
          */
-        public double qualityCore = 0.50;
+        public double qualityCore = 0.58;
 
         /** How far past the core the quality falls from 1 to 0. Core + this is the rim, beyond
-         *  which a contact earns nothing but the floor. */
-        public double qualityFalloff = 0.42;
+         *  which a contact earns nothing but the floor. TUNED wider (was 0.42): a bigger core
+         *  is only half the ease an average player needs -- the other half is that the drop from
+         *  "clean" to "mishit" should be a slope they can feel coming, not a cliff a couple of
+         *  centimetres past the core. */
+        public double qualityFalloff = 0.50;
 
         /** Incoming speed (m/s) at which the core starts shrinking, and the span over which it
          *  shrinks the whole way. A fast ball has to be met more precisely than a slow one. */
@@ -156,8 +167,11 @@ public final class ShotAssist {
         public double qualityPaceSpan = 12.0;
 
         /** How much of the core the fastest ball takes away, and the floor it cannot shrink
-         *  below -- past which even a perfect player could not connect cleanly. */
-        public double qualityPaceLoss = 0.22;
+         *  below -- past which even a perfect player could not connect cleanly. TUNED down from
+         *  0.22: a fast incoming ball is already the hardest thing to time, so shrinking the
+         *  forgiving zone hardest exactly when the player most needs it was undoing a chunk of
+         *  the ease the wider core above just bought. */
+        public double qualityPaceLoss = 0.15;
         public double qualityCoreMin = 0.26;
 
         /**
@@ -168,8 +182,12 @@ public final class ShotAssist {
          * every single time and the game would read as broken rather than hard. At 0.25 a badly
          * struck ball is usually lost and occasionally survives, which is what a mishit does in
          * the real game.
+         *
+         * TUNED up to 0.35 for an average player: a shank is still well below a clean hit's
+         * assist and stays the wrong thing to do on purpose, but it stops reading as an almost
+         * automatic loss the way 0.25 did.
          */
-        public double assistFloor = 0.25;
+        public double assistFloor = 0.35;
 
         /**
          * The quality below which the rescue search does not run at all.
