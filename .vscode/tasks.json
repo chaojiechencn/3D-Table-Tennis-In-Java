@@ -1,17 +1,43 @@
 {
   "version": "2.0.0",
+  "options": { "cwd": "${workspaceFolder}" },
   "tasks": [
     {
       "label": "Run game",
       "type": "shell",
-      "command": "./gradlew run",
+      "command": "bash ./gradlew run",
+      "windows": { "command": ".\\gradlew.bat run" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Build and validate",
+      "type": "shell",
+      "command": "bash ./gradlew build",
+      "windows": { "command": ".\\gradlew.bat build" },
       "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "All checks",
+      "type": "shell",
+      "command": "bash ./gradlew check",
+      "windows": { "command": ".\\gradlew.bat check" },
+      "group": { "kind": "test", "isDefault": true },
       "problemMatcher": []
     },
     {
       "label": "Physics SelfTest",
       "type": "shell",
-      "command": "./gradlew selfTest",
+      "command": "bash ./gradlew selfTest",
+      "windows": { "command": ".\\gradlew.bat selfTest" },
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Rally Test",
+      "type": "shell",
+      "command": "bash ./gradlew rallyTest",
+      "windows": { "command": ".\\gradlew.bat rallyTest" },
       "group": "test",
       "problemMatcher": []
     }

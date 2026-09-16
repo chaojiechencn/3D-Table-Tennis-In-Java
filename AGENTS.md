@@ -2,9 +2,11 @@
 
 Operating guide for coding agents (Codex, Claude Code) working in this repository.
 
-`CLAUDE.md` is the plan, the methodology and the full rationale — ~56 KB, and the authority when the two
-disagree. **This file is the short operational contract**: what you must not break, how to build,
-and how to prove you did not break it. Read `CLAUDE.md` when you need the *why* behind a rule.
+[docs/DESIGN.md](docs/DESIGN.md) holds the plan, methodology and full rationale; root
+[CLAUDE.md](CLAUDE.md) is its entry point. **This file is the short operational contract**:
+what you must not break and how to prove you did not break it. See
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for current builds and source layout. Read the design
+notes when you need the *why* behind a rule.
 
 ---
 
@@ -18,30 +20,20 @@ on top of it.
 
 ## Build and run
 
-There is **no build system** and no dependencies. Stock `javac` only. Do not introduce Maven or
-Gradle — this project is run from IntelliJ.
-
-The JDK must be **Liberica "Full" JDK 21**, which ships JavaFX as system modules. With it there is
-no `--module-path` and no `--add-modules`. A plain JDK has no JavaFX and fails at launch.
-
-```bash
-# Git Bash — the path that actually exists on this machine
-JDK=~/.jdks/jdk-21.0.12.1-full/bin
-"$JDK/javac" -d out/production/3D-Table-Tennis-In-Java $(find src -name '*.java')
-"$JDK/java" -cp out/production/3D-Table-Tennis-In-Java Table_Tennis_In_3D
-```
+**Java 21 + the existing Gradle wrapper** is the standard build. It resolves JavaFX dependencies.
+The project also remains compilable with stock `javac` when using **Liberica Full JDK 21**, which
+bundles JavaFX. Do not introduce another build system or application dependency for a cleanup.
 
 ```powershell
-# PowerShell
-$JDK = "$env:USERPROFILE\.jdks\jdk-21.0.12.1-full\bin"
-& "$JDK\javac" -d out\production\3D-Table-Tennis-In-Java (Get-ChildItem -Recurse src -Filter *.java).FullName
+.\gradlew.bat classes
+.\gradlew.bat run
 ```
 
-> **Note:** there is a second, non-Full JDK beside it at `~/.jdks/liberica-21.0.12.1` with **zero**
-> JavaFX modules. Nothing points at it, but repointing the project SDK at it by hand is exactly what
-> produces the "no JavaFX, fails at launch" symptom.
+On macOS/Linux/Git Bash, use `bash ./gradlew`. Full manual compilation commands and IDE setup live in
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). Manual compilation includes both `src/main/java` and
+`src/test/java`, and writes to `out/production/3D-Table-Tennis-In-Java`.
 
-Never commit build output. `out/` is git-ignored; do not add new build directories to the repo.
+Gradle uses `build/`; manual builds use `out/`. Both are ignored. Never commit generated output.
 
 ---
 
@@ -49,14 +41,19 @@ Never commit build output. `out/` is git-ignored; do not add new build directori
 
 Two headless suites. Both print PASS/FAIL per check and exit 0/1. **They must stay at 100%.**
 
-```bash
-"$JDK/java" -cp out/production/3D-Table-Tennis-In-Java physics.SelfTest   # 101 checks
-"$JDK/java" -cp out/production/3D-Table-Tennis-In-Java play.RallyTest     #  29 checks
+```powershell
+.\gradlew.bat check       # both suites
+.\gradlew.bat selfTest    # physics.SelfTest: 101 checks
+.\gradlew.bat rallyTest   # play.RallyTest: 29 checks
 ```
 
-- Touched anything in `src/physics/` → run `physics.SelfTest`.
-- Touched anything in `src/play/` → run `play.RallyTest`.
+The suites remain plain Java `main` classes under `src/test/java`. Gradle's `test`, `check` and
+`build` tasks invoke both dedicated suites.
+
+- Touched physics code or its tests → run `physics.SelfTest`.
+- Touched gameplay code or its tests → run `play.RallyTest`.
 - Touched rendering only → still compile, and run both if you changed anything shared.
+- Changed source layout or build configuration → compile and run both suites.
 
 A failing check is a broken deliverable, not a flaky test. **Never widen a threshold to make a
 regression fit.** Re-deriving a threshold because the model got more accurate is legitimate — say
@@ -71,12 +68,16 @@ actually measured.
 
 ## Architecture and the rules that keep it from rotting
 
-```
+```text
 src/
-  Table_Tennis_In_3D.java   entry point; fixed-timestep loop, input, wiring, capture mode
-  physics/                  plain Java. NO javafx imports, ever.
-  play/                     game logic. Plain Java, so it tests headlessly.
-  render/                   JavaFX views. Reads physics state; never writes it.
+  main/java/
+    Table_Tennis_In_3D.java  entry point; fixed-timestep loop, input, wiring, capture mode
+    physics/                plain Java. NO javafx imports, ever.
+    play/                   game logic. Plain Java, so it tests headlessly.
+    render/                 JavaFX views. Reads physics state; never writes it.
+  test/java/
+    physics/SelfTest.java    physics validation
+    play/RallyTest.java      game validation
 ```
 
 **Dependency direction is one-way:** `play` → `physics`; `physics` → nothing. A test needing both
@@ -84,7 +85,7 @@ belongs in `play`.
 
 Hard invariants — breaking any of these is a defect even if it compiles and the suites pass:
 
-1. **`src/physics/` must never import `javafx.*`.** It stays headless and frame-rate independent.
+1. **`src/main/java/physics/` must never import `javafx.*`.** It stays headless and frame-rate independent.
 2. **`render.Xform` is the ONLY place physics space becomes scene space**, in both directions.
    Nothing else may multiply or divide by `SPM`.
 3. **`render/` reads physics state, never writes it.**
@@ -139,11 +140,11 @@ ball out of the way before the descent can be detected — so the first crossing
 SECOND descent, out past the end line. **Always ask the landing question of a contact-free flight
 (`Aim.landingPoint`).** This bug has been found three separate times.
 
-**Editing `.idea/` with IntelliJ open.** A running IDE rewrites those files underneath you. Edit
-them with IntelliJ closed and check `git status` afterwards. `modules.xml`, the `.iml`, `misc.xml`
-and `runConfigurations/` are all committed and load-bearing; `workspace.xml` is local and ignored.
-For a module file stored in `.idea/`, `$MODULE_DIR$` resolves to the PROJECT directory — do not
-"correct" it to `$MODULE_DIR$/..` or every Run button greys out.
+**IDE configuration is generated.** Import the existing Gradle project so `src/main/java` and
+`src/test/java` are marked correctly. `.idea/` and `.iml` files are local and ignored; a running
+IntelliJ rewrites them. Change source roots in the Gradle project rather than moving or hand-editing
+generated module files. Keep the `Table_Tennis_In_3D`, `physics.SelfTest` and `play.RallyTest`
+entry points stable.
 
 ---
 

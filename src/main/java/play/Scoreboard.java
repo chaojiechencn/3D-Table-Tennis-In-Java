@@ -6,7 +6,7 @@ package play;
  * This is plain Java with no view and no `World`, for the same reason the rest of `play/` is:
  * scoring is a rule system, rule systems are exactly what a headless test can pin down, and a
  * scoreboard that can only be checked by playing a match is a scoreboard that does not get
- * checked. Every number below is a rule, and every rule has a check in {@link RallyTest}.
+ * checked. Every number below is a rule, and every rule has a check in {@code play.RallyTest}.
  *
  * The rules implemented, from the ITTF Handbook (Laws 2.11 "A Game" and 2.13 "The Order of
  * Serving, Receiving and Ends"):

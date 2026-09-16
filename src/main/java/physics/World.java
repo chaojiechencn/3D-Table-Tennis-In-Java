@@ -15,7 +15,7 @@ import static physics.Constants.*;
  * The simulated world: the ball, the three things it can hit, and the log of what happened.
  *
  * Deliberately free of JavaFX. Nothing in this package imports the renderer, which is what
- * lets {@link SelfTest} run the exact same physics headlessly and check it against published
+ * lets {@code physics.SelfTest} run the exact same physics headlessly and check it against published
  * numbers. If the physics could only be observed by looking at it, "checking my simulation
  * against real numbers" would not be possible.
  *

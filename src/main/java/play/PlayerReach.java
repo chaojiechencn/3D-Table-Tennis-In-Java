@@ -12,7 +12,7 @@ import static physics.Constants.*;
  * This is the CONTROL ENVELOPE, kept apart from both the cursor geometry that feeds it
  * ({@link render.MouseAim}, which is pure ray work and knows no rules) and the blade that
  * obeys it ({@link Stroke}, which is handed a point and goes there). Splitting it out is what
- * lets the envelope be graded headlessly by {@link RallyTest} -- the two neighbours are a
+ * lets the envelope be graded headlessly by {@code play.RallyTest} -- the two neighbours are a
  * JavaFX class and a class that must never see a ball, so neither could carry these numbers.
  *
  * <h2>The control model</h2>
@@ -49,7 +49,7 @@ import static physics.Constants.*;
  * </ol>
  *
  * Both numbers, and every constant below, come from flying the actual feeds and measuring;
- * the checks in {@link RallyTest} re-measure them on every run.
+ * the checks in {@code play.RallyTest} re-measure them on every run.
  */
 public final class PlayerReach {
 

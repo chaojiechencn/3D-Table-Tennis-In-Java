@@ -1,206 +1,57 @@
 # 3D Table Tennis
 
-A 3D table tennis game in Java. You move the paddle with your mouse, the ball carries real spin, and
-an AI opponent plays you for the point. Inspired by the mobile game *Ping Pong Fury*.
+A 3D table tennis game in Java 21 and JavaFX. Move the paddle with your mouse, shape shots with
+your swing, and play an AI opponent over a simulation with real spin, drag and spin-coupled bounces.
+Inspired by *Ping Pong Fury*.
 
-> **In development.** The physics simulation runs and can be watched; the game around it is being built.
+**In development:** rallies, assisted shots and match scoring work. Real serving, a predicting
+opponent and menus are next.
 
----
+## Run
 
-## Gameplay
-
-The paddle follows your mouse, and only your mouse. It slides around on one flat plane at bat
-height: move the mouse **across** and the paddle goes across, move it **up the screen** and the
-paddle moves up the table toward the net, **down** and it comes back behind the baseline for a
-deep ball. That is the whole of it — the mouse cannot raise or lower the bat, only move it around
-the table, which is what keeps "reach in" and "step back" from fighting each other.
-
-How you move it through the ball aims the shot: **swipe it sideways** to send the ball that way
-(swipe right, ball goes right), **drive it up-table through the ball** for pace, depth and
-topspin — the face closes over the ball as you go forward — and **pull it back** through the ball
-to open the face and cut backspin under it. A still paddle just blocks it back soft. **Hold the
-right mouse button** and the up/down axis stops moving the paddle up the table and starts raising
-and lowering the bat instead, so you can brush up or down the back of the ball; depth freezes while
-you hold it. The game then
-keeps that shot playable — the ball is aimed at a real spot on the other side, and the shot is
-checked all the way to the bounce before it is played, so it clears the net and lands in rather
-than flying off the end. It is assisted, arcade-style, more *Ping Pong Fury* than a physics sim
-(though a full physics simulation runs underneath — see below).
-
-What that buys, measured over 75 different ways of swinging the paddle at the same ball: the raw
-physics puts 11 of them on the table and throws the ball up to 2.4 m wide at 24 m/s; through the
-assist all 75 land, none more than 0.38 m off centre, none faster than 12.4 m/s. Hitting harder
-always does a little more and never a lot more, so a long rally cannot spiral into a rocket.
-
-The assist is not a guarantee, though — **you can still miss.** Every contact is graded on where it
-struck the blade, and the further out toward the rim you catch the ball the more of the raw physics
-you get and the less of the aimed shot. A clean, centred contact goes where you aimed it; a shot off
-the edge mostly does what real physics says, which is usually to die. Against a 5 m/s ball you have
-about 0.6 of the blade's radius to play with, and about 0.3 of it against an 18 m/s one.
-
-You can only return the ball **after it has bounced on your side** (real table-tennis rule). A ball
-that bounces twice, comes back on your own half, or sails past the end line ends the point, and the
-next serve is fed in. Clipping the net is *not* an automatic loss — as in the real game, a ball that
-touches the cord and still lands in is a good shot.
-
-The match is scored to the real rules: **games to 11, win by two**, with no ceiling at deuce, so
-13–11 and 24–22 both finish a game. Service changes every two points, and every single point once
-the score reaches 10–all. A match is the best of five.
-
-The camera is your main tool for reading the ball: it cuts between a close view and a wide one
-depending on who last hit — close after your shot, wide after the opponent's.
-
-Under the arcade assist there is a full physics simulation: in flight the ball is simulated rather
-than scripted — spin curves it in the air, and it changes the bounce when the ball lands (heavy
-topspin kicks forward, backspin sits up). The assist shapes the ball only at the moment a racket
-hits it; between hits it flies for real.
-
-## Features
-
-**Playable now**
-
-- Mouse-controlled paddle that slides anywhere from over the table to well behind the baseline,
-  wherever YOU point it
-- Assisted arcade shots — drive for pace, swipe to aim; the game keeps the ball in play
-- Rallies against the AI, with the one-bounce rule and points that end on a long ball or a double bounce
-- A match scored to the real rules — games to 11, win by two, service changing on the right points
-- Shots you can genuinely miss: catch the ball off the rim of the bat and real physics takes over
-- A two-view rally-cam that cuts on who last hit, plus five preset views, slow motion, single-step
-- Full ball-flight simulation between hits: spin, air drag, Magnus curve, spin-coupled bounces
-- A menu of shots to feed in, a grey no-spin "ghost" trail, and a `V` debug overlay that shows
-  exactly how a shot was chosen
-
-**In progress**
-
-- Serving off your own blade (right now a ball is fed in each rally)
-- An AI opponent that reads where the ball is going rather than tracking it
-- A menu, so the game is something you start rather than something you launch
-
-**Planned**
-
-- Multiple paddles that play differently — one built for spin, one for power
-- Earn currency by beating the AI and spend it in a shop
-
-## Controls
-
-Playing the ball:
-
-| Input | Action |
-| --- | --- |
-| Mouse left / right | Moves the paddle across the table |
-| Mouse up / down | Moves the paddle up the table toward the net, or back behind the baseline |
-| Hold right mouse | Switches up / down to raising and lowering the bat, for brushing up or down the ball. Depth is frozen while held |
-| Swipe the paddle sideways | Sends the ball that way — swipe right, ball goes right |
-| Drive the paddle up-table through the ball | Pace, depth and topspin |
-| Pull the paddle back through the ball | Opens the face and cuts backspin |
-| Still paddle | Soft block back |
-
-There is no button to press — the shot is entirely in the mouse movement. The paddle stays at one
-height; the mouse moves it around the table, not up and down in the air.
-
-Other keys (carried over from the physics demo):
-
-| Key | Action |
-| --- | --- |
-| `1`–`9`, `0` | Pick the feed shot |
-| `N` / `P`, `←` `→` | Next / previous feed |
-| `R` | Replay the current feed |
-| `Space` | Pause |
-| `.` | Single physics step |
-| `[` `]` | Slow down / speed up (starts at 0.45×) |
-| `F` | Rally-cam on / off |
-| `C` | Cycle the preset camera views (turns the rally-cam off) |
-| `V` | Shot-assist debug overlay (paddle and ball velocity, raw / intended / final shot, target, predicted landing) |
-| `D` | Control debug overlay (cursor, paddle and target position, legal paddle area, how far and how long the paddle has to travel, where the ball is and when it arrives, and whether you could have got there) |
-| `G` | Toggle the no-spin ghost trail |
-| `T` | Toggle the flight trail |
-| `B` | Draw the ball at 2× (physics still uses 40 mm) |
-| `A` | Toggle auto-replay |
-| `H` | Toggle the on-screen legend |
-| `Esc` | Quit |
-| Left-drag / scroll | Orbit / zoom the camera (turns the follow-cam off) |
-
-## Requirements
-
-**Liberica "Full" JDK 21** — <https://bell-sw.com/pages/downloads/>. The Full build bundles JavaFX 21 as
-system modules, so there is nothing else to install and no module path to configure. The plain JDK 21
-does *not* include JavaFX and will fail at launch.
-
-There are no other dependencies and no build script — this compiles with stock `javac`.
-
-## Running
-
-> **I have only ever built and run this from IntelliJ.** That is the only setup I have actually
-> tested. The terminal commands below are provided for reference and are not the path I use, so if
-> something there does not work for you, try it from the IDE first.
-
-In IntelliJ:
-
-1. Open the project folder and select **File > Project Structure** (`Ctrl+Alt+Shift+S`).
-2. Under **Project > SDK**, choose **Add SDK > JDK** and select the installed
-   **Liberica Full JDK 21** folder (the folder containing `bin`, not `bin` itself).
-   Select that SDK for the project and keep the language level at **21**.
-3. Under **Modules > Dependencies**, set **Module SDK** to **Project SDK**. Apply the changes.
-4. Select the committed **3D-Table-Tennis-In-Java** run configuration and click **Run**
-   (`Shift+F10`). It launches `Table_Tennis_In_3D` using the project SDK.
-
-**Physics SelfTest** runs the headless validation suite.
-
-If you see `package javafx... does not exist`, the compiler is using a JDK without JavaFX.
-The regular Liberica build is not the Full build. Changing only the JRE in a run configuration
-does not fix the compiler's project SDK. With Full JDK 21, no extra JavaFX libraries or VM
-options are needed.
-
-From a terminal (untested by me):
+Install a **JDK 21**. The included Gradle wrapper handles the build and JavaFX dependencies.
 
 ```powershell
-# PowerShell
-$JDK = "$env:USERPROFILE\jdk\jdk-21.0.7-full\bin"
-& "$JDK\javac" -d out\production\3D-Table-Tennis-In-Java (Get-ChildItem -Recurse src -Filter *.java).FullName
-& "$JDK\java" -cp out\production\3D-Table-Tennis-In-Java Table_Tennis_In_3D
+# Windows PowerShell
+.\gradlew.bat run
 ```
 
 ```bash
-# bash
-JDK=~/jdk/jdk-21.0.7-full/bin
-"$JDK/javac" -d out/production/3D-Table-Tennis-In-Java $(find src -name '*.java')
-"$JDK/java" -cp out/production/3D-Table-Tennis-In-Java Table_Tennis_In_3D
+# macOS / Linux / Git Bash
+bash ./gradlew run
 ```
 
-Adjust the JDK path to wherever you installed it.
+For IntelliJ, VS Code, manual compilation with Liberica Full JDK, and troubleshooting, see
+[Development](docs/DEVELOPMENT.md).
 
-## Is the physics actually right?
+## Play
 
-`physics.SelfTest` is a headless suite of 101 checks that compares the simulation against numbers that
-did not come from this program — closed-form solutions of the same equations, published measurements,
-and the ITTF Laws. It checks terminal velocity against the analytic result, free fall against the exact
-`tanh` solution, the ITTF drop test (30.5 cm in, 24–26 cm out), that RK4 really is fourth-order, that
-spin curves the ball the correct way, that no bounce ever adds energy, and that nothing tunnels through
-the table at smash speed.
+- Move the mouse left/right to move across the table, and up/down to reach forward or retreat.
+- Swipe sideways to aim; drive forward for pace and topspin; pull back for a softer cut.
+- Hold the right mouse button to brush up/down while depth stays fixed.
+- Catch the ball near the paddle centre for an assisted return. Rim contacts can miss.
+- Use `Space` to pause, `R` to replay a feed and `Esc` to quit.
 
-```bash
-"$JDK/java" -cp out/production/3D-Table-Tennis-In-Java physics.SelfTest
+See [Gameplay and controls](docs/GAMEPLAY.md) for every control, current features and match rules.
+
+## Validate
+
+```powershell
+.\gradlew.bat check
 ```
 
-It prints PASS/FAIL per check and exits non-zero if anything fails. I run it from the
-**Physics SelfTest** configuration in IntelliJ.
+This runs both headless suites: `physics.SelfTest` (101 checks) and `play.RallyTest` (29 checks).
+See [Validation](docs/DEVELOPMENT.md#validation) for individual suites and what they cover.
 
-`play.RallyTest` is a second headless suite, 29 checks, covering the game rather than the physics:
-that the AI reaches every shot fed at it, puts every one back over the net, lands every one on the
-table, never returns the ball faster than the impulse could have sent it, never launches it out of
-the hall, and that flinging the mouse cannot move the paddle faster than a person carries a bat.
+## Find your way around
 
-It also grades the **controls**, which is harder to eyeball than it sounds: that no mouse position
-can change the paddle's height, that moving the mouse up the screen never sends the paddle
-backwards, that the paddle is allowed to go everywhere a returnable ball actually goes, that it has
-a human amount of time to get there, that it is fast enough to make the trip — and, playing nine
-full points end to end, that a player who simply points at the ball does return it over the net.
+| Path | Contents |
+| --- | --- |
+| `src/main/java/` | Game entry point and the `physics`, `play`, `render` packages |
+| `src/test/java/` | Headless validation suites, in their corresponding packages |
+| `docs/` | Gameplay, development instructions and design rationale |
+| `tools/` | Optional development utilities |
+| `gradle/`, `gradlew`, `gradlew.bat` | Gradle wrapper |
+| `build/`, `out/` | Generated output; ignored by Git |
 
-It grades the **scoring** too, since a scoreboard that can only be checked by playing a whole match
-is one that does not get checked: that 11–9 wins a game but 11–10 does not, that service changes on
-the right points either side of 10–all, and that the server is derived from the score rather than
-tracked by a flag that can drift out of step with it.
-
-## Built with
-
-Java 21 and JavaFX — the 3D scene graph for rendering, `AnimationTimer` for the game loop. No libraries.
+[Documentation index](docs/README.md) · [Agent operating guide](AGENTS.md)
