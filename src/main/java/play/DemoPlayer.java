@@ -8,7 +8,6 @@ import java.util.List;
 
 import static physics.Constants.DT;
 import static physics.Constants.TABLE_LENGTH;
-import static physics.Constants.TABLE_WIDTH;
 
 /**
  * A stand-in HAND: plays the game the way a competent person would, by moving the cursor.
@@ -35,17 +34,12 @@ public final class DemoPlayer {
     private static final int STRIDE = 1;
 
     /**
-     * How far past the meeting point to aim while striking, metres.
-     *
-     * Zero, deliberately: {@link Stroke} stops the blade when it arrives at the cursor, so
-     * aiming exactly ON the ball gives a bat with no velocity at contact, and aiming PAST it
-     * (the obvious fix) lets the bat overshoot in front of the ball and hit it backwards. The
-     * swing buys its closing speed from {@link #SETBACK} instead -- see docs/DESIGN.md.
+     * How far behind the meeting point to wait while setting up, metres -- room to come forward
+     * THROUGH the ball rather than reaching back for it, and the source of the swing's closing
+     * speed at contact. The stroke aims exactly AT the meeting point, never past it: {@link
+     * Stroke} stops the blade when it arrives at the cursor, so aiming past it would let the bat
+     * overshoot in front of the ball and hit it backwards -- see docs/DESIGN.md.
      */
-    public static final double SWING_THROUGH = 0.0;
-
-    /** How far behind the meeting point to wait while setting up, metres -- room to come
-     *  forward THROUGH the ball rather than reaching back for it. */
     public static final double SETBACK = 0.20;
 
     /**

@@ -272,82 +272,21 @@ public final class ShotAssist {
         Vec3 reflect = physical.vel();
         Vec3 swing = racket.vel();
 
-        // ---- 1. intent -------------------------------------------------------------------
-        // Split the racket's motion into the three things it can mean. For the player, x and y
-        // are purely the cursor (the depth reach is all in z), so they are deliberate input.
-        double drive   = swing.z() * toOpp;      // + toward the opponent, - pulling away
-        double swipeX  = swing.x();              // + to the player's right
-        double lift    = swing.y();              // + upward
-
-        // The BRUSH -- how much the blade rolls over the ball rather than pushing through it --
-        // authors spin, from two places: `lift`, the true vertical one (live only while the
-        // brush modifier is held, since the blade is otherwise pinned to PlayerReach.HIT_Y), and
-        // `drive`, the brush the player always has (forward rolls the face over for topspin,
-        // pulling back opens it for backspin). See docs/DESIGN.md for the gain derivation.
-        double brush = lift + drive * t.driveBrush;
-
-        // Strength comes from the FORWARD drive, not the blade's total speed -- a still blade
-        // dinks, a blade driven through the ball hits. The curve below 1 gives a quick early
-        // response then diminishing returns, so swinging harder always does a little more and
-        // never a lot more.
-        double effort = Math.max(0, drive) + t.lateralEffort * Math.hypot(swipeX, lift);
-        double swingAmount = clamp(Math.pow(
-                clamp(effort / t.maxSwingSpeed, 0, 1), t.swingCurve), 0, 1) * t.swingInfluence;
-
-        // Where on the blade it was struck, in the face's own plane, as -1..1 of the radius.
-        Vec3 off = contact.minus(racket.pos());
-        Vec3 inPlane = off.minus(racket.normal().scale(off.dot(racket.normal())));
-        double offX = clamp(inPlane.x() / BLADE_R, -1, 1);
-        double offY = clamp(inPlane.y() / BLADE_R, -1, 1);
-
-        // Which way the racket face is pointing, sideways, as a fraction.
-        double faceX = clamp(racket.normal().x() * -toOpp, -1, 1);
-
-        // ---- contact quality: how cleanly this ball was struck, 1 in the middle of the blade
-        // and 0 at the rim, shrinking as the ball arrives faster. Measured IN THE FACE'S OWN
-        // PLANE (offX, offY above), so being early/late counts the same as being wide.
-        double offR = Math.min(1, Math.hypot(offX, offY));
-        double paceFrac = clamp((incoming.speed() - t.qualityPaceFrom) / t.qualityPaceSpan, 0, 1);
-        double core = Math.max(t.qualityCoreMin, t.qualityCore - t.qualityPaceLoss * paceFrac);
-        double rim  = core + t.qualityFalloff;
-        double quality = clamp((rim - offR) / (rim - core), 0, 1);
-
-        // The share of the authored shot this contact earned; see Tuning.assistFloor. Only the
-        // PLAYER is graded -- Follower tracks the ball rather than reading where it is going, so
-        // grading it punishes a placeholder's limitation rather than a real skill. See
-        // docs/DESIGN.md.
+        // ---- 1-4. intent, contact quality, target, strength, spin ------------------------
+        // Each of these is a pure read of the contact -- no branching, no state -- so they are
+        // split out for their own sake; see each helper for what it means and why.
+        Intent in = readIntent(contact, racket, toOpp);
+        double quality = quality(incoming, in.offX(), in.offY());
         double assist = playerHit ? t.assistFloor + (1 - t.assistFloor) * quality : 1.0;
 
-        // ---- 2. target -------------------------------------------------------------------
-        // Built inside the box by construction, so the aim can never be absurd.
-        double aim = swipeX * t.aimInfluence
-                   + faceX * t.faceInfluence
-                   + offX * t.contactPointInfluence;
-        double wantX = clamp(aim, -1, 1) * targetHalfWidth();
+        Target tgt = readTarget(in, toOpp, halfLen);
+        Vec3 wantTarget = tgt.want(), safeTarget = tgt.safe();
+        double wantX = wantTarget.x();
 
-        double depthFrac = t.targetDepthMinFrac
-                + (t.targetDepthMaxFrac - t.targetDepthMinFrac)
-                  * clamp(0.35 + drive * t.depthInfluence - brush * t.arcInfluence
-                               - offY * t.contactPointInfluence * 0.5, 0, 1);
-        double wantZ = toOpp * clamp(depthFrac, t.targetDepthMinFrac, t.targetDepthMaxFrac) * halfLen;
-
-        Vec3 wantTarget = new Vec3(wantX, 0, wantZ);
-        Vec3 safeTarget = new Vec3(0, 0, toOpp * t.safeDepthFrac * halfLen);
-
-        // ---- 3. strength -----------------------------------------------------------------
-        // Swing maps onto a fixed band. The incoming ball nudges it slightly, but is never
-        // ADDED to it -- that is what stops a rally from compounding into a rocket.
-        double wantSpeed = t.minShotSpeed + (t.maxShotSpeed - t.minShotSpeed) * swingAmount;
-        wantSpeed += clamp((incoming.speed() - 9.0) * 0.05, -0.6, 0.6);
-        wantSpeed = clamp(wantSpeed, t.minShotSpeed, t.maxShotSpeed);
-
-        // ---- 4. spin ---------------------------------------------------------------------
-        double topRevs  = clamp((t.baseTopspin + brush * t.topspinPerLift) * t.spinInfluence,
-                                -t.maxSpin, t.maxSpin);
-        double sideRevs = clamp(swipeX * t.sidespinPerSwipe * t.spinInfluence,
-                                -t.maxSpin, t.maxSpin);
+        double wantSpeed = readSpeed(in.swingAmount(), incoming);
+        Spin startSpin = readSpin(in.brush(), in.swipeX());
+        double topRevs = startSpin.top(), sideRevs = startSpin.side();
         // Both may be reset below: the safe fallback flies with plain topspin.
-
 
         // ---- 5-7. solve, constrain, validate, correct ------------------------------------
         //
@@ -406,7 +345,7 @@ public final class ShotAssist {
         // every sensible depth down the middle, at speeds from a soft lift up to full pace.
         // Some contacts have no fast answer at all and the honest shot is a slow one.
         boolean mayRescue = !playerHit
-                || (quality >= t.rescueQualityFloor && swingAmount <= t.rescueEffortCeiling);
+                || (quality >= t.rescueQualityFloor && in.swingAmount() <= t.rescueEffortCeiling);
         if (bestCost > 0 && mayRescue) {
             // The player's own spin first, plain topspin only as a last resort: a chop that
             // has to be rescued should still come back as a chop if any speed works with it.
@@ -452,6 +391,97 @@ public final class ShotAssist {
                           finalVel.length(), finalSpin, passes, bestCost == 0);
 
         return new BallState(physical.pos(), finalVel, finalSpin, physical.orient());
+    }
+
+    // ================================================================== intent
+
+    /** The racket's motion and contact point, split into the things they can mean. */
+    private record Intent(double drive, double swipeX, double lift, double brush,
+                          double swingAmount, double offX, double offY, double faceX) {}
+
+    private Intent readIntent(Vec3 contact, Paddle racket, double toOpp) {
+        Vec3 swing = racket.vel();
+
+        // For the player, x and y are purely the cursor (depth reach is all in z), so they are
+        // deliberate input: drive toward the opponent, swipeX to the player's right, lift up.
+        double drive  = swing.z() * toOpp;
+        double swipeX = swing.x();
+        double lift   = swing.y();
+
+        // The BRUSH -- how much the blade rolls over the ball rather than pushing through it --
+        // authors spin, from two places: `lift`, the true vertical one (live only while the
+        // brush modifier is held, since the blade is otherwise pinned to PlayerReach.HIT_Y), and
+        // `drive`, the brush the player always has. See docs/DESIGN.md for the gain derivation.
+        double brush = lift + drive * t.driveBrush;
+
+        // Strength comes from the FORWARD drive, not the blade's total speed -- a still blade
+        // dinks, a blade driven through the ball hits, with quick early response then
+        // diminishing returns so swinging harder always does a little more and never a lot more.
+        double effort = Math.max(0, drive) + t.lateralEffort * Math.hypot(swipeX, lift);
+        double swingAmount = clamp(Math.pow(
+                clamp(effort / t.maxSwingSpeed, 0, 1), t.swingCurve), 0, 1) * t.swingInfluence;
+
+        // Where on the blade it was struck, in the face's own plane, as -1..1 of the radius.
+        Vec3 off = contact.minus(racket.pos());
+        Vec3 inPlane = off.minus(racket.normal().scale(off.dot(racket.normal())));
+        double offX = clamp(inPlane.x() / BLADE_R, -1, 1);
+        double offY = clamp(inPlane.y() / BLADE_R, -1, 1);
+
+        // Which way the racket face is pointing, sideways, as a fraction.
+        double faceX = clamp(racket.normal().x() * -toOpp, -1, 1);
+
+        return new Intent(drive, swipeX, lift, brush, swingAmount, offX, offY, faceX);
+    }
+
+    /**
+     * How cleanly this ball was struck, 1 in the middle of the blade and 0 at the rim, shrinking
+     * as the ball arrives faster. Measured IN THE FACE'S OWN PLANE (offX, offY), so being
+     * early/late counts the same as being wide.
+     */
+    private double quality(BallState incoming, double offX, double offY) {
+        double offR = Math.min(1, Math.hypot(offX, offY));
+        double paceFrac = clamp((incoming.speed() - t.qualityPaceFrom) / t.qualityPaceSpan, 0, 1);
+        double core = Math.max(t.qualityCoreMin, t.qualityCore - t.qualityPaceLoss * paceFrac);
+        double rim  = core + t.qualityFalloff;
+        return clamp((rim - offR) / (rim - core), 0, 1);
+    }
+
+    /** Where the shot is aimed, inside the opponent's court by construction. */
+    private record Target(Vec3 want, Vec3 safe) {}
+
+    private Target readTarget(Intent in, double toOpp, double halfLen) {
+        double aim = in.swipeX() * t.aimInfluence
+                   + in.faceX() * t.faceInfluence
+                   + in.offX() * t.contactPointInfluence;
+        double wantX = clamp(aim, -1, 1) * targetHalfWidth();
+
+        double depthFrac = t.targetDepthMinFrac
+                + (t.targetDepthMaxFrac - t.targetDepthMinFrac)
+                  * clamp(0.35 + in.drive() * t.depthInfluence - in.brush() * t.arcInfluence
+                               - in.offY() * t.contactPointInfluence * 0.5, 0, 1);
+        double wantZ = toOpp * clamp(depthFrac, t.targetDepthMinFrac, t.targetDepthMaxFrac) * halfLen;
+
+        return new Target(new Vec3(wantX, 0, wantZ),
+                          new Vec3(0, 0, toOpp * t.safeDepthFrac * halfLen));
+    }
+
+    /** Swing maps onto a fixed band; the incoming ball nudges it slightly but is never ADDED to
+     *  it, which is what stops a rally from compounding into a rocket. */
+    private double readSpeed(double swingAmount, BallState incoming) {
+        double wantSpeed = t.minShotSpeed + (t.maxShotSpeed - t.minShotSpeed) * swingAmount;
+        wantSpeed += clamp((incoming.speed() - 9.0) * 0.05, -0.6, 0.6);
+        return clamp(wantSpeed, t.minShotSpeed, t.maxShotSpeed);
+    }
+
+    /** Topspin from the brush, sidespin from the swipe. */
+    private record Spin(double top, double side) {}
+
+    private Spin readSpin(double brush, double swipeX) {
+        double topRevs  = clamp((t.baseTopspin + brush * t.topspinPerLift) * t.spinInfluence,
+                                -t.maxSpin, t.maxSpin);
+        double sideRevs = clamp(swipeX * t.sidespinPerSwipe * t.spinInfluence,
+                                -t.maxSpin, t.maxSpin);
+        return new Spin(topRevs, sideRevs);
     }
 
     /**

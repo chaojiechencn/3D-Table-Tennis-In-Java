@@ -31,43 +31,19 @@ import static physics.Constants.DT;
 import static physics.Constants.MAX_FRAME;
 
 /**
- * Mr. Pong - a 3D table tennis game.
+ * Mr. Pong - a 3D table tennis game. Entry point, fixed-timestep loop, input, wiring and capture
+ * mode; see docs/GAMEPLAY.md for what it plays like and docs/DESIGN.md for the architecture.
  *
- * Checkpoint 1 (27 August) was the physics on its own: a ball flying with spin, curving in the
- * air, bouncing off the table and dying in the net. That still runs -- the ghost trail and the
- * camera presets that made the curve visible are still here -- and physics.SelfTest still
- * grades it.
+ * A racket at each end (near follows the mouse, far is the AI); the player's CONTROL is two
+ * horizontal dimensions while the ball's flight stays three ({@link play.PlayerReach}); the shot
+ * is entirely mouse motion, constrained to a playable target by {@link play.ShotAssist} on both
+ * rackets; the ITTF one-bounce rule is enforced by handing {@link World} a null racket until the
+ * ball has bounced on that side; a rally-cam cuts between two fixed views on who last hit; `V`
+ * shows what {@code ShotAssist} did and `D` shows the control/reachability overlay -- see their
+ * readout methods below for why each exists.
  *
- * On top of it is an ARCADE game:
- *
- *   - a racket at each end: the near one follows the mouse, the far one is the AI
- *   - the player's control is TWO-DIMENSIONAL and the ball's flight is three. The cursor moves
- *     the blade on one horizontal plane -- cursor X across the table, cursor Y up and down it,
- *     and the blade's height fixed at play.PlayerReach.HIT_Y. It is deliberately impossible
- *     for the cursor to raise the bat: one screen axis meaning both "deeper" and "higher" was
- *     the control bug this replaced. The BALL is untouched by any of that and still flies in
- *     full 3D, with spin curving it and the bounce coupling spin to speed.
- *   - the shot is the mouse motion -- driving the blade up-table sets the pace and closes the
- *     face for topspin, pulling back opens it for backspin, swiping across sets the direction.
- *     play.ShotAssist then constrains the outgoing trajectory to a playable target so the ball
- *     stays in and the rally holds. BOTH rackets go through it.
- *   - the ITTF one-bounce rule: you may only return the ball after it has bounced on your
- *     side. Enforced by handing World a null racket until then. A double bounce, the net, or a
- *     ball past the end line decides the point and cuts to the next serve.
- *   - a rally-cam that cuts between two fixed views -- close when the player last hit, wide
- *     when the opponent did -- and a 0.45x slow-motion default
- *   - V shows a debug overlay of what ShotAssist did: the racket's velocity, the incoming
- *     ball, the raw bounce, the intended and final shot, the target and the predicted landing
- *   - D shows the CONTROL overlay: cursor, racket and target positions, the legal racket
- *     bounds, how far and how long the blade has to travel, where the ball is and when it
- *     arrives, and whether the blade can be there in time. It is there to separate "I lost
- *     because the controls could not express that" from "I lost because that ball was
- *     unplayable", which look identical on screen and have opposite fixes.
- *
- * Still missing, and deliberately next: a real serve off the player's blade, and a scoreboard.
- *
- * The physics lives in the physics package and the game logic in play, and neither imports
- * JavaFX -- so both can be checked headlessly. Run physics.SelfTest and play.RallyTest.
+ * The physics lives in {@code physics} and the game logic in {@code play}; neither imports
+ * JavaFX, so both run headlessly under {@code physics.SelfTest} and {@code play.RallyTest}.
  */
 public class Table_Tennis_In_3D extends Application {
 
@@ -94,14 +70,9 @@ public class Table_Tennis_In_3D extends Application {
 
     private final Stroke stroke = new Stroke(PlayerReach.NEUTRAL);
 
-    /**
-     * The demo hand, and whether it is driving. `M` toggles it.
-     *
-     * It supplies the CURSOR, exactly as the mouse does, so the whole control path below it is
-     * unchanged -- same Stroke, same PlayerReach envelope, same TRACK_SPEED. It replaces the
-     * player rather than assisting one: while this is on, mouse movement is ignored, and the
-     * moment it were allowed to nudge a human's aim it would be auto-aim. See DemoPlayer.
-     */
+    /** The demo hand, and whether it is driving. `M` toggles it. Supplies the CURSOR exactly as
+     *  the mouse does (same Stroke, PlayerReach, TRACK_SPEED); replaces the player rather than
+     *  assisting one -- see {@link DemoPlayer}. */
     private final DemoPlayer demo = new DemoPlayer();
     private boolean demoMode = false;
 
@@ -134,7 +105,6 @@ public class Table_Tennis_In_3D extends Application {
     private double timeScale = 0.45;
     private boolean paused = false;
     private int singleSteps = 0;
-    private double fps = 0;
 
     // ------------------------------------------------------------------ view
 
@@ -209,20 +179,10 @@ public class Table_Tennis_In_3D extends Application {
     private int shownMarks = 0;
 
     /**
-     * Trail resolution, in whole PHYSICS STEPS per dot.
-     *
-     * Counted in steps rather than in seconds so that the live trail and the ghost are
-     * sampled by the identical rule. Expressed as a duration it could not be: the old 2.5 ms
-     * is 1.2 steps at DT = 1/480 s, and the two paths rounded that fraction in OPPOSITE
-     * directions -- the live trail accumulated up to 2 steps, the ghost rounded down to 1.
-     * The ghost came out twice as dense as the shot it exists to be compared against, and
-     * 360 points long against a 300-dot trail, so it silently dropped the first 0.125 s of
-     * its own flight and no longer started where the ball started. Comparing two paths drawn
-     * to two different rules is exactly the thing this demo must not do.
-     *
-     * 2 steps is 4.2 ms, about 6 cm between dots on a 15 m/s drive, which still reads as a
-     * continuous line. Being in simulated steps (not frames) is also what makes slow motion
-     * show the same curve rather than a denser one.
+     * Trail resolution, in whole PHYSICS STEPS per dot -- not seconds, so the live trail and the
+     * ghost are sampled by the identical rule (a duration like the old 2.5 ms rounds to a
+     * different step count on each path, so the two stop being comparable dot for dot). TUNED: 2
+     * steps is 4.2 ms, ~6 cm between dots on a 15 m/s drive, still a continuous line.
      */
     private static final int TRAIL_STRIDE = 2;
 
@@ -279,15 +239,11 @@ public class Table_Tennis_In_3D extends Application {
 
     /**
      * When the last racket contact happened, and how long after one a table bounce is treated
-     * as part of that contact rather than as a shot falling back.
-     *
-     * A ball can legally be struck while it is still touching the table -- a push dug out at
-     * surface height is a real shot, and the paddle can reach in over the table for it. When
-     * that happens the table contact fires on the same physics step as the racket contact, and
-     * the rules below read it as "your own shot bounced on your own half", ending the point on
-     * a stroke that was perfectly legal. It ended a four-hit rally every single time in the
-     * headless rally trace. Two steps is enough: the ball is gone from the surface long before
-     * that at any speed the shot model can produce.
+     * as part of that contact rather than as a shot falling back -- a legal push dug out at
+     * surface height fires its table contact on the SAME physics step as the racket contact, and
+     * without this window the rule below reads that as "your own shot bounced on your own half"
+     * and ends the point on a legal stroke. Two steps is enough: the ball is long gone from the
+     * surface before that at any speed the shot model can produce.
      */
     private double lastHitTime = -1;
     private static final double CONTACT_BOUNCE_WINDOW = DT * 2;
@@ -352,7 +308,6 @@ public class Table_Tennis_In_3D extends Application {
 
                 double frame = (now - lastNanos) / 1e9;
                 lastNanos = now;
-                fps = fps == 0 ? 1 / frame : fps * 0.9 + (1 / frame) * 0.1;
 
                 // Clamp before scaling: a stall (a breakpoint, a window drag) must not hand
                 // the accumulator a second of work and send the loop into a spiral trying to
@@ -611,20 +566,11 @@ public class Table_Tennis_In_3D extends Application {
     }
 
     /**
-     * The control/reachability overlay, toggled with D.
-     *
-     * It exists to answer one question that is otherwise unanswerable from the screen: when a
-     * ball goes past, was that the CONTROL MAPPING failing to express where the player wanted
-     * the bat, or was the ball genuinely unplayable? Those look the same from the outside and
-     * have opposite fixes, and guessing wrong is how the reach bug survived as long as it did.
-     *
-     * So it prints both halves. The cursor and the raw aim say what was asked for; the bounds
-     * and the granted target say what the envelope allowed; the dash and the arrival say
-     * whether the blade could physically have got there in time.
-     *
-     * This is the ONE place ball position is allowed anywhere near the player's control path,
-     * and it is read-only and downstream of everything -- it validates, it never steers. The
-     * blade's target has already been computed and handed to Stroke by the time this runs.
+     * The control/reachability overlay, toggled with D -- answers "was that the CONTROL MAPPING
+     * failing to express where the player wanted the bat, or was the ball genuinely unplayable?"
+     * (the two look identical on screen and have opposite fixes). Read-only and downstream of
+     * everything: the blade's target has already been computed and handed to Stroke by the time
+     * this runs, so ball position appearing here never steers the control path.
      */
     private String controlReadout() {
         BallState b = world.state();
@@ -667,13 +613,10 @@ public class Table_Tennis_In_3D extends Application {
             verdict);
     }
 
-    /**
-     * TUNED broad overhead lighting for a sports hall. Directional sources keep incidence
-     * uniform along the table, avoiding a bright far end as the camera cuts. A warm key and
-     * weaker cool cross-fill model the room's ceiling light and reflected light; the coloured
-     * ambient lifts the ball's underside without washing away its spherical shading.
-     * Directions are dimensionless physics-space vectors and cross the usual Xform boundary.
-     */
+    /** TUNED broad overhead lighting for a sports hall: directional sources keep incidence
+     *  uniform along the table as the camera cuts, a warm key and cooler cross-fill model the
+     *  room's ceiling and reflected light, and the coloured ambient lifts the ball's underside
+     *  without washing out its spherical shading. */
     private Group lighting() {
         DirectionalLight key = new DirectionalLight(Color.web("#b9b1a4"));
         key.setDirection(Xform.toScene(new Vec3(0.35, -1, -0.28)).normalize());
@@ -685,16 +628,10 @@ public class Table_Tennis_In_3D extends Application {
     // ------------------------------------------------------------------ input
 
     /**
-     * Mouse control of the player's racket: bare movement aims, and that is all there is.
-     *
-     * The blade follows the cursor and the shot is in how you move it -- swing speed is pace,
-     * the direction you cut across the ball is spin, both measured by the contact solver. No
-     * buttons: the left button still belongs to the camera orbit in CameraRig, and there is no
-     * longer a charge gesture to give the right one.
-     *
-     * addEventHandler, not setOnMouseMoved. That is a single-slot property, so assigning it
-     * here would silently unhook the camera orbit that CameraRig just installed on this same
-     * SubScene.
+     * Mouse control of the player's racket: bare movement aims, and that is all there is -- no
+     * buttons, since the left button belongs to camera orbit ({@link CameraRig}). Uses
+     * addEventHandler rather than setOnMouseMoved, a single-slot property that would silently
+     * unhook the camera orbit CameraRig already installed on this SubScene.
      */
     private void attachPaddleControls(SubScene sub) {
         sub.addEventHandler(MouseEvent.MOUSE_MOVED, e -> aim(sub, e));
@@ -719,25 +656,17 @@ public class Table_Tennis_In_3D extends Application {
     }
 
     /**
-     * Sample the cursor onto the hitting plane and park it in a field for advanceOne().
-     *
-     * sceneToLocal, not getX/getY. This handler sits on the SubScene, but the events are
-     * targeted at the 3D nodes inside it and carry coordinates belonging to whatever was
-     * picked. Scene coordinates are the one frame both ends agree on.
+     * Sample the cursor onto the hitting plane and park it in a field for advanceOne(). Uses
+     * sceneToLocal rather than getX/getY, since this handler sits on the SubScene but events are
+     * targeted at the 3D nodes inside it -- scene coordinates are the one frame both agree on.
      */
     private void aim(SubScene sub, MouseEvent e) {
         Point2D p = sub.sceneToLocal(e.getSceneX(), e.getSceneY());
         Vec3 fallback = pendingAim != null ? pendingAim : playerPaddle.pos();
 
-        // Two steps, deliberately separate. MouseAim answers a question of pure geometry --
-        // where does the cursor's ray meet the racket's horizontal hitting plane -- and knows
-        // nothing about where a racket may legally be. PlayerReach then applies the envelope,
-        // and in doing so throws the ray's height away and substitutes its own: that discard
-        // is what stops cursor height from ever reaching racket height again.
-        //
-        // The blade's own position goes in only as the fallback for a degenerate ray, never as
-        // an input. Reading the cursor against a plane derived from where the blade already is
-        // would be a loop with gain, and the blade would creep to the stop on its own.
+        // MouseAim answers pure geometry (where the ray meets the hitting plane); PlayerReach
+        // then applies the envelope, discarding the ray's height for its own -- the fallback is
+        // only for a degenerate ray, never an input, or this would be a loop with gain.
         cursorX = p.getX();
         cursorY = p.getY();
         rawAim = MouseAim.onHittingPlane(sub, p.getX(), p.getY(), PlayerReach.HIT_Y, fallback);
@@ -817,20 +746,11 @@ public class Table_Tennis_In_3D extends Application {
     // ------------------------------------------------------------------ feeds
 
     /**
-     * Put a ball in play.
-     *
-     * Not a serve -- serving is the next piece of work. This is a feed: the ball appears just
-     * behind the near end travelling down the table, as though the player had struck it, and
-     * the opponent answers it. The player's racket is left exactly where it is.
-     *
-     * The feed launches from z = 1.52 (Shots.FROM), which is now INSIDE the legal racket
-     * region -- the blade may sit anywhere from 0.30 to 2.40. That used to matter: the old
-     * hitting plane was deliberately placed behind every launch point so a feed could not
-     * rebound off the player's own bat on its first step. What protects it now is the
-     * one-bounce rule rather than the geometry -- playerMayHit is false below, so World is
-     * handed a null player racket and the ball flies through where the blade is standing until
-     * it has bounced on this side. That is the stronger guarantee of the two, since it holds
-     * wherever the player happens to be pointing.
+     * Put a ball in play. Not a serve (that is still to build) -- a feed: the ball appears just
+     * behind the near end as though the player had struck it, and the opponent answers it. What
+     * stops it rebounding off the player's own bat on the first step is the one-bounce rule
+     * (playerMayHit is false below, so World gets a null player racket), not the launch
+     * geometry -- that guarantee holds wherever the player happens to be pointing.
      */
     private void launchShot(Shots shot) {
         currentShot = shot;
