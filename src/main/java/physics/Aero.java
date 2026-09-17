@@ -3,15 +3,11 @@ package physics;
 import static physics.Constants.*;
 
 /**
- * The forces on a ball in flight: gravity, drag, Magnus lift, and spin decay.
- *
- * This is the part of the project the contract calls out first — "How a spinning ball moves
- * through the air". Everything here is acceleration (force/mass) because the integrator only
- * ever wants accelerations, and dividing by a constant mass in four RK4 stages is wasted work.
- *
- * The whole curve of a topspin loop comes out of ONE cross product. Get its sign wrong and
- * the ball floats instead of dipping, which is why physics space is documented as
- * right-handed in three separate places.
+ * The forces on a ball in flight: gravity, drag, Magnus lift, and spin decay. Everything here
+ * is acceleration (force/mass), since the integrator only ever wants accelerations. The whole
+ * curve of a topspin loop comes out of ONE cross product -- get its sign wrong and the ball
+ * floats instead of dipping, which is why physics space is documented as right-handed in three
+ * separate places.
  */
 public final class Aero {
 
@@ -21,18 +17,10 @@ public final class Aero {
     public record Derivative(Vec3 dPos, Vec3 dVel, Vec3 dSpin) {}
 
     /**
-     * How the drag coefficient is obtained. An argument, not a global.
-     *
-     * Real C_d is a function of Reynolds number and of spin, and modelling it that way is a
-     * genuine improvement -- but it also destroys the two strongest checks in SelfTest, which
-     * compare against the closed-form solutions for free fall with drag. Those closed forms
-     * (v_t = sqrt(g/kC_d), and the tanh / ln cosh solution) EXIST ONLY FOR CONSTANT C_d. The
-     * free-fall check is exact to 1 mm over 3 s and is the only thing testing RK4 against real
-     * analysis rather than against itself, so losing it to gain realism would be a bad trade.
-     *
-     * Making the law a parameter means we do not have to choose: the analytic checks run
-     * against CONSTANT and stay exactly as strong as they were, the game runs against the
-     * measured law, and the measured law gets its own checks against measured values.
+     * How the drag coefficient is obtained -- an argument, not a global, so the two closed-form
+     * SelfTest checks (which exist ONLY for constant C_d: v_t = sqrt(g/kC_d), and the tanh /
+     * ln cosh solution) can keep running against {@link #constant} while the game flies with
+     * the measured law below. See docs/DESIGN.md.
      */
     @FunctionalInterface
     public interface DragModel {
@@ -114,33 +102,20 @@ public final class Aero {
     }
 
     /**
-     * Interpolation between adjacent table entries -- smooth, not linear, and the reason is
-     * numerical rather than cosmetic.
-     *
-     * Straight-line interpolation puts a kink in the force field at every table node. RK4
-     * only achieves fourth-order accuracy if the function it is sampling is smooth, so a ball
-     * whose speed sweeps across a node during flight quietly drops the integrator to about
-     * second order -- SelfTest's convergence check caught exactly that, measuring 30x error
-     * reduction for a 4x smaller step where fourth order demands 256x.
-     *
-     * The classic smootherstep, 6t^5 - 15t^4 + 10t^3, has zero first AND second derivative at
-     * both ends, so the assembled curve is C2 across every node while still passing exactly
-     * through the measured values. The integrator gets its order back and the table is still
-     * the table.
+     * Interpolation between adjacent table entries -- smootherstep (6t^5-15t^4+10t^3), not
+     * linear, for a numerical reason: RK4 only keeps its 4th-order accuracy on a smooth
+     * right-hand side, and a linear kink at each node quietly drops it to ~2nd order (measured:
+     * 30x error reduction for a 4x smaller step, where 4th order demands 256x). Smootherstep has
+     * zero first AND second derivative at both ends, so the assembled curve is C2 across every
+     * node while still passing exactly through the measured values.
      */
     private static double lerp(double a, double b, double t) {
         double smooth = t * t * t * (t * (t * 6 - 15) + 10);
         return a + (b - a) * smooth;
     }
 
-    /**
-     * Drag: -1/2 rho A C_d |v| v / m, always opposing motion.
-     *
-     * At 10 m/s this is ~11.4 m/s², slightly MORE than gravity. That is the thing people
-     * get wrong about table tennis: the ball is so light relative to its frontal area that
-     * air resistance dominates the trajectory. Ignoring drag (as the throwaway scaffold did)
-     * overshoots the far end of the table by roughly a metre on a normal drive.
-     */
+    /** Drag: -1/2 rho A C_d |v| v / m, always opposing motion. At 10 m/s this is ~11.4 m/s²,
+     *  slightly MORE than gravity -- air, not gravity, dominates a table tennis trajectory. */
     public static Vec3 drag(Vec3 vel) {
         return drag(vel, Vec3.ZERO, DEFAULT_DRAG);
     }

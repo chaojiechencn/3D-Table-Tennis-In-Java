@@ -1,11 +1,10 @@
 package physics;
 
 /**
- * Every real-world number the simulation uses, with the source it came from.
- *
- * The contract says: "Research papers on table tennis ball trajectories, so I have real
- * numbers to check my simulation against instead of guessing." So nothing in this file is
- * a guess. Anything tuned by eye is labelled TUNED and explains what it is standing in for.
+ * Every real-world number the simulation uses, with the source it came from. Nothing here is a
+ * guess; anything tuned by eye is labelled TUNED and says what it stands in for. See
+ * docs/DESIGN.md, "Physics model (and where the numbers came from)", for the full derivations
+ * and measurement history behind these -- this file keeps the citation and the number.
  *
  * Sources, referred to by tag below:
  *   [ITTF]  ITTF Technical Leaflet T3 "The Ball" + Laws of Table Tennis 2.01-2.03
@@ -13,10 +12,12 @@ package physics;
  *           bounce test: drop 30.5 cm onto steel, rebound 24-26 cm).
  *   [AERO]  Measured drag/lift on table tennis balls at Re ~ 1e4-1e5. C_d settles near
  *           0.40-0.50 across the playing range; lift coefficient rises with spin ratio
- *           and saturates around 0.3-0.4. Consistent with the standard sphere-with-spin
- *           results reported in the table tennis trajectory literature.
+ *           and saturates around 0.3-0.4.
  *   [CONT]  Ball-table contact studies: coefficient of restitution ~0.89-0.93,
  *           sliding friction coefficient ~0.2-0.3.
+ *   [FIT]   "Physics Models for Sim-to-Real Transfer in Professional-Level Robot Table
+ *           Tennis", arXiv:2606.28805 -- coefficients fitted to 277 recorded competitive
+ *           matches, reported consistent with wind-tunnel and CFD work.
  */
 public final class Constants {
 
@@ -30,12 +31,9 @@ public final class Constants {
     /** Ball mass, 2.7 g. [ITTF] */
     public static final double BALL_M = 0.0027;
 
-    /**
-     * Moment of inertia. A table tennis ball is a HOLLOW SHELL, so I = (2/3)mr²,
-     * not the solid sphere's (2/5)mr². This is not a nitpick: it is what makes the
-     * grip impulse -(2/5)m*v_contact instead of -(2/7)m*v_contact, i.e. it changes how
-     * much spin a bounce can generate by ~40%. [ITTF] (ball is a hollow celluloid/ABS shell)
-     */
+    /** Moment of inertia. A table tennis ball is a HOLLOW SHELL, so I = (2/3)mr², not the solid
+     *  sphere's (2/5)mr² -- this is what makes the grip impulse -(2/5)m*v_contact instead of
+     *  -(2/7)m*v_contact, changing how much spin a bounce generates by ~40%. [ITTF] */
     public static final double BALL_I = (2.0 / 3.0) * BALL_M * BALL_R * BALL_R;
 
     /** Cross-sectional area presented to the airflow. */
@@ -49,45 +47,24 @@ public final class Constants {
     /** Air density at sea level, 15 degC, dry. */
     public static final double AIR_RHO = 1.225;
 
-    /**
-     * The factor drag and lift SHARE: 0.5 * rho * A / m. Pulling it out once keeps the two
-     * aerodynamic forces dimensionally consistent — if you ever tune one, the other moves
-     * with it. Value works out to ~0.285 1/m.
-     */
+    /** The factor drag and lift SHARE: 0.5 * rho * A / m, ~0.285 1/m. Pulled out once so tuning
+     *  one keeps both dimensionally consistent with the other. */
     public static final double HALF_RHO_A_OVER_M = 0.5 * AIR_RHO * BALL_AREA / BALL_M;
 
     /**
-     * Constant-coefficient drag reference. [AERO]
-     *
-     * NOT what the game flies with any more -- that is the measured DRAG_TABLE below. This
-     * value survives for one specific job: free fall with drag has a closed-form solution
-     * ONLY when C_d is constant, and SelfTest uses that closed form to check the integrator
-     * against exact analysis to 1 mm over 3 s. Keeping a named constant law preserves that
-     * check at full strength instead of trading it away for realism.
+     * Constant-coefficient drag reference. [AERO] NOT what the game flies with (see
+     * DRAG_TABLE below) -- kept because free fall with drag has a closed form only for
+     * constant C_d, and SelfTest uses that form to check the integrator against exact
+     * analysis to 1 mm over 3 s.
      */
     public static final double C_DRAG = 0.40;
 
     /**
-     * Spin decay, per metre of flight rather than per second.
-     *
-     * The old form was dw/dt = -0.05*w, independent of airspeed, which says a ball drifting
-     * at 1 m/s sheds spin as fast as one screaming past at 30 m/s. It does not. James and
-     * Haake, "The Spin Decay of Sports Balls in Flight" (Engineering of Sport 7, 2008, pp.
-     * 165-170), measured a strong linear relationship between spin decay and the PRODUCT of
-     * spin and speed, so the shape here is dw/dt = -k*w*|v| and k has units of 1/m.
-     *
-     * Still TUNED, and deliberately so, because the magnitude is genuinely unsettled:
-     *   - James and Haake measured real decay, but on tennis balls, footballs and oversize
-     *     tennis balls. There is no table tennis in their data.
-     *   - "Table Tennis and Physics" (IntechOpen ch. 83844) states flatly that the spin of a
-     *     table tennis ball was experimentally shown to be CONSTANT during flight.
-     * No table-tennis-specific time constant appears anywhere I could find; estimates from
-     * the spin-down torque put tau somewhere in 2-10 s.
-     *
-     * So the value is pinned conservatively: 1/240 per metre reproduces the previous 5%/s at
-     * a typical 12 m/s rally speed. That takes the fix to the SHAPE -- slow balls now hold
-     * their spin and fast ones lose it quicker -- without smuggling in a magnitude change
-     * that no measurement supports.
+     * Spin decay, per METRE of flight rather than per second: dw/dt = -k*w*|v|, following the
+     * speed-coupled shape James &amp; Haake measured for other sports balls (Engineering of
+     * Sport 7, 2008, pp. 165-170) -- no table-tennis-specific data exists. TUNED: 1/240 per
+     * metre reproduces the previous 5%/s at a typical 12 m/s rally speed, fixing only the SHAPE
+     * (slow balls hold spin, fast ones lose it quicker), not an unmeasured magnitude.
      */
     public static final double SPIN_DECAY_PER_M = 1.0 / 240.0;
 
@@ -120,28 +97,13 @@ public final class Constants {
 
     // ---------------------------------------------------------------- measured aerodynamics
 
-    /*
-     * The two tables below replace a pair of guesses with measurements. Both come from
-     * [FIT] = "Physics Models for Sim-to-Real Transfer in Professional-Level Robot Table
-     * Tennis", arXiv:2606.28805, whose coefficients were fitted to 277 recorded competitive
-     * matches and which the authors report as consistent with the wind-tunnel and CFD work.
-     *
-     * They are tables rather than formulas because the real coefficients are not monotonic
-     * and no tidy closed form fits them. That non-monotonicity is the physics: see
-     * LIFT_* below.
-     */
-
     /**
-     * Drag coefficient, measured. Rows are airspeed in m/s, columns are spin ratio S.
-     *
-     * The old model used a flat C_d = 0.40. Every table-tennis-specific published value is
-     * 0.45-0.55, so 0.40 under-drags the ball by around 20% -- long loops flew further and
-     * flatter than they should. The whole playing range (Re from 5e3 at 2 m/s to 9.3e4 at
-     * 35 m/s) is SUB-CRITICAL, well below the smooth-sphere drag crisis at Re ~ 3e5, which
-     * is why C_d stays high and only drifts down with speed instead of collapsing.
-     *
-     * The dip in the S = 0.95 column is not noise. It is the drag-side signature of the same
-     * laminar-turbulent transition that produces the lift crisis. [FIT]
+     * Drag coefficient, measured [FIT]. Rows are airspeed in m/s, columns spin ratio S. The old
+     * flat C_d = 0.40 under-drags by ~20% against every published table-tennis value
+     * (0.45-0.55). The whole playing range is sub-critical (Re 5e3-9.3e4, well below the
+     * smooth-sphere drag crisis at ~3e5), which is why C_d stays high and drifts down with
+     * speed rather than collapsing. The dip at S = 0.95 is the drag-side signature of the same
+     * transition behind the lift crisis below, not noise.
      */
     public static final double[] DRAG_SPEEDS = { 2.5, 7.5, 12.5, 17.5 };
     public static final double[] DRAG_SPIN_RATIOS = { 0.0, 0.3, 0.7, 0.95, 1.5, 2.0 };
@@ -153,36 +115,17 @@ public final class Constants {
     };
 
     /**
-     * Magnus coefficient, measured, as a piecewise function of spin rate at each speed.
+     * Magnus coefficient, measured [FIT], piecewise by spin rate at each speed. [FIT] writes
+     * lift volume-based (F_M = C_M * rho * V * (v x omega)); this project is area-based, so the
+     * conversion C_L = (8/3) C_M S happens once, in {@link Aero}.
      *
-     * [FIT] writes lift volume-based, F_M = C_M * rho * V * (v x omega). This project is
-     * area-based, so the conversion happens once, in Aero:
-     *
-     *     1/2 C_L rho A v^2 = C_M rho V v omega,   A = pi r^2,  V = (4/3) pi r^3
-     *                  C_L = (8/3) C_M S,          S = r omega / |v|
-     *
-     * WHY THIS REPLACED C_L = S/(2S+1). The old saturating curve rises monotonically toward
-     * 0.5. Real lift does not: converting the table below gives C_L that is roughly FLAT at
-     * 0.16-0.25 across the whole reachable range. Checked against the old model term by term,
-     * the old one was ~15% too WEAK below S = 0.5, up to 1.9x too STRONG around S = 0.75-0.95,
-     * and about right again above S = 1.1.
-     *
-     * That shape is the "lift crisis" -- Miyazaki, Sakai, Komatsu, Takahashi and Himeno,
-     * "Lift crisis of a spinning table tennis ball", Eur. J. Phys. 38(2):024001 (2017), who
-     * measured a deep valley in C_L near S = 0.5 with lift almost vanishing at Re = 9e4. A
-     * monotonic saturating curve cannot represent a valley at all, which is why this is a
-     * table and not a formula.
-     *
-     * And the valley is not an exotic edge case. Realistic play spans S = 0.1 (fast smash) to
-     * S = 1.4 (slow heavy chop), with serves near 0.72 and loops near 0.92 -- so a rally
-     * crosses the crisis constantly.
-     *
-     * The negative constant terms in the quadratic branch at high speed are the inverse
-     * Magnus regime falling out of the fit. It is real (Ito and Ueshima, Trans. JSST 17(1),
-     * put the zero crossing at S ~ 0.65; Miyazaki's experiment puts it at S ~ 0.48-0.50 --
-     * the sources genuinely disagree, and both are recorded here rather than averaged away)
-     * but small: it moves a trajectory by millimetres, because C_L is already near zero
-     * wherever it goes negative.
+     * Replaces the old monotonic C_L = S/(2S+1): real lift has a valley near S ≈ 0.5-0.8 (the
+     * "lift crisis" -- Miyazaki, Sakai, Komatsu, Takahashi &amp; Himeno, Eur. J. Phys.
+     * 38(2):024001, 2017), which a saturating curve cannot represent and normal play (S ≈
+     * 0.1-1.4) crosses constantly. The negative terms in the quadratic branch are the inverse
+     * Magnus regime the fit finds at high speed; two sources disagree on where it crosses zero
+     * (S ~ 0.48-0.65) and both are recorded in docs/DESIGN.md rather than averaged away, though
+     * the effect is millimetres either way since C_L is already near zero there.
      */
     public static final double[] LIFT_SPEEDS = { 2.0, 3.5, 7.5, 10.5, 13.5, 17.0 };
 
@@ -206,70 +149,40 @@ public final class Constants {
             { -1.000e-7,  2.300e-4, -0.0375 },
     };
 
-    /**
-     * The two branches of the fit do not quite meet -- at 13.5 m/s the step at the breakpoint
-     * is 0.022 in C_M, and the others are smaller. Blending across a narrow window either side
-     * makes the force continuous, which matters because RK4 samples the derivative four times
-     * per step and a jump inside that window would be integrated as if it were real.
-     */
+    /** The two branches of the fit do not quite meet (up to 0.022 in C_M at the breakpoint), so
+     *  this blends across a narrow window either side -- RK4 samples the derivative four times
+     *  a step, and an unblended jump inside that window would be integrated as if it were real. */
     public static final double LIFT_BLEND = 0.05;
 
     // ---------------------------------------------------------------- racket
 
-    /**
-     * Blade radius. ITTF Law 2.4.1 puts NO restriction on racket size, shape or weight -- only
-     * that the blade be flat and rigid, at least 85% natural wood by thickness. A typical
-     * head is about 157 x 150 mm, so a 75 mm disc is the honest round equivalent.
-     */
+    /** Blade radius. ITTF Law 2.4.1 puts NO restriction on racket size, shape or weight -- only
+     *  that it be flat and rigid, at least 85% natural wood by thickness. A typical head is
+     *  about 157 x 150 mm, so a 75 mm disc is the honest round equivalent. */
     public static final double BLADE_R = 0.075;
 
-    /**
-     * Blade thickness including both rubbers. A wooden blade is ~6 mm and ITTF Law 2.4.3 caps
-     * each sandwich rubber at 4.05 mm including adhesive, so ~15 mm is a legal maximum-ish
-     * racket. Being a little thick is deliberate: like the net, extra thickness is anti-
-     * tunnelling margin, and 15 mm at a 20 m/s swing is still well inside one physics step.
-     */
+    /** Blade thickness including both rubbers. A wooden blade is ~6 mm and ITTF Law 2.4.3 caps
+     *  each sandwich rubber at 4.05 mm including adhesive, so ~15 mm is a legal maximum-ish
+     *  racket -- a little thick on purpose, as anti-tunnelling margin, same reasoning as
+     *  NET_THICK. */
     public static final double BLADE_THICK = 0.015;
 
-    /** Racket mass. 150-190 g is the usual assembled range; the effective mass at the impact
-     *  point is what actually matters, and Paddle's class comment does that arithmetic. */
+    /** Racket mass. 150-190 g is the usual assembled range; the effective mass AT THE IMPACT
+     *  POINT is what actually matters -- see {@link Paddle}'s class comment. */
     public static final double RACKET_M = 0.170;
 
     /**
-     * Inverted ("smooth") offensive rubber -- the covering most attacking players use.
-     *
-     * NORMAL. e_n = 0.878 - 0.020*|v_n|, from arXiv:2606.28805 Table IV, clamped to the range
-     * the fit was measured over. arXiv:2604.11349 measured the same slope independently
-     * across 8194 bounces and 10 racket configurations: -0.021 per m/s for offensive rubbers,
-     * -0.017 for all-round, a total drop of about 0.15 across 2-12 m/s.
-     *
-     * TANGENTIAL -- and this is the one that matters. A rigid surface can only ever bring the
-     * contact patch to rest; rubber stores tangential energy in the topsheet and SPRINGS IT
-     * BACK. That is what reverses incoming spin instead of merely absorbing it, and
-     * arXiv:2604.11349 states plainly that a table-style grip-or-slide model provably cannot
-     * reproduce the spin inversion they measured. So e_t = 0.819 - 0.010*|v_T|.
-     *
-     * A NOTE ON A NUMBER THAT DID NOT SURVIVE CHECKING. The same paper also reports a
-     * tangential stiffness k_p ~ 0.019, defined through a_1 = 1 - k_p/m. Taken at face value
-     * that is impossible: perfect grip for a hollow shell is k_p = (2/5)m = 0.00108 kg, and
-     * k_p = 0.019 implies a tangential restitution of 16.6 -- the contact patch leaving
-     * sixteen times faster than it arrived. Working backwards from the paper's OWN e_t = 0.819
-     * via J_t = -(2/5)m(1+e_t)v_s gives k_p = 0.00196 kg. The reported figure is a factor of
-     * ten out, and the two agree once that is fixed. This model uses e_t, which is
-     * dimensionless and independently reported and therefore cannot hide an error like that.
-     *
-     * FRICTION. There is no peer-reviewed coefficient of friction for inverted rubber, because
-     * inverted rubber essentially never slides on the ball at realistic stroke speeds -- it
-     * grips, and the literature describes it with a tangential stiffness instead. The only
-     * published figure, 0.197-0.207, is for ANTI-SPIN, where sliding does happen. 1.2 here is
-     * set high on purpose so the Coulomb cone almost never binds and the elastic branch is
-     * what governs, which is the behaviour the measurements describe. TUNED, and flagged as
-     * such because a tacky elastomer above mu = 1 is plausible but not something I can cite.
-     *
-     * DRILL DAMPING. e_s = 0.805 damps the spin component about the contact normal -- the
-     * corkscrew component, which friction has little purchase on. It is deliberately NOT the
-     * blanket spin damping: applying 0.805 to the whole spin vector would destroy a fifth of
-     * the topspin the stroke had just generated.
+     * Inverted ("smooth") offensive rubber, the covering most attacking players use.
+     * e_n = 0.878 - 0.020*|v_n| [FIT Table IV], independently corroborated (arXiv:2604.11349,
+     * 8194 bounces / 10 racket configurations). e_t = 0.819 - 0.010*|v_T| is the number that
+     * matters: rubber SPRINGS the tangential contact back rather than only stopping it, which
+     * is what reverses incoming spin -- a grip-or-slide model provably cannot do that
+     * (arXiv:2604.11349). Friction 1.2 is TUNED high on purpose so the Coulomb cone almost never
+     * binds and the elastic (e_t) branch governs, since no published friction coefficient exists
+     * for inverted rubber at realistic stroke speeds. Drill damping 0.805 is scoped to spin about
+     * the contact normal only -- applying it to the whole spin vector would destroy a fifth of
+     * the topspin a stroke just generated. See docs/DESIGN.md for the k_p unit-error this
+     * superseded.
      */
     public static final Material RACKET_MAT = new Material(
             0.878, 0.020, 0.45, 0.90,     // e_n = 0.878 - 0.020|v_n|, clamped
@@ -281,64 +194,35 @@ public final class Constants {
     // ---------------------------------------------------------------- contact materials
 
     /**
-     * Ball-on-table restitution. Measured range is 0.89-0.93 [CONT]; this sits near the top
-     * of it, and the reason is worth writing down.
-     *
-     * [ITTF] specify a drop of 30.5 cm rebounding to 24-26 cm. The obvious arithmetic gives
-     * e = sqrt(25/30.5) = 0.905 -- but that arithmetic assumes a vacuum. Over the 55 cm the
-     * ball actually travels, air drag costs it about 1.5 cm of rebound, so a ball with
-     * e = 0.905 lands *below* the ITTF band. Solving with drag included puts the value that
-     * reproduces the specified bounce at 0.92, which is still inside the independently
-     * measured ball-table range -- two unrelated sources agreeing, which is the useful part.
-     *
-     * SelfTest checks both halves of that: the rebound lands in the ITTF band, and the naive
-     * drag-free value would have missed it.
-     *
-     * NOW SPEED-DEPENDENT. e_n = 0.98 - 0.02*|v_n|, clamped to [0.75, 0.94], fitted to real
-     * trajectories in arXiv:2606.28805 and consistent with the cap-buckling roll-off above
-     * ~5 m/s. At the ITTF drop speed of 2.43 m/s that is e = 0.931, which reproduces the
-     * required 24-26 cm rebound; at a 5 m/s rally bounce it is 0.88, and at an 8 m/s smash
-     * 0.82. The old flat 0.92 was that curve evaluated at one point and then applied
-     * everywhere, which is why a smash used to bounce too lively.
-     *
-     * Friction 0.25 is unchanged and now has a second source: arXiv:2606.28805 fits exactly
-     * 0.25, and ITTF's own acceptance band for table coefficient of friction is 0.150-0.350,
-     * so it sits dead centre of both.
-     *
-     * The table's tangential restitution is left at zero, i.e. perfect grip. Rod Cross
-     * ("Measurements of the horizontal coefficient of restitution...", Am. J. Phys. 70(5):482)
-     * shows tangential restitution is real and non-zero for a bouncing ball, so a small value
-     * would arguably be better -- but every figure he measured is for a TENNIS ball, and no
-     * table-tennis-specific number exists. Zero is the standard rigid-body model and the one
-     * the published oblique-bounce work for table tennis uses, so it stays until there is a
-     * number to replace it with. The mechanism is in place either way; only rubber uses it.
+     * Ball-on-table restitution, speed-dependent: e_n = 0.98 - 0.02*|v_n|, clamped to
+     * [0.75, 0.94] [FIT], consistent with cap-buckling roll-off above ~5 m/s [CONT]. At the ITTF
+     * drop speed (2.43 m/s) that gives e = 0.931, reproducing the required 24-26 cm rebound once
+     * air drag over the 55 cm drop is accounted for (the drag-free arithmetic alone gives 0.905,
+     * which undershoots the ITTF band -- see docs/DESIGN.md). At 8 m/s (a smash) it is 0.82; the
+     * old flat 0.92 was this curve evaluated at one point and applied everywhere, so a smash used
+     * to bounce too lively. Friction 0.25 sits dead centre of ITTF's own 0.150-0.350 acceptance
+     * band and matches [FIT] exactly. Tangential restitution is left at 0 (perfect grip) -- real
+     * and nonzero for a bouncing ball in general (Cross, Am. J. Phys. 70(5):482), but only ever
+     * measured for a TENNIS ball, so it stays zero until a table-tennis-specific number exists.
      */
     public static final Material TABLE_MAT =
             new Material(0.98, 0.02, 0.75, 0.94, 0.25, 0.0, 0.0, 1.0, 1.00, 1.00);
 
-    /**
-     * The floor: a hard indoor sports floor. Slightly deader and grippier than the table.
-     * Only here so a missed ball behaves instead of falling forever.
-     */
+    /** The floor: a hard indoor sports floor, slightly deader and grippier than the table. Only
+     *  here so a missed ball behaves instead of falling forever. */
     public static final Material FLOOR_MAT = Material.rigid(0.80, 0.40, 1.00, 1.00);
 
-    /**
-     * The net. Loose fabric on a cord: it absorbs almost everything. Low restitution, high
-     * friction, and heavy extra damping of both velocity and spin because the netting
-     * deforms and drags rather than rebounding. TUNED — there is no standard COR for
-     * netting; calibrated so a ball into the net drops on the near side instead of
-     * bouncing back, which is what actually happens.
-     */
+    /** The net: loose fabric on a cord, absorbing almost everything. TUNED -- there is no
+     *  standard COR for netting; calibrated so a ball into the net drops on the near side
+     *  instead of bouncing back, which is what actually happens. */
     public static final Material NET_MAT = Material.rigid(0.12, 0.50, 0.55, 0.35);
 
     /**
-     * Contact parameters for one surface.
-     *
-     * Restitution is a function of approach speed, not a constant. A table tennis ball is a
-     * thin shell and above roughly 5 m/s of normal impact the cap BUCKLES -- it dimples inward
-     * instead of compressing uniformly -- and the coefficient of restitution falls away from
-     * ~0.9 toward 0.8 and below (IntechOpen ch. 83844). A single number cannot describe a ball
-     * that bounces at 0.93 off a gentle drop and 0.82 off a smash.
+     * Contact parameters for one surface. Restitution is a function of approach speed, not a
+     * constant: above roughly 5 m/s of normal impact a table tennis ball's thin shell BUCKLES
+     * (dimples inward instead of compressing uniformly) and restitution falls away from ~0.9
+     * toward 0.8 and below [CONT] -- a single number cannot describe a ball that bounces at 0.93
+     * off a gentle drop and 0.82 off a smash.
      *
      * @param restitution   normal bounce extrapolated to zero approach speed (the intercept)
      * @param restitutionFade how much restitution is lost per m/s of normal approach speed

@@ -36,17 +36,10 @@ public final class World {
             NET_WIDTH, NET_HEIGHT, NET_THICK);
 
     /**
-     * The floor, 76 cm below the playing surface.
-     *
-     * 120 m across, which sounds absurd until you work out how far a table tennis ball
-     * actually rolls. Once it is rolling, the only things slowing it are quadratic drag and
-     * rolling resistance, and drag gives distance = ln(v0/v)/k with k = 0.5*rho*A*Cd/m ~
-     * 0.114 /m -- so a ball that starts rolling at 5 m/s covers about 17 m before it is down
-     * to walking pace, and something over 20 m before it stops. The old 40 m slab was
-     * narrower than that, so a missed ball reached the rim and fell off the edge of the world.
-     *
-     * This is a bounds convenience, not a real object -- the floor you can SEE is 14 x 16 m
-     * (Court.floor). Nothing here is load bearing except being wider than the ball can roll.
+     * The floor, 76 cm below the playing surface. 120 m across: a rolling ball only slows under
+     * drag and rolling resistance, and covers 17-20+ m before stopping -- a narrower slab let a
+     * missed ball reach the rim and fall off the edge of the world. Bounds convenience, not a
+     * real object; the floor you can SEE is 14 x 16 m ({@code Court.floor}).
      */
     public static final Box FLOOR = Box.centered(
             0, -TABLE_HEIGHT - 0.5, 0,
@@ -195,24 +188,13 @@ public final class World {
     }
 
     /**
-     * Resolve contacts, earliest first, repeating until nothing more is touching.
-     *
-     * The loop matters for the net: a ball that clips the cord can be pushed down into the
-     * table in the same step, and resolving only once would leave it embedded.
-     *
-     * Two things changed here when the paddle arrived, and both are corrections rather than
-     * additions:
-     *
-     * 1. It resolves the EARLIEST contact, not the first one in a fixed list. With three
-     *    static surfaces those were the same answer often enough to get away with. With a
-     *    paddle that can be over the table they are not: a ball touching both in one step
-     *    must bounce off whichever it reached first, or a smash into the paddle resolves as
-     *    a table bounce.
-     *
-     * 2. After a SWEPT contact it flies the rest of the step. The old code left the ball
-     *    parked at the contact point for the remaining (1-t)*DT, which at table speeds was
-     *    invisible and at paddle speeds is not: a blade caught at t=0.1 would drop the ball
-     *    90% of a step short of where it belongs.
+     * Resolve contacts, EARLIEST first, repeating until nothing more is touching -- needed for
+     * the net, where a ball that clips the cord can be pushed down into the table in the same
+     * step. Resolving the first surface in a fixed list rather than the earliest contact was
+     * fine with three static surfaces but breaks once a paddle can be over the table: a smash
+     * into the paddle would resolve as a table bounce instead. After a SWEPT contact it flies
+     * the rest of the step rather than parking at the contact point, which at paddle speeds
+     * would leave the ball well short of where it belongs.
      */
     private BallState resolveContacts(BallState from, BallState to) {
         BallState before = from, current = to;
@@ -237,13 +219,10 @@ public final class World {
             }
             if (earliest == null) return current;
 
-            // Bounce the state the ball is actually IN at the moment of impact.
-            //
-            // A swept contact happens part way through the step, but the flown state carries
-            // the velocity from the END of it -- for a ball falling at 60 m/s that is a
-            // measurably faster ball than the one that touched the table. Reflecting the
-            // end-of-step velocity and then flying the remainder hands the ball free energy
-            // every bounce, which is exactly what the energy check is there to catch.
+            // Bounce the state the ball is actually IN at the moment of impact, not the
+            // end-of-step state a swept contact carries -- reflecting the later, faster velocity
+            // would hand the ball free energy every bounce (which SelfTest's energy check would
+            // catch).
             BallState atContact = current;
             if (earliest.swept()) {
                 atContact = Integrator.step(before, stepLeft * earliest.toi());

@@ -710,11 +710,58 @@ prints cursor, raw ray aim, racket and target positions, the legal bounds, the t
 and its time at `TRACK_SPEED`, the ball, its arrival time at the racket's depth, and a
 reachable yes/no with the margin. `--controldebug=true` turns it on for a capture.
 
+## The demo player, and the paddle's face settling to square
+
+**`play/DemoPlayer.java`** is a stand-in hand, not a shortcut into the blade: it produces a
+cursor point through the same `Stroke` / `PlayerReach` path a mouse does, and never touches a
+`Paddle` directly. What it knows that a beginner does not comes down to three things: it predicts
+where the ball is going (`World.predict`) rather than chasing where it is, it aims at the point on
+that path closest to `PlayerReach.HIT_Y` rather than the first reachable point (always at the
+rim, where a contact is a graze), and it sets up `SETBACK` (0.20 m) behind and `PREP_ACROSS`
+(0.18 m) to one side so the bat is still travelling — not parked — when the ball arrives. Measured
+against `Follower`: 71–79 exchanges a point on every feed, versus 1.9 for a hand that merely
+points at the ball. `swingLead()` derives when to start the stroke from `SETBACK / TRACK_SPEED`
+rather than a chosen constant, so it stays correct if either is retuned; `COMMIT` (0.30 s) and
+`STALE` (0.12 s) stop it re-predicting into a receding target as the ball closes, and stop it
+freezing on a meeting point that has already passed.
+
+**`Stroke.strokeDir`** relaxes to square (`FACE_TAU`) once the blade stops moving, rather than
+holding whatever lean its last positioning move left it at. Without that, the same ball met with
+the same incoming velocity came off at face.y = ±0.480 depending on whether the player had last
+walked in or backed up to get there — a 57° swing in blade angle from a movement that had
+finished hundreds of milliseconds earlier, because depth (a positioning axis) was also being read
+as the spin axis. Relaxing to square costs nothing wanted: the lean describes a stroke being
+played, not a walk that already ended.
+
+**The racket-wobble fix (`Stroke.idleTime` / `AIM_STILL_DELAY`).** `advance` runs once a physics
+step (480 Hz), but `aimAt` only gets a new point at the mouse's own event rate, which is coarser.
+Once the blade closed the remaining distance to the current target — usually within one of those
+gaps — every step until the next real event read as "not moving", and the face-lean easing
+relaxed toward square on each in-between step before being pulled back the instant the next event
+landed: a sawtooth in the face angle at the mouse's event rate, felt as a wobbling racket. Fixed
+by holding the relax off until the aim target has been unchanged for `AIM_STILL_DELAY` (0.05 s) of
+real time, rather than for a single physics step.
+
+**The brush gain (`ShotAssist.Tuning.driveBrush`).** `brush = lift + drive * driveBrush` has to
+be strong enough to reach genuine backspin, not just less topspin: a still blade authors
+`baseTopspin` (14 rev/s), and a hard pull-back (~-8 m/s of drive) at `driveBrush = 0.8` gives a
+brush of -6.4, so `14 + (-6.4 * topspinPerLift 2.6) ≈ -2.6 rev/s` -- just past square, into a
+genuine chop. Below about 0.7 here the whole backspin half of the gesture is unreachable.
+
+**Ball-control ease (`ShotAssist.Tuning`).** For an average player rather than a bot that always
+points exactly at the ball, the clean-contact core was widened (`qualityCore` 0.50 → 0.58,
+`qualityFalloff` 0.42 → 0.50), a fast incoming ball shrinks that core less (`qualityPaceLoss`
+0.22 → 0.15), and a mishit earns more assist (`assistFloor` 0.25 → 0.35). A mishit is still
+clearly worse than a clean hit; it stops reading as close to an automatic loss.
+
 ## Conventions
 
 - Java 21, 4-space indent.
-- Comments explain *why*, and cite a source for every real-world number. **A bare constant with no
-  citation in `physics/` is a bug.**
+- Comments stay short: what a constant is, its citation or `TUNED` reasoning, and the one
+  sentence someone needs before changing it. **A bare constant with no citation in `physics/` is
+  a bug.** The full derivation, history and measurements belong here, in this file, not in the
+  source — search this document for the class or field name before re-deriving something that
+  already has a measured answer.
 - Anything tuned by eye is labelled `TUNED` and says what it is standing in for.
 - `build/` and `out/` are git-ignored; never commit build output.
 

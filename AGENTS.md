@@ -205,8 +205,10 @@ monotone: ±2.5 m/s of swipe lands at ±0.098 m, ±5 at ±0.220, ±10 at ±0.398
 ## Conventions
 
 - Java 21, 4-space indent.
-- **Comments explain *why*, not what.** Match the density of the surrounding code — this codebase
-  documents the reasoning behind a choice and the alternative that was rejected.
+- **Comments stay short and explain *why*, not what.** One or two lines: the constraint, the
+  citation or `TUNED` reasoning, the thing that breaks if this is changed carelessly. The full
+  derivation, measurement tables and rejected alternatives belong in `docs/DESIGN.md`, not in the
+  source — check there before re-deriving something that already has a measured answer.
 - **Cite a source for every real-world number.** A bare constant with no citation in `physics/` is
   a bug.
 - Anything tuned by eye is labelled `TUNED` and says what it stands in for.

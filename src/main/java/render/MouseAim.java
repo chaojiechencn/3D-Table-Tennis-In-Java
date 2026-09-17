@@ -7,69 +7,28 @@ import physics.Vec3;
 
 /**
  * Turns a mouse position into the point on the racket's hitting plane the player is pointing
- * at. Geometry only: one ray, one horizontal plane, one intersection.
+ * at. Geometry only: build the ray the cursor points along, in scene units, and intersect it
+ * with a HORIZONTAL plane at a caller-supplied height -- not the naive "map the cursor's screen
+ * fraction onto a rectangle of table", which only reads correctly from one fixed camera angle.
  *
- * The problem it solves is that the cursor is two numbers on a screen and the paddle needs
- * three in metres. The naive fix is to map the cursor's fraction across the window straight
- * onto a rectangle of table, which is one line of code and feels correct from exactly one
- * camera angle -- orbit away from behind the near end and the paddle starts moving sideways
- * when you move the mouse up. So this does the real thing: build the ray the cursor points
- * along and intersect it with the world. That works from any preset view and any orbit,
- * because it asks the camera where it actually is rather than assuming.
- *
- * <h2>One plane, and what that buys</h2>
- *
- * The plane is HORIZONTAL and its height is given by the caller. Because it is a plane of
- * constant height rather than a surface that rises and falls, the two screen axes come apart
- * cleanly:
- *
- * <pre>
- *   cursor X  ->  world X       across the table
- *   cursor Y  ->  world Z       up and down the table, monotonically
- *   world Y                     is the plane's own height -- never read off the ray
- * </pre>
- *
- * That last line is the point. This used to return a point on a "reach surface" whose depth
- * came from where the ray crossed table height and whose height was then read on the plane
- * that depth had chosen -- so one cursor axis meant "go deeper" and "go higher" at the same
- * time, and the depth mapping doubled back on itself at full stretch. Both are gone. The
- * height is a parameter now, the caller owns it, and moving the cursor up-screen can only move
- * the blade up-table.
- *
- * <h2>What it deliberately does not do</h2>
- *
- * No clamping, no envelope, no idea where the racket is allowed to be -- {@link play.PlayerReach}
- * owns all of that, and owns it in plain Java so it can be graded headlessly. And nothing here
- * has ever seen the ball: the blade goes where the cursor points, never where the ball is.
- *
- * All the ray work happens in scene units and the result is converted once, through
- * {@link Xform}, which stays the only place the two spaces meet.
+ * Because the plane's height is a parameter rather than something read off the ray, the two
+ * screen axes come apart cleanly (cursor X -> world X, cursor Y -> world Z, monotonically); see
+ * docs/DESIGN.md, "The control mapping", for the one-screen-axis-meant-two-things bug this
+ * replaced. No clamping and no envelope -- {@link play.PlayerReach} owns that -- and nothing
+ * here has ever seen the ball. The ray work happens in scene units; the result is converted
+ * once, through {@link Xform}, which stays the only place the two spaces meet.
  */
 public final class MouseAim {
 
     /**
-     * How far along a ray to walk when it never meets the plane, in metres.
-     *
-     * A ray pointing at or above the horizon crosses the hitting plane at infinity, or behind
-     * the camera. Returning the fallback there would freeze the blade mid-motion the instant
-     * the cursor passed the horizon; walking a long way along the ray instead keeps the
-     * mapping continuous and monotone, and the caller's clamp pins the result to the far edge
-     * of the legal region -- which is exactly where "further up-table than the table goes"
-     * ought to land.
-     *
-     * The distance matters more than "well past the clamp" suggests, because it sets the
-     * LATERAL behaviour too, and that was missed when this was 30 m.
-     *
-     * Walking a fixed distance along a near-horizontal ray gives x = eye.x + d*(dir.x/horiz),
-     * so the sideways aim saturates at asin(MAX_X / d). At 30 m that is 3.4 degrees: the whole
-     * band above the horizon collapsed into a two-state left/right switch with a knife edge
-     * between them, measured at 0.559 m of blade travel for ONE pixel of mouse movement in the
-     * LOW view, and 19.6 m of blade per screen height in the default rally view.
-     *
-     * 6 m puts the saturation angle at 16.9 degrees, a five-fold gentler ridge. The depth
-     * behaviour the paragraph above describes is unchanged, because every camera in the rig
-     * sits within about 4.5 m of PlayerReach.Z_FAR -- the horizon only has to out-run the
-     * clamp, and 6 m still does.
+     * How far along a ray to walk when it never meets the plane (at or above the horizon),
+     * metres. Walking out keeps the mapping continuous and monotone instead of freezing the
+     * blade the instant the cursor crosses the horizon; the caller's clamp then pins the result
+     * to the edge of the legal region. TUNED: 6 m. This also sets the LATERAL sensitivity above
+     * the horizon (saturates at asin(MAX_X / distance)) -- 30 m was measured to collapse that
+     * whole band into a near-binary left/right switch (0.56 m of blade travel per pixel in the
+     * LOW view); 6 m gives a five-fold gentler ridge while still out-running
+     * {@code PlayerReach.Z_FAR}.
      */
     private static final double HORIZON = 6.0;
 
@@ -78,11 +37,9 @@ public final class MouseAim {
     /**
      * Where the cursor's ray meets the horizontal plane at {@code planeY} metres.
      *
-     * No state, and no dependence on where the blade currently is: the answer is a function of
-     * the cursor and the camera alone. That matters more than it looks. Reading the cursor
-     * against a plane whose height or depth was itself derived from the blade's position is a
-     * loop WITH GAIN -- the blade creeps, the ray reads differently on the plane it just moved
-     * to, and it creeps further, all the way to the stop. A fixed plane cannot do that.
+     * No state, and no dependence on where the blade currently is -- deriving the plane from the
+     * blade's own position would be a loop WITH GAIN (the blade creeps, the ray reads
+     * differently on the plane it just moved to, and it creeps further to the stop).
      *
      * @param sub      the SubScene the 3D world is drawn in
      * @param mouseX   cursor position within that SubScene
@@ -115,15 +72,11 @@ public final class MouseAim {
             // a far point rather than an astronomical one.
             s = (planeY - eye.y()) / dir.y();
             if (s <= 0) {
-                // The plane is ABOVE the eye, so a descending ray never reaches it. This
-                // happens for real: orbiting down drops the camera below the hitting plane,
-                // and from there every downward ray is in this case. Returning the caller's
-                // fallback froze the blade outright across the whole lower half of the
-                // viewport -- measured at 6 px of drag from the LOW view, and 50% of the
-                // screen dead -- with no indication anything had changed. Walking out to the
-                // horizon instead is the same answer the level-or-rising branch gives, so the
-                // mapping stays continuous through the moment the eye crosses the plane: the
-                // blade runs to its stop rather than stopping dead.
+                // The plane is ABOVE the eye (orbiting down past it is real), so a descending
+                // ray never reaches it. Walking out to the horizon -- the same answer the
+                // level-or-rising branch gives -- keeps the mapping continuous through that
+                // crossing instead of freezing the blade dead, which measured as 50% of the
+                // screen going unresponsive in the LOW view.
                 if (horizontal <= 1e-9) return fallback;
                 s = HORIZON / horizontal;
             } else if (horizontal > 1e-9) {

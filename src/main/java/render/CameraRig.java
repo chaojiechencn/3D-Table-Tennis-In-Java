@@ -69,34 +69,16 @@ public final class CameraRig {
     private static final double[] RALLY_OUT = { 21.0, 4.75, 0.08 };
 
     /*
-     * RALLY_IN's distance is 3.30 and not the 2.35 it used to be, and that is a CONTROL
-     * constraint rather than a framing preference.
-     *
-     * The player points at the hitting plane; the camera decides which parts of that plane are
-     * on screen to be pointed at. At 2.35 m the eye sat only 0.49 m above the plane, so the
-     * bottom of the 38 degree frustum met y = HIT_Y at z = 1.485 -- the camera was standing
-     * inside the part of the envelope it was supposed to let you aim into. PlayerReach.Z_FAR is
-     * 2.40, and the whole point of that number (Sep 4, later) was taking the worst touchable
-     * window from 98 ms to 302 ms. In this view it was back to 90 ms: WORSE than the bug that
-     * motivated the change, and invisible because RallyTest grades PlayerReach.clamp directly
-     * and never looks through a camera.
-     *
-     * The depth the cursor can reach, for a camera looking down the table at pitch p from
-     * distance d with a 38 degree vertical FOV, is
-     *
-     *     z_reach = d * [ cos(p) - sin(p) / tan(p + 19) ]
-     *
-     * which is 0.632*d at p = 12. Reaching Z_FAR that way needs d = 3.80, which is most of the
-     * way out to RALLY_OUT's 4.75 and stops the close view being close. Dropping the pitch is
-     * the cheaper lever -- the bracket rises to 0.717 at p = 8 -- so {8.0, 3.45} reaches
-     * z = 2.47 while sitting NEARER the table than {12.0, 3.80} would. Measured through the
-     * real rig, not derived and hoped for: the sweep is in the commit message.
-     *
-     * A flatter, closer eye is also the better picture for the view that exists to put you in
-     * the rally.
-     *
-     * TOP (z = 1.508) and HIGH (1.162) have the same shortfall and are left alone deliberately:
-     * they are inspection views, not ones a rally is played from.
+     * RALLY_IN's {pitch, distance} is a CONTROL constraint, not a framing preference: the
+     * player aims by casting the cursor's ray onto the hitting plane, so the camera decides how
+     * much of PlayerReach's envelope is on screen to aim into. For a camera at pitch p and
+     * distance d with this 38-degree vertical FOV, the reachable depth is
+     * z_reach = d * [cos(p) - sin(p)/tan(p+19)]. At the old {12, 2.35} that frustum bottomed out
+     * at z = 1.485, well short of PlayerReach.Z_FAR = 2.40 -- invisible to RallyTest, which
+     * grades PlayerReach.clamp directly and never looks through a camera. {8.0, 3.45} reaches
+     * z = 2.47 while sitting nearer the table than raising distance alone would need (measured
+     * through the real rig). TOP and HIGH have the same shortfall and are left alone
+     * deliberately -- inspection views, not ones a rally is played from.
      */
 
     /** Seconds for the cut between the two views. Short -- it should read as a cut, not a
@@ -123,15 +105,10 @@ public final class CameraRig {
     private static final double OPP_CENTRE_Z = -TABLE_LENGTH / 4;
 
     /**
-     * Hard cap on the swing, degrees.
-     *
-     * There is a control constraint here, not a framing preference -- see the long comment on
-     * RALLY_IN's distance above. The player aims by casting the cursor's ray onto the hitting
-     * plane, so the camera decides which parts of PlayerReach's envelope are on screen to be
-     * pointed at, and this file has already shipped one bug where the camera quietly cost the
-     * player two thirds of their touchable window. Yaw slides the envelope across the frame
-     * the same way distance did. Measured through the real camera at this limit, the full
-     * depth range Z_NEAR 0.30 to Z_FAR 2.40 is still addressable.
+     * Hard cap on the swing, degrees -- the same control constraint as RALLY_IN's distance
+     * above (yaw slides PlayerReach's envelope across the frame the same way distance does).
+     * Measured through the real camera at this limit, the full depth range Z_NEAR 0.30 to
+     * Z_FAR 2.40 is still addressable.
      */
     private static final double MAX_SWING_DEG = 22.0;
 
@@ -231,20 +208,11 @@ public final class CameraRig {
         rcDist   += (rallyTarget[1] - rcDist)   * k;
         rcHeight += (rallyTarget[2] - rcHeight) * k;
 
-        /*
-         * The swing: put the camera on the line from the opponent's half through the ball.
-         * atan2 of the horizontal offset, because yaw 0 already looks down the table.
-         *
-         * NEGATED, and not as a guess. Xform maps physics (x, y, z) to scene (x, -y, -z) --
-         * two axes flipped, which is a change of handedness. So a rotation about Y worked out
-         * in physics space describes the OPPOSITE rotation once it reaches the JavaFX gimbal,
-         * and an angle that is correct on paper swings the camera to the wrong side of the
-         * table. Measured before this negation: a ball at x = +1.20 put the camera at
-         * x = -1.28, mirrored about the centre line at every ball position.
-         *
-         * This is the conversion happening at the boundary, which is where it belongs -- the
-         * geometry above is all physics space, and only this one step speaks JavaFX.
-         */
+        // The swing: put the camera on the line from the opponent's half through the ball
+        // (atan2 of the horizontal offset, since yaw 0 already looks down the table). NEGATED
+        // because Xform maps physics (x, y, z) to scene (x, -y, -z) -- a handedness flip, so a
+        // physics-space rotation about Y is the opposite rotation once it reaches the JavaFX
+        // gimbal. This is that conversion happening at the boundary, where it belongs.
         double wantYaw = 0;
         if (ball != null && ball.isFinite()) {
             wantYaw = clamp(-Math.toDegrees(Math.atan2(ball.x(), ball.z() - OPP_CENTRE_Z)),
