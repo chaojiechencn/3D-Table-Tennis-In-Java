@@ -28,7 +28,7 @@ import static physics.Constants.*;
  * "you cannot cheat by flinging the mouse" is a claim about behaviour that nothing on screen
  * would contradict loudly enough to notice.
  *
- * Run: java -cp out/production/3D-Table-Tennis-In-Java play.RallyTest
+ * Run from the project root: bash ./gradlew rallyTest (Windows: .\gradlew.bat rallyTest).
  * Exits 0 if everything passes, 1 otherwise.
  */
 public final class RallyTest {

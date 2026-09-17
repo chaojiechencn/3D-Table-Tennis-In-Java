@@ -15,7 +15,7 @@ import static physics.Constants.*;
  *
  * A demo that merely looks right is not evidence. This is.
  *
- * Run: java -cp out/production/T1-WTT-Project-CS-IS physics.SelfTest
+ * Run from the project root: bash ./gradlew selfTest (Windows: .\gradlew.bat selfTest).
  * Exits 0 if everything passes, 1 otherwise.
  */
 public final class SelfTest {

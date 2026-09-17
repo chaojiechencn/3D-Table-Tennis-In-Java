@@ -1,9 +1,0 @@
-# Python bytecode — regenerated on import, including inside vendor/
-__pycache__/
-*.py[cod]
-
-# The repo root ignores bin/ for Java build output, and that pattern is unanchored,
-# so it also swallows the vendored package's console-script directory. This is a
-# shipped part of websocket-client, not build output — un-exclude the directory
-# itself, which is the only way to re-include anything underneath it.
-!vendor/bin/

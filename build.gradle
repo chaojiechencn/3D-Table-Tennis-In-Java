@@ -18,18 +18,6 @@ javafx {
     modules = ['javafx.controls', 'javafx.graphics', 'javafx.swing']
 }
 
-sourceSets {
-    main {
-        java {
-            srcDirs = ['src']
-        }
-        resources {
-            srcDirs = ['src']
-            exclude '**/*.java'
-        }
-    }
-}
-
 application {
     mainClass = 'Table_Tennis_In_3D'
 }
@@ -37,6 +25,24 @@ application {
 tasks.register('selfTest', JavaExec) {
     group = 'verification'
     description = 'Runs the headless physics validation suite'
+    dependsOn tasks.named('testClasses')
     mainClass = 'physics.SelfTest'
-    classpath = sourceSets.main.runtimeClasspath
+    classpath = sourceSets.test.runtimeClasspath
+    javaLauncher = javaToolchains.launcherFor(java.toolchain)
+}
+
+tasks.register('rallyTest', JavaExec) {
+    group = 'verification'
+    description = 'Runs the headless gameplay validation suite'
+    dependsOn tasks.named('testClasses')
+    mainClass = 'play.RallyTest'
+    classpath = sourceSets.test.runtimeClasspath
+    javaLauncher = javaToolchains.launcherFor(java.toolchain)
+}
+
+// These suites are executable mains, so test/check/build must invoke them explicitly.
+// No framework tests are expected: failure comes from either suite's nonzero exit.
+tasks.named('test') {
+    dependsOn tasks.named('selfTest'), tasks.named('rallyTest')
+    failOnNoDiscoveredTests = false
 }

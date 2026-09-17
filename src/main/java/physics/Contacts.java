@@ -5,19 +5,13 @@ import physics.Constants.Material;
 import static physics.Constants.*;
 
 /**
- * ONE collision solver, used for the table, the net and the floor.
- *
- * Everything the ball can hit is an axis-aligned box, and everything it can hit responds the
- * same way: a normal impulse with restitution, plus a tangential impulse that either grips
- * or slides. The three surfaces differ only by their {@link Material}. Resisting the urge to
- * write a bespoke "bounceOffTable" and a separate "hitNet" is what keeps the spin coupling
- * consistent, because the net has to steal spin by the same rules the table uses to make it.
- *
- * The spin coupling is the interesting half. A topspin ball arrives with its contact patch
- * already moving backwards relative to the table, so friction there ADDS forward speed and
- * the ball kicks low and long. A backspin ball arrives with the patch moving forwards, so
- * friction subtracts, and the ball checks up short, sometimes reversing its own spin. None
- * of that is scripted; it falls out of the impulse below.
+ * ONE collision solver, used for the table, the net and the floor -- see AGENTS.md invariant 4.
+ * Everything the ball can hit is an axis-aligned box responding the same way (a normal impulse
+ * with restitution, plus a tangential impulse that grips or slides), differing only by
+ * {@link Material}. The spin coupling falls out of that impulse rather than being scripted: a
+ * topspin ball's contact patch is already moving backwards relative to the surface, so friction
+ * ADDS forward speed and it kicks low and long; a backspin ball's patch moves forwards, so
+ * friction subtracts and it checks up short.
  */
 public final class Contacts {
 
@@ -141,15 +135,12 @@ public final class Contacts {
             return new Contact(1.0, p1, normalAt(surface, p1), false);
         }
 
-        // Case 2: it passed clean through between steps. A 30 m/s smash covers 6.25 cm per
-        // step, which is very nearly the 6.5 cm it takes to cross the table slab, so this is
-        // not a theoretical concern: without the swept test, the hardest shots in the game
-        // would occasionally fall straight through the table.
-        //
-        // The sweep is done in the SURFACE's frame. The collider is already at its
-        // end-of-step pose, so the ball's start position has to be carried into that frame:
-        // the surface was one step behind, and relative to it the ball started at p0 + u*DT.
-        // For the table, the net and the floor u is zero and this is exactly the old test.
+        // Case 2: it passed clean through between steps -- a real risk, not theoretical: a
+        // 30 m/s smash covers 6.25 cm per step, close to the 6.5 cm needed to cross the table
+        // slab. Done in the SURFACE's frame (AGENTS.md invariant 5): the collider is already at
+        // its end-of-step pose, so the ball's start position is carried into that frame as
+        // p0 + u*DT, which collapses to the old test wherever u is zero (every surface but a
+        // moving paddle).
         Vec3 u = surface.velocityAt(p1);
         Vec3 q0 = p0.plusScaled(u, DT);
 
@@ -177,12 +168,10 @@ public final class Contacts {
         Vec3 v = s.vel(), w = s.spin();
         Vec3 contactPoint = s.pos().plusScaled(n, -BALL_R);
 
-        // Everything here is measured RELATIVE TO THE SURFACE. For the table, the net and the
-        // floor u is zero and every line below is what it always was. For a paddle it is the
-        // whole of the physics: a blade swung at 15 m/s into a ball drifting at 2 m/s is a
-        // 17 m/s impact, and a blade brushing tangentially past a ball is what puts spin on
-        // it. Written in absolute velocity, as this was, a paddle catching up to a receding
-        // ball reads as "already separating" and does nothing at all.
+        // Everything here is measured RELATIVE TO THE SURFACE (AGENTS.md invariant 5) -- u is
+        // zero for the table, net and floor, but for a paddle it is the whole of the physics.
+        // Written in absolute velocity, a paddle catching up to a receding ball would read as
+        // "already separating" and do nothing at all.
         Vec3 u = box.velocityAt(contactPoint);
 
         double vn = v.minus(u).dot(n);
