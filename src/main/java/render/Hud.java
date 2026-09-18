@@ -24,7 +24,8 @@ import javafx.scene.layout.VBox;
  *
  * The one exception is the shot line, and it is only on while V is: it prints the numbers from
  * the shot-assist overlay that cannot be drawn as an arrow in the 3D scene -- launch speed,
- * spin, how many correction passes the shot needed, and whether it came out legal.
+ * spin, how many correction passes the shot needed, and whether it came out legal. In raw-physics
+ * mode (S) there is no shot-assist call to read, so it prints a one-line note instead.
  */
 public final class Hud {
 
@@ -49,7 +50,8 @@ public final class Hud {
             VIEW    F rally-cam on/off   C preset view
                     V shot debug   D control debug
                     G ghost   T trail   B ball x2   H hud   ESC quit
-            DEMO    M watch it play itself""");
+            DEMO    M watch it play itself
+            SIM     S raw physics -- no aim assist, either racket""");
 
         setShot(null);
         root.getChildren().addAll(corner(Pos.TOP_LEFT, feed, shot),

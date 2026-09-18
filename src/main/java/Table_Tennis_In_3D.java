@@ -40,7 +40,8 @@ import static physics.Constants.MAX_FRAME;
  * rackets; the ITTF one-bounce rule is enforced by handing {@link World} a null racket until the
  * ball has bounced on that side; a rally-cam cuts between two fixed views on who last hit; `V`
  * shows what {@code ShotAssist} did and `D` shows the control/reachability overlay -- see their
- * readout methods below for why each exists.
+ * readout methods below for why each exists. `S` skips {@code ShotAssist} altogether, on both
+ * rackets, so every contact keeps the raw impulse-solver bounce instead of an authored shot.
  *
  * The physics lives in {@code physics} and the game logic in {@code play}; neither imports
  * JavaFX, so both run headlessly under {@code physics.SelfTest} and {@code play.RallyTest}.
@@ -83,6 +84,12 @@ public class Table_Tennis_In_3D extends Application {
 
     /** Turns every racket contact into a playable shot -- see ShotAssist. */
     private final ShotAssist shotAssist = new ShotAssist();
+
+    /** `S` toggles this: when true, ShotAssist is skipped entirely and a contact keeps the raw
+     *  impulse-solver bounce -- the real simulation with no authored aim, on either racket. Off
+     *  by default; see docs/GAMEPLAY.md for what that trade costs (11 of 75 sweep contacts land
+     *  at all without the assist). */
+    private boolean rawPhysics = false;
 
     /** Paddle-contact count at the last step, so the assist and rally-cam fire once per hit. */
     private int lastPaddleHits = 0;
@@ -388,20 +395,26 @@ public class Table_Tennis_In_3D extends Application {
             boolean playerHit = lastHitByPlayer();
             Paddle racket = playerHit ? playerPaddle : aiPaddle;
 
-            world.setState(shotAssist.assist(beforeStep, world.state(), racket, playerHit));
+            if (!rawPhysics) {
+                world.setState(shotAssist.assist(beforeStep, world.state(), racket, playerHit));
+            }
             rig.onRallyHit(playerHit);
             lastHitSide = playerHit ? -1 : 1;
             lastHitTime = world.time();
             playerMayHit = false;
             aiMayHit = false;
 
-            ShotAssist.Debug d = shotAssist.debug();
-            shotDebug.set(d.contact(), d.racketVel(), d.incomingVel(), d.reflectDir(),
-                          d.intendDir(), d.finalDir(), d.target(), d.landing(),
-                          d.speed(), d.spin(), d.passes(), d.legal());
-            shotDebug.setTargetArea(shotAssist.targetHalfWidth(), shotAssist.targetNearDepth(),
-                                    shotAssist.targetFarDepth(), !playerHit);
-            hud.setShot(shotDebug.isShown() ? shotDebug.readout() : null);
+            if (!rawPhysics) {
+                ShotAssist.Debug d = shotAssist.debug();
+                shotDebug.set(d.contact(), d.racketVel(), d.incomingVel(), d.reflectDir(),
+                              d.intendDir(), d.finalDir(), d.target(), d.landing(),
+                              d.speed(), d.spin(), d.passes(), d.legal());
+                shotDebug.setTargetArea(shotAssist.targetHalfWidth(), shotAssist.targetNearDepth(),
+                                        shotAssist.targetFarDepth(), !playerHit);
+                hud.setShot(shotDebug.isShown() ? shotDebug.readout() : null);
+            } else {
+                hud.setShot(shotDebug.isShown() ? "raw physics -- no shot assist" : null);
+            }
         }
 
         // A table bounce opens the receiver's racket -- unless it is the SECOND bounce on that
@@ -719,16 +732,22 @@ public class Table_Tennis_In_3D extends Application {
                 showControlDebug = !showControlDebug;
                 hud.setControl(showControlDebug ? controlReadout() : null);
             }
-            case M -> {
-                demoMode = !demoMode;
-                hud.setFeed(demoMode ? currentShot.name() + "   [DEMO -- M to take over]"
-                                     : currentShot.name());
-            }
+            case M -> { demoMode = !demoMode; refreshFeedLabel(); }
+            case S -> { rawPhysics = !rawPhysics; refreshFeedLabel(); }
             case H -> { showHud = !showHud; hud.setShown(showHud); }
             case ESCAPE -> Platform.exit();
 
             default -> { }
         }
+    }
+
+    /** The feed label plus whichever of DEMO / raw-physics mode tags apply -- both M and S flip
+     *  independent flags but share the one line, so this is the single place that composes it. */
+    private void refreshFeedLabel() {
+        String label = currentShot.name();
+        if (rawPhysics) label += "   [RAW PHYSICS -- S for assist]";
+        if (demoMode)   label += "   [DEMO -- M to take over]";
+        hud.setFeed(label);
     }
 
     private void pick(int index) {
@@ -755,7 +774,7 @@ public class Table_Tennis_In_3D extends Application {
     private void launchShot(Shots shot) {
         currentShot = shot;
         world.launch(shot.state());
-        hud.setFeed(shot.name());
+        refreshFeedLabel();
         hud.setScore(score.line());      // also puts 0-0 on screen for the opening serve
 
         // The feed stands in for the player's own serve, so the rally-cam opens zoomed IN; it
@@ -816,6 +835,7 @@ public class Table_Tennis_In_3D extends Application {
                 case "--controldebug" -> showControlDebug = Boolean.parseBoolean(kv[1]);
                 case "--demo" -> demoMode = Boolean.parseBoolean(kv[1]);
                 case "--rallycam" -> keepRallyCam = Boolean.parseBoolean(kv[1]);
+                case "--rawphysics" -> rawPhysics = Boolean.parseBoolean(kv[1]);
                 default -> { }
             }
         }

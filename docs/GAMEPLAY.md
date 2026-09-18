@@ -50,6 +50,12 @@ than scripted — spin curves it in the air, and it changes the bounce when the 
 topspin kicks forward, backspin sits up). The assist shapes the ball only at the moment a racket
 hits it; between hits it flies for real.
 
+Press **`S`** to see that underlying simulation directly: it turns the shot assist off for both
+rackets, so every contact keeps the raw impulse-solver bounce instead of an authored shot aimed
+into the target box. This is genuinely harder, not just less forgiving — measured over the same
+75-swing sweep used to tune the assist, only 11 of 75 land on the table at all, and the rest go up
+to 2.4 m wide at 24 m/s. `S` again turns the assist back on.
+
 ## Features
 
 **Playable now**
@@ -64,6 +70,8 @@ hits it; between hits it flies for real.
 - Full ball-flight simulation between hits: spin, air drag, Magnus curve, spin-coupled bounces
 - A menu of shots to feed in, a grey no-spin "ghost" trail, and a `V` debug overlay that shows
   exactly how a shot was chosen
+- A raw-physics mode (`S`) that turns the shot assist off entirely, for players who want the real
+  simulation with no aim help on either racket
 
 **In progress**
 
@@ -111,6 +119,7 @@ Other keys (carried over from the physics demo):
 | `T` | Toggle the flight trail |
 | `B` | Draw the ball at 2× (physics still uses 40 mm) |
 | `A` | Toggle auto-replay |
+| `S` | Toggle raw-physics mode: no shot assist, either racket -- real physics only |
 | `H` | Toggle the on-screen legend |
 | `Esc` | Quit |
 | Left-drag / scroll | Orbit / zoom the camera (turns the follow-cam off) |

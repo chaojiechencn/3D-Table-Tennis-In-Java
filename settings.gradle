@@ -1,1 +1,9 @@
+plugins {
+    // Lets Gradle auto-provision a JDK 21 toolchain (build.gradle pins
+    // languageVersion = 21) when the machine only has other Java versions
+    // installed. Without this, `Cannot find a Java installation ... matching
+    // {languageVersion=21}` is fatal instead of triggering a download.
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
+}
+
 rootProject.name = '3D-Table-Tennis-In-Java'
