@@ -19,14 +19,14 @@ javafx {
 }
 
 application {
-    mainClass = 'Table_Tennis_In_3D'
+    mainClass = 'pong.screens.MatchScreen'
 }
 
 tasks.register('selfTest', JavaExec) {
     group = 'verification'
     description = 'Runs the headless physics validation suite'
     dependsOn tasks.named('testClasses')
-    mainClass = 'physics.SelfTest'
+    mainClass = 'pong._tests.PhysicsTest'
     classpath = sourceSets.test.runtimeClasspath
     javaLauncher = javaToolchains.launcherFor(java.toolchain)
 }
@@ -35,7 +35,7 @@ tasks.register('rallyTest', JavaExec) {
     group = 'verification'
     description = 'Runs the headless gameplay validation suite'
     dependsOn tasks.named('testClasses')
-    mainClass = 'play.RallyTest'
+    mainClass = 'pong._tests.RallyTest'
     classpath = sourceSets.test.runtimeClasspath
     javaLauncher = javaToolchains.launcherFor(java.toolchain)
 }
