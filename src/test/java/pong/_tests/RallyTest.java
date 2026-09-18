@@ -16,6 +16,7 @@ import pong.systems.control.PlayerReach;
 import pong.systems.control.Stroke;
 import pong.systems.opponent.Follower;
 import pong.systems.opponent.Opponent;
+import pong.systems.connectors.RallyRules;
 import pong.systems.scoring.Scoreboard;
 import pong.systems.shotmaking.ShotAssist;
 
@@ -534,38 +535,31 @@ public final class RallyTest {
         Stroke hand = new Stroke(PlayerReach.NEUTRAL);
         Opponent bot = new Follower();
         ShotAssist assist = new ShotAssist();
-        world.launch(shot.state());
 
-        boolean aiMayHit = false, playerMayHit = false, returned = false;
-        int lastHits = 0, lastSerial = world.bounceSerial(), lastHitSide = 0;
-        double lastHitTime = -1;
+        // The REAL rules, not a copy of them: gating, the one-bounce rule and point-ending all
+        // come from RallyRules, exactly as MatchScreen drives them. This loop used to reimplement
+        // that here, which meant the thing under test was the copy.
+        RallyRules rules = new RallyRules(world);
+        rules.serve(shot.state());
 
+        boolean returned = false;
         for (int i = 0; i < (int) (14.0 / DT); i++) {
             // The stand-in hand: point the CURSOR at the ball, and let the envelope and the
             // tracking speed decide whether the blade gets there. Both are the real ones.
             hand.aimAt(PlayerReach.clamp(new Vec3(world.state().pos().x(), 0, world.state().pos().z())));
             hand.advance(me, DT);
             bot.advance(world.state(), ai, DT);
-            world.setRackets(playerMayHit ? me : null, aiMayHit ? ai : null);
+            rules.gate(me, ai);
 
             Ball before = world.state();
             world.step();
+            RallyRules.Step step = rules.observe();
 
-            if (world.racketHits() > lastHits) {
-                lastHits = world.racketHits();
-                boolean playerHit = before.pos().z() > 0;
-                world.setState(assist.assist(before, world.state(), playerHit ? me : ai, playerHit));
-                playerMayHit = aiMayHit = false;
-                lastHitSide = playerHit ? -1 : 1;
-                lastHitTime = world.time();
-                if (playerHit) returned = true;
+            if (step.racketHit()) {
+                Racket hitter = step.playerHit() ? me : ai;
+                world.setState(assist.assist(before, world.state(), hitter, step.playerHit()));
+                if (step.playerHit()) returned = true;
             }
-            if (world.bounceSerial() > lastSerial && world.time() - lastHitTime > DT * 2) {
-                lastSerial = world.bounceSerial();
-                if (world.state().pos().z() > 0) { if (lastHitSide >= 0) playerMayHit = true; }
-                else aiMayHit = true;
-            }
-            lastSerial = world.bounceSerial();
 
             // Returned AND it got to the other side: a ball popped straight up is not a return.
             if (returned && world.state().pos().z() < -0.1) return true;
@@ -578,8 +572,8 @@ public final class RallyTest {
      * One feed, flown until the opponent has returned it and the return has bounced on the
      * player's half; the ball's path from that bounce onward, or null if no such rally happens.
      *
-     * Deliberately built the same way MrPong builds it -- Follower, ShotAssist on every
-     * contact, the one-bounce rule gating the rackets -- because a reachability claim about a
+     * Deliberately built the same way the game builds it -- Follower, ShotAssist on every
+     * contact, and {@link RallyRules} gating the rackets -- because a reachability claim about a
      * ball the game never actually produces would be worth nothing.
      */
     private static List<Vec3> pathAfterThePlayerSideBounce(Shots shot) {
@@ -587,33 +581,28 @@ public final class RallyTest {
         Racket ai = new Racket(new Vec3(0, 0.20, Follower.PLANE_Z), new Vec3(0, 0, 1));
         Opponent bot = new Follower();
         ShotAssist assist = new ShotAssist();
-        world.launch(shot.state());
 
-        boolean aiMayHit = false, returned = false, bounced = false;
-        int lastHits = 0, lastSerial = world.bounceSerial();
-        double lastHitTime = -1;
+        RallyRules rules = new RallyRules(world);
+        rules.serve(shot.state());
+
+        boolean returned = false, bounced = false;
         List<Vec3> path = new ArrayList<>();
 
         for (int i = 0; i < (int) (14.0 / DT); i++) {
             bot.advance(world.state(), ai, DT);
-            world.setRackets(null, aiMayHit ? ai : null);      // the PLAYER never hits here
+            rules.gate(null, ai);                              // the PLAYER never hits here
 
             Ball before = world.state();
             world.step();
+            RallyRules.Step step = rules.observe();
 
-            if (world.racketHits() > lastHits) {
-                lastHits = world.racketHits();
+            if (step.racketHit()) {
                 world.setState(assist.assist(before, world.state(), ai, false));
-                aiMayHit = false;
-                lastHitTime = world.time();
                 returned = true;
             }
-            if (world.bounceSerial() > lastSerial && world.time() - lastHitTime > DT * 2) {
-                lastSerial = world.bounceSerial();
-                if (world.state().pos().z() > 0) { if (returned) bounced = true; }
-                else aiMayHit = true;
-            }
-            lastSerial = world.bounceSerial();
+            // The player's racket going live IS the return's bounce on the player's half --
+            // which is the one-bounce rule, so it is read from the rules rather than re-derived.
+            if (returned && rules.playerMayHit()) bounced = true;
 
             if (bounced) path.add(world.state().pos());
             if (world.state().pos().y() < -TABLE_HEIGHT) break;

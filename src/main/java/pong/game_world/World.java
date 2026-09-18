@@ -360,9 +360,6 @@ public final class World {
     public int bounceSerial()   { return bounceSerial; }
     public int racketHits()     { return racketHits; }
 
-    public Racket player()      { return player; }
-    public Racket opponent()    { return opponent; }
-
     /** Give this world its rackets. Passing null for both makes it a plain flight simulator. */
     public void setRackets(Racket player, Racket opponent) {
         this.player = player;
@@ -373,11 +370,7 @@ public final class World {
     public Event lastEvent()       { return events.peekLast(); }
     public List<Vec3> bounceMarks() { return List.copyOf(bounceMarks); }
 
-    /** True while the ball is over the playing surface, at any height. */
-    public boolean overTable() {
-        Vec3 p = state.pos();
-        return Math.abs(p.x()) <= TABLE_WIDTH / 2 && Math.abs(p.z()) <= TABLE_LENGTH / 2;
-    }
+
 
     // ------------------------------------------------------------------ offline prediction
 

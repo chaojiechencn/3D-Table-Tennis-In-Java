@@ -4,6 +4,7 @@ import static pong.config.Physical.*;
 import pong.core.math.Vec3;
 import pong.game_objects.ball.Ball;
 import pong.game_world.World;
+import pong.core.math.Scalars;
 
 /**
  * Where the player's racket is allowed to be, and how long it takes to get there.
@@ -77,9 +78,9 @@ public final class PlayerReach {
      */
     public static Vec3 clamp(Vec3 rawAim) {
         if (rawAim == null || !rawAim.isFinite()) return NEUTRAL;
-        return new Vec3(clamp(rawAim.x(), -MAX_X, MAX_X),
+        return new Vec3(Scalars.clamp(rawAim.x(), -MAX_X, MAX_X),
                         HIT_Y,
-                        clamp(rawAim.z(), Z_NEAR, Z_FAR));
+                        Scalars.clamp(rawAim.z(), Z_NEAR, Z_FAR));
     }
 
     /**
@@ -103,23 +104,16 @@ public final class PlayerReach {
     public static Vec3 clampBrushed(Vec3 rawAim, double heightFrac, double holdZ) {
         if (rawAim == null || !rawAim.isFinite()) return NEUTRAL;
         // Screen Y grows downward, so the top of the viewport is the high blade.
-        double up = 1 - 2 * clamp(heightFrac, 0, 1);
+        double up = 1 - 2 * Scalars.clamp(heightFrac, 0, 1);
 
         // The blade is a disc of radius BLADE_R: a centre below that hangs the bottom of the bat
         // through the table top, so the downward half of the band is cut short there. The full
         // band is available upward.
         double y = Math.max(BLADE_R, HIT_Y + up * BRUSH_BAND);
 
-        return new Vec3(clamp(rawAim.x(), -MAX_X, MAX_X),
+        return new Vec3(Scalars.clamp(rawAim.x(), -MAX_X, MAX_X),
                         y,
-                        clamp(holdZ, Z_NEAR, Z_FAR));
-    }
-
-    /** Whether a point is inside the legal racket region (on the hitting plane, to 1 mm). */
-    public static boolean contains(Vec3 p) {
-        return Math.abs(p.y() - HIT_Y) < 1e-3
-            && p.x() >= -MAX_X - 1e-9 && p.x() <= MAX_X + 1e-9
-            && p.z() >= Z_NEAR - 1e-9 && p.z() <= Z_FAR + 1e-9;
+                        Scalars.clamp(holdZ, Z_NEAR, Z_FAR));
     }
 
     /**
@@ -166,18 +160,4 @@ public final class PlayerReach {
         return Double.NaN;
     }
 
-    /**
-     * Can the blade be where the cursor is asking before the ball gets to that depth? The
-     * question that separates "the control mapping cannot express what I wanted" from "that
-     * ball was genuinely unplayable".
-     */
-    public static boolean reachableInTime(Vec3 bladeAt, Vec3 target, Ball ball) {
-        double arrive = timeToDepth(ball, target.z());
-        if (Double.isNaN(arrive)) return true;         // not coming here; nothing to be late for
-        return travelTime(bladeAt, target) <= arrive;
-    }
-
-    private static double clamp(double v, double lo, double hi) {
-        return v < lo ? lo : (v > hi ? hi : v);
-    }
 }

@@ -60,10 +60,7 @@ public final class BallView {
         shadow.update(s.pos(), magnified);
     }
 
-    /** Orientation only, when position comes from an interpolated vector. */
-    public void setOrientation(Quat q) {
-        group.getTransforms().setAll(Xform.toRotate(q));
-    }
+
 
     /**
      * Draw the ball at twice life size.

@@ -2,6 +2,7 @@ package pong.game_objects.ball;
 
 import static pong.config.Physical.*;
 import pong.core.math.Vec3;
+import static pong.core.math.Scalars.frac;
 
 /**
  * The forces on a ball in flight: gravity, drag, Magnus lift, and spin decay. Everything here
@@ -61,7 +62,7 @@ public final class Aero {
         while (hi < LIFT_SPEEDS.length - 1 && LIFT_SPEEDS[hi] < speed) hi++;
         int lo = hi - 1;
         double f = frac(speed, LIFT_SPEEDS[lo], LIFT_SPEEDS[hi]);
-        return lerp(rowMagnus(lo, omega), rowMagnus(hi, omega), f);
+        return smooth(rowMagnus(lo, omega), rowMagnus(hi, omega), f);
     }
 
     /** One fitted speed row: linear branch, quadratic branch, blended where they meet. */
@@ -75,7 +76,7 @@ public final class Aero {
         double lo = wb * (1 - LIFT_BLEND), hi = wb * (1 + LIFT_BLEND);
         if (omega <= lo) return linear;
         if (omega >= hi) return quad;
-        return lerp(linear, quad, frac(omega, lo, hi));
+        return smooth(linear, quad, frac(omega, lo, hi));
     }
 
     // ---------------------------------------------------------------- interpolation
@@ -90,16 +91,9 @@ public final class Aero {
         double fr = frac(r, rows[ri - 1], rows[ri]);
         double fc = frac(c, cols[ci - 1], cols[ci]);
 
-        double top = lerp(table[ri - 1][ci - 1], table[ri - 1][ci], fc);
-        double bot = lerp(table[ri][ci - 1], table[ri][ci], fc);
-        return lerp(top, bot, fr);
-    }
-
-    /** Position of x between a and b, clamped to [0,1] so the tables never extrapolate. */
-    private static double frac(double x, double a, double b) {
-        if (b - a < 1e-12) return 0;
-        double t = (x - a) / (b - a);
-        return t < 0 ? 0 : (t > 1 ? 1 : t);
+        double top = smooth(table[ri - 1][ci - 1], table[ri - 1][ci], fc);
+        double bot = smooth(table[ri][ci - 1], table[ri][ci], fc);
+        return smooth(top, bot, fr);
     }
 
     /**
@@ -110,7 +104,7 @@ public final class Aero {
      * zero first AND second derivative at both ends, so the assembled curve is C2 across every
      * node while still passing exactly through the measured values.
      */
-    private static double lerp(double a, double b, double t) {
+    private static double smooth(double a, double b, double t) {
         double smooth = t * t * t * (t * (t * 6 - 15) + 10);
         return a + (b - a) * smooth;
     }
@@ -195,18 +189,8 @@ public final class Aero {
         return spin.scale(-SPIN_DECAY_PER_M * vel.length());
     }
 
-    /** Total acceleration on a ball in free flight. */
-    public static Vec3 acceleration(Vec3 vel, Vec3 spin) {
-        return acceleration(vel, spin, DEFAULT_DRAG);
-    }
-
     public static Vec3 acceleration(Vec3 vel, Vec3 spin, DragModel model) {
         return new Vec3(0, -G, 0).plus(drag(vel, spin, model)).plus(magnus(vel, spin));
-    }
-
-    /** The derivative the integrator samples. */
-    public static Derivative derivative(Vec3 pos, Vec3 vel, Vec3 spin) {
-        return derivative(pos, vel, spin, DEFAULT_DRAG);
     }
 
     public static Derivative derivative(Vec3 pos, Vec3 vel, Vec3 spin, DragModel model) {

@@ -179,9 +179,8 @@ public final class DemoPlayer {
         return best;
     }
 
-    /** Where the hand is pointing, for the overlay. */
-    public Vec3 lastAim() { return lastAim; }
 
-    /** The far edge of the table, for callers that want to draw the intended target. */
-    public static double tableHalfLength() { return TABLE_LENGTH / 2; }
+
+
+
 }

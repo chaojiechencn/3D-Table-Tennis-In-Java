@@ -110,8 +110,7 @@ public record Shots(String name, String detail, Ball state, Aim.Solution solutio
         throw new IllegalArgumentException("no shot named " + name);
     }
 
-    /** Spin in rev/s, the unit the sport actually uses. */
-    public double spinRevs() { return state.spinRevsPerSec(); }
+
 
     /** The same shot with the spin removed, for the side-by-side comparison ghost. */
     public Ball withoutSpin() { return state.withSpin(Vec3.ZERO); }

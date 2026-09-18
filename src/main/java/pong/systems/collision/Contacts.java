@@ -3,6 +3,7 @@ package pong.systems.collision;
 import static pong.config.Physical.*;
 import pong.core.math.Vec3;
 import pong.game_objects.ball.Ball;
+import static pong.core.math.Scalars.clamp;
 
 /**
  * ONE collision solver, used for the table, the net and the floor -- see AGENTS.md invariant 4.
@@ -24,7 +25,6 @@ public final class Contacts {
             return new Box(new Vec3(cx - sx / 2, cy - sy / 2, cz - sz / 2),
                            new Vec3(cx + sx / 2, cy + sy / 2, cz + sz / 2));
         }
-        public Vec3 center() { return min.plus(max).scale(0.5); }
 
         /** Nearest point on the box to p (equals p when p is inside). */
         @Override public Vec3 closestPoint(Vec3 p) {
@@ -269,7 +269,4 @@ public final class Contacts {
         return s.withPos(surface.plusScaled(offset.scale(1.0 / dist), BALL_R + SKIN));
     }
 
-    private static double clamp(double v, double lo, double hi) {
-        return v < lo ? lo : (v > hi ? hi : v);
-    }
 }

@@ -27,7 +27,6 @@ public record Ball(Vec3 pos, Vec3 vel, Vec3 spin, Quat orient) {
     public Ball withPos(Vec3 p)    { return new Ball(p, vel, spin, orient); }
     public Ball withVel(Vec3 v)    { return new Ball(pos, v, spin, orient); }
     public Ball withSpin(Vec3 s)   { return new Ball(pos, vel, s, orient); }
-    public Ball withOrient(Quat q) { return new Ball(pos, vel, spin, q); }
 
     public double speed()    { return vel.length(); }
     public double spinRate() { return spin.length(); }

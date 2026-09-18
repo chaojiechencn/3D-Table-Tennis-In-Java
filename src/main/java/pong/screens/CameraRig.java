@@ -10,6 +10,7 @@ import javafx.scene.transform.Rotate;
 import static pong.config.Physical.TABLE_LENGTH;
 import pong.core.math.Vec3;
 import pong.helpers.Xform;
+import static pong.core.math.Scalars.clamp;
 
 /**
  * An orbiting camera on a gimbal, plus the preset views the demo actually needs.
@@ -135,7 +136,6 @@ public final class CameraRig {
     public PerspectiveCamera camera() { return camera; }
     public Group gimbal() { return gimbal; }
     public View view() { return current; }
-    public boolean rallyCamOn() { return rallyCam; }
 
     /** F toggles the rally-cam. Leaving it restores the last preset cleanly. */
     public void toggleRallyCam() {
@@ -269,7 +269,4 @@ public final class CameraRig {
         sub.addEventHandler(ScrollEvent.SCROLL, e -> zoom(e.getDeltaY() > 0 ? 0.92 : 1.087));
     }
 
-    private static double clamp(double v, double lo, double hi) {
-        return v < lo ? lo : (v > hi ? hi : v);
-    }
 }

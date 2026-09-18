@@ -87,8 +87,6 @@ public final class RacketView {
 
     public Group node() { return group; }
 
-    public void setShown(boolean shown) { group.setVisible(shown); }
-
     /**
      * Push a pose onto the node. Position in metres, normal a unit vector in physics space.
      *
@@ -137,10 +135,7 @@ public final class RacketView {
         return v.subtract(unitN.multiply(v.dotProduct(unitN)));
     }
 
-    /** Convenience for driving straight off a Racket. */
-    public void update(Racket racket) {
-        update(racket.pos(), racket.normal());
-    }
+
 
     private static PhongMaterial matte(Color base) {
         PhongMaterial m = new PhongMaterial(base);

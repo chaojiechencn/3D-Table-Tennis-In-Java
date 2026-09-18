@@ -21,6 +21,7 @@ import java.util.List;
 
 import static pong.config.Physical.DT;
 import static pong.config.Physical.MAX_FRAME;
+import pong._debug.ControlOverlay;
 import pong._debug.ShotDebug;
 import pong.core.math.Quat;
 import pong.core.math.Vec3;
@@ -40,7 +41,7 @@ import pong.systems.control.Stroke;
 import pong.systems.opponent.DemoPlayer;
 import pong.systems.opponent.Follower;
 import pong.systems.opponent.Opponent;
-import pong.systems.scoring.Scoreboard;
+import pong.systems.connectors.RallyRules;
 import pong.systems.shotmaking.ShotAssist;
 import pong.ui.Hud;
 
@@ -65,6 +66,11 @@ public class MatchScreen extends Application {
     // ------------------------------------------------------------------ simulation
 
     private final World world = new World();
+
+    /** The one-bounce rule, the point-ending rules and the score. See {@link RallyRules} --
+     *  headless, so both validation suites drive the same rules this screen does. */
+    private final RallyRules rules = new RallyRules(world);
+
     // Opens on a gentle no-spin corner-to-corner serve. Every hit after that -- both rackets --
     // goes through ShotAssist, which keeps the ball in a playable area, so the rally holds.
     private Shots currentShot = Shots.byName("Serve");
@@ -104,9 +110,6 @@ public class MatchScreen extends Application {
      *  by default; see docs/GAMEPLAY.md for what that trade costs (11 of 75 sweep contacts land
      *  at all without the assist). */
     private boolean rawPhysics = false;
-
-    /** Racket-contact count at the last step, so the assist and rally-cam fire once per hit. */
-    private int lastPaddleHits = 0;
 
     /**
      * Leftover time not yet consumed by a whole physics step.
@@ -190,7 +193,7 @@ public class MatchScreen extends Application {
     private boolean brushing = false;
     private double brushHoldZ = PlayerReach.NEUTRAL.z();
 
-    /** D toggles the control/reachability overlay -- see controlReadout(). */
+    /** D toggles the control/reachability overlay -- see {@link ControlOverlay}. */
     private boolean showControlDebug = false;
 
     private final Deque<Vec3> trailPoints = new ArrayDeque<>();
@@ -230,44 +233,6 @@ public class MatchScreen extends Application {
     /** Shorter pause after a *decided* point (net, out, double bounce) before the next serve —
      *  the point is cut early rather than waiting for the ball to trickle to a stop. */
     private static final double POINT_END_DELAY = 0.9;
-
-    // ------------------------------------------------------------------ the one-bounce rule
-    //
-    // ITTF: you may only return the ball after it has bounced once on your side. Enforced by
-    // handing World a null racket for whoever is not yet allowed to hit -- the blade still
-    // tracks the ball on screen, it just cannot make contact. A ball that bounces twice on one
-    // side, or into the net, or past the end line, decides the point and cuts to the next serve.
-
-    private boolean playerMayHit = false;
-    private boolean aiMayHit = false;
-    private int lastBounceSerial = 0;
-
-    /** The match score, kept to ITTF rules. See {@link Scoreboard}. */
-    private final Scoreboard score = new Scoreboard();
-
-    /**
-     * Latched the instant a point is decided, cleared when the next serve is fed.
-     *
-     * Without it the ball stays live for the whole {@link #POINT_END_DELAY}: the rackets keep
-     * making contact, every one of those contacts runs through ShotAssist and cuts the camera,
-     * and -- now that there is a score -- a second point-ending event would be counted as a
-     * second point. A decided point has to stop being playable at the moment it is decided, not
-     * when the replay timer happens to fire.
-     */
-    private boolean pointOver = false;
-    /** Who put the ball in the air: 0 = the serve/feed, +1 = the opponent hit it, -1 = player. */
-    private int lastHitSide = 0;
-
-    /**
-     * When the last racket contact happened, and how long after one a table bounce is treated
-     * as part of that contact rather than as a shot falling back -- a legal push dug out at
-     * surface height fires its table contact on the SAME physics step as the racket contact, and
-     * without this window the rule below reads that as "your own shot bounced on your own half"
-     * and ends the point on a legal stroke. Two steps is enough: the ball is long gone from the
-     * surface before that at any speed the shot model can produce.
-     */
-    private double lastHitTime = -1;
-    private static final double CONTACT_BOUNCE_WINDOW = DT * 2;
 
     // ------------------------------------------------------------------ screenshot mode
 
@@ -384,39 +349,30 @@ public class MatchScreen extends Application {
 
         // The demo drives the cursor when it is on; otherwise the mouse does. Exactly one of
         // them is ever the source, which is what keeps this from becoming an aim assist.
-        if (demoMode) stroke.aimAt(demo.cursorFor(world.state(), playerMayHit && !pointOver, DT));
+        if (demoMode) stroke.aimAt(demo.cursorFor(world.state(), rules.playerMayHit(), DT));
         else if (pendingAim != null) stroke.aimAt(pendingAim);
         stroke.advance(playerRacket, DT);
         opponent.advance(world.state(), aiRacket, DT);
 
-        // The one-bounce rule: only the racket that is currently ALLOWED to hit is in the
-        // collision set. The other blade still tracks the ball on screen, it just phases
-        // through it until the ball has bounced on that player's side.
-        // A decided point withdraws BOTH rackets. The blades still track on screen; they just
-        // stop being able to touch a ball whose point has already been awarded.
-        world.setRackets(playerMayHit && !pointOver ? playerRacket : null,
-                         aiMayHit     && !pointOver ? aiRacket     : null);
+        // The one-bounce rule and the point-ending rules both live in RallyRules; gate() decides
+        // which blade is in the collision set for this step and observe() reads the result.
+        rules.gate(playerRacket, aiRacket);
 
         // The ball as it is just before this step -- ShotAssist wants the pre-contact velocity.
         Ball beforeStep = world.state();
         world.step();
+        RallyRules.Step step = rules.observe();
 
         // A racket just hit it: run the raw bounce through the arcade assist so the shot stays
-        // playable, cut the rally-cam, and hand the ball to the other side (which now waits for
-        // its own bounce before it may hit).
-        if (world.racketHits() > lastPaddleHits) {
-            lastPaddleHits = world.racketHits();
-            boolean playerHit = lastHitByPlayer();
+        // playable, and cut the rally-cam.
+        if (step.racketHit()) {
+            boolean playerHit = step.playerHit();
             Racket racket = playerHit ? playerRacket : aiRacket;
 
             if (!rawPhysics) {
                 world.setState(shotAssist.assist(beforeStep, world.state(), racket, playerHit));
             }
             rig.onRallyHit(playerHit);
-            lastHitSide = playerHit ? -1 : 1;
-            lastHitTime = world.time();
-            playerMayHit = false;
-            aiMayHit = false;
 
             if (!rawPhysics) {
                 ShotAssist.Debug d = shotAssist.debug();
@@ -431,54 +387,10 @@ public class MatchScreen extends Application {
             }
         }
 
-        // A table bounce opens the receiver's racket -- unless it is the SECOND bounce on that
-        // side, or the ball has fallen back onto the hitter's own half, which decides the point.
-        if (world.bounceSerial() > lastBounceSerial
-                && world.time() - lastHitTime > CONTACT_BOUNCE_WINDOW) {
-            lastBounceSerial = world.bounceSerial();
-            boolean near = lastBounceSide() < 0;
-            if (near) {
-                if (lastHitSide >= 0) {
-                    // The opponent's ball (or the serve) has bounced on our side. The first
-                    // bounce opens our racket; a second one means we never got to it.
-                    if (playerMayHit) endPoint(Scoreboard.Side.OPPONENT);
-                    else playerMayHit = true;
-                } else {
-                    // Our own shot came back down on our own half: it never crossed.
-                    endPoint(Scoreboard.Side.OPPONENT);
-                }
-            } else {
-                if (lastHitSide <= 0) {
-                    if (aiMayHit) endPoint(Scoreboard.Side.PLAYER);
-                    else aiMayHit = true;
-                } else {
-                    endPoint(Scoreboard.Side.PLAYER);
-                }
-            }
-        }
-
-        // A bounce inside the contact window is the racket contact's own table touch. It is not
-        // a rally event, but the serial still has to move on or the next real bounce is
-        // measured against a stale one.
-        lastBounceSerial = world.bounceSerial();
-
-        // A ball past the end line, or one that reached the floor, decides the point against
-        // whoever hit it last. The serve counts as the player's, so a feed that never lands is
-        // the player's fault, the same way a missed service toss is.
-        //
-        // NET is deliberately NOT in this list. World emits a NET event for ANY contact with the
-        // cord above 0.05 m/s, and under ITTF a rally ball that clips the net and still crosses
-        // and lands legally is a perfectly good shot -- often a lucky one, never a lost point.
-        // (Only a SERVICE that touches the net is special, and that is a let, replayed rather
-        // than scored; it belongs with serving, which is not built yet.) Ending on every NET
-        // event scored legal winners as errors. A net cord that genuinely kills the ball still
-        // decides the point here -- it just does so a moment later, through the rule that
-        // catches a shot falling back on its hitter's own half, or through the floor.
-        World.Event last = world.lastEvent();
-        if (last != null && world.time() - last.time() < DT * 2
-                && (last.type() == World.EventType.OUT_OF_BOUNDS
-                 || last.type() == World.EventType.FLOOR)) {
-            endPoint(lastHitSide > 0 ? Scoreboard.Side.PLAYER : Scoreboard.Side.OPPONENT);
+        // A decided point cuts early rather than waiting for the ball to trickle to a stop.
+        if (step.pointDecided()) {
+            hud.setScore(rules.score().line());
+            if (autoReplay && Double.isNaN(replayAt)) replayAt = world.time() + POINT_END_DELAY;
         }
 
         // Fallback: the ball dropped near the FLOOR without a clean event, or died on the table.
@@ -493,47 +405,6 @@ public class MatchScreen extends Application {
             trailPoints.addLast(world.state().pos());
             while (trailPoints.size() > TRAIL_DOTS) trailPoints.removeFirst();
         }
-    }
-
-    /** Whose racket the most recent contact was: near half (z &lt; 0) is the player. Scans the
-     *  event log back to front for the last RACKET_HIT. */
-    private boolean lastHitByPlayer() {
-        List<World.Event> es = world.events();
-        for (int i = es.size() - 1; i >= 0; i--) {
-            if (es.get(i).type() == World.EventType.RACKET_HIT) return es.get(i).side() < 0;
-        }
-        return true;
-    }
-
-    /** Side of the most recent table bounce: -1 near (player), +1 far (opponent), 0 if none. */
-    private int lastBounceSide() {
-        List<World.Event> es = world.events();
-        for (int i = es.size() - 1; i >= 0; i--) {
-            if (es.get(i).type() == World.EventType.TABLE_BOUNCE) return es.get(i).side();
-        }
-        return 0;
-    }
-
-    /**
-     * Decide the current point: award it, kill the ball, and schedule the next serve.
-     *
-     * The latch is the whole point of the method. Several rules can fire on the same step -- a
-     * ball can be long AND land on the floor a moment later -- and every one of them is a
-     * legitimate reason to end the rally, but only the FIRST of them says who won it. Awarding
-     * on each would score a single rally two or three times.
-     *
-     * The next serve is still scheduled only when auto-replay is on, but the point is awarded
-     * either way: with replay off the rally is being inspected, not played, and a score that
-     * silently stopped counting in that mode would be a trap.
-     */
-    private void endPoint(Scoreboard.Side winner) {
-        if (pointOver) return;
-        pointOver = true;
-
-        score.pointTo(winner);
-        hud.setScore(score.line());
-
-        if (autoReplay && Double.isNaN(replayAt)) replayAt = world.time() + POINT_END_DELAY;
     }
 
     // ------------------------------------------------------------------ rendering
@@ -590,54 +461,6 @@ public class MatchScreen extends Application {
     private static void drawPaddle(RacketView view, Racket.Blade from, Racket to, double alpha) {
         view.update(Vec3.lerp(from.centre(), to.pos(), alpha),
                     Vec3.lerp(from.normal(), to.normal(), alpha).normalized());
-    }
-
-    /**
-     * The control/reachability overlay, toggled with D -- answers "was that the CONTROL MAPPING
-     * failing to express where the player wanted the bat, or was the ball genuinely unplayable?"
-     * (the two look identical on screen and have opposite fixes). Read-only and downstream of
-     * everything: the blade's target has already been computed and handed to Stroke by the time
-     * this runs, so ball position appearing here never steers the control path.
-     */
-    private String controlReadout() {
-        Ball b = world.state();
-        Vec3 blade = playerRacket.pos();
-        Vec3 target = pendingAim != null ? pendingAim : blade;
-
-        double dist = PlayerReach.travelDistance(blade, target);
-        double travel = PlayerReach.travelTime(blade, target);
-        double arrive = PlayerReach.timeToDepth(b, target.z());
-
-        // Clamped is not the same as unreachable: it is normal to point past the end of the
-        // legal region and be held at its edge. Worth showing, because a blade that seems
-        // stuck is usually a blade sitting on a clamp.
-        boolean clamped = rawAim != null
-                && (Math.abs(rawAim.x() - target.x()) > 1e-6 || Math.abs(rawAim.z() - target.z()) > 1e-6);
-
-        String verdict;
-        if (Double.isNaN(arrive))          verdict = "n/a  (ball not coming to this depth)";
-        else if (travel <= arrive)         verdict = String.format("YES  (%.0f ms to spare)", (arrive - travel) * 1000);
-        else                               verdict = String.format("NO   (%.0f ms short)", (travel - arrive) * 1000);
-
-        return String.format("""
-            CONTROL  [D]
-              cursor     %s px%s
-              racket     x %+.3f  y %+.3f  z %+.3f
-              target     x %+.3f  y %+.3f  z %+.3f%s
-              bounds     x [%+.2f, %+.2f]   y %.3f fixed   z [%.2f, %.2f]
-              travel     %.3f m  ->  %.0f ms at %.1f m/s
-              ball       x %+.3f  y %+.3f  z %+.3f
-              arrival    %s  (to racket depth z %+.3f)
-              reachable  %s""",
-            Double.isNaN(cursorX) ? "(none yet)" : String.format("(%4.0f,%4.0f)", cursorX, cursorY),
-            rawAim == null ? "" : String.format("   ray -> x %+.3f  z %+.3f", rawAim.x(), rawAim.z()),
-            blade.x(), blade.y(), blade.z(),
-            target.x(), target.y(), target.z(), clamped ? "   (clamped)" : "",
-            -PlayerReach.MAX_X, PlayerReach.MAX_X, PlayerReach.HIT_Y, PlayerReach.Z_NEAR, PlayerReach.Z_FAR,
-            dist, travel * 1000, Stroke.TRACK_SPEED,
-            b.pos().x(), b.pos().y(), b.pos().z(),
-            Double.isNaN(arrive) ? "  --  " : String.format("%.0f ms", arrive * 1000), target.z(),
-            verdict);
     }
 
     /** TUNED broad overhead lighting for a sports hall: directional sources keep incidence
@@ -757,6 +580,13 @@ public class MatchScreen extends Application {
 
     /** The feed label plus whichever of DEMO / raw-physics mode tags apply -- both M and S flip
      *  independent flags but share the one line, so this is the single place that composes it. */
+    /** What D prints -- the numbers this screen knows, formatted by {@link ControlOverlay}. */
+    private String controlReadout() {
+        return ControlOverlay.readout(world.state(), playerRacket.pos(),
+                pendingAim != null ? pendingAim : playerRacket.pos(),
+                rawAim, cursorX, cursorY);
+    }
+
     private void refreshFeedLabel() {
         String label = currentShot.name();
         if (rawPhysics) label += "   [RAW PHYSICS -- S for assist]";
@@ -779,30 +609,21 @@ public class MatchScreen extends Application {
     // ------------------------------------------------------------------ feeds
 
     /**
-     * Put a ball in pong. Not a serve (that is still to build) -- a feed: the ball appears just
+     * Put a ball in play. Not a serve (that is still to build) -- a feed: the ball appears just
      * behind the near end as though the player had struck it, and the opponent answers it. What
      * stops it rebounding off the player's own bat on the first step is the one-bounce rule
-     * (playerMayHit is false below, so World gets a null player racket), not the launch
-     * geometry -- that guarantee holds wherever the player happens to be pointing.
+     * ({@link RallyRules#serve} opens with nobody allowed to hit, so World gets a null player
+     * racket), not the launch geometry -- that guarantee holds wherever the player is pointing.
      */
     private void launchShot(Shots shot) {
         currentShot = shot;
-        world.launch(shot.state());
+        rules.serve(shot.state());
         refreshFeedLabel();
-        hud.setScore(score.line());      // also puts 0-0 on screen for the opening serve
+        hud.setScore(rules.score().line());   // also puts 0-0 up for the opening serve
 
         // The feed stands in for the player's own serve, so the rally-cam opens zoomed IN; it
         // will cut OUT when the opponent returns it.
-        lastPaddleHits = 0;
         rig.onRallyHit(true);
-
-        // One-bounce state: the serve is in the air, nobody may hit until it has bounced.
-        playerMayHit = false;
-        aiMayHit = false;
-        pointOver = false;
-        lastHitSide = 0;
-        lastBounceSerial = world.bounceSerial();
-        lastHitTime = -1;
 
         accumulator = 0;
         replayAt = Double.NaN;

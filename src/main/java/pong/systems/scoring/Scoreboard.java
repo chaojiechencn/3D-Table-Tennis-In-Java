@@ -53,8 +53,7 @@ public final class Scoreboard {
     /** ITTF 2.13.3: from 10-all, service changes every point instead. */
     public static final int DEUCE_FROM = 10;
 
-    /** ITTF 2.13.4: in the deciding game, ends change when a score of 5 is first reached. */
-    public static final int DECIDER_ENDS_CHANGE_AT = 5;
+
 
     private final int gamesToWinMatch;
 
@@ -151,22 +150,9 @@ public final class Scoreboard {
         return null;
     }
 
-    /** True in the deciding game -- both sides one game short of the match. */
-    public boolean isDecidingGame() {
-        return playerGames == gamesToWinMatch - 1 && opponentGames == gamesToWinMatch - 1;
-    }
 
-    /**
-     * Should the players have changed ends by now?
-     *
-     * After every game, and in the deciding game the moment either side first reaches 5. Purely a
-     * presentation question -- the renderer may honour it or ignore it -- so it reports the rule
-     * rather than acting on it.
-     */
-    public boolean endsChangeAt() {
-        return isDecidingGame()
-            && (playerPoints == DECIDER_ENDS_CHANGE_AT || opponentPoints == DECIDER_ENDS_CHANGE_AT);
-    }
+
+
 
     /**
      * Whose serve it is, derived from the score.
@@ -188,12 +174,7 @@ public final class Scoreboard {
         return (turns % 2 == 0) ? openingServer : openingServer.other();
     }
 
-    /** Start the whole match again. */
-    public void reset() {
-        playerPoints = opponentPoints = 0;
-        playerGames = opponentGames = 0;
-        openingServer = Side.PLAYER;
-    }
+
 
     // ------------------------------------------------------------------ display
 

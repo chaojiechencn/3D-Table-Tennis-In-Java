@@ -129,13 +129,7 @@ public final class Racket {
         normal = n;
     }
 
-    /** Put the blade somewhere with no implied motion. Used when a rally is (re)started. */
-    public void placeAt(Vec3 newPos, Vec3 newNormal) {
-        pos = newPos;
-        normal = newNormal.normalized();
-        vel = Vec3.ZERO;
-        angVel = Vec3.ZERO;
-    }
+
 
     public Vec3 pos()    { return pos; }
     public Vec3 normal() { return normal; }

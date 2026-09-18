@@ -4,6 +4,7 @@ import static pong.config.Physical.*;
 import pong.core.math.Vec3;
 import pong.game_objects.ball.Ball;
 import pong.game_objects.racket.Racket;
+import static pong.core.math.Scalars.clamp;
 
 /**
  * An opponent that simply follows the ball, and is therefore unbeatable in a rally: it moves to
@@ -163,7 +164,4 @@ public final class Follower implements Opponent {
                         z);
     }
 
-    private static double clamp(double v, double lo, double hi) {
-        return v < lo ? lo : (v > hi ? hi : v);
-    }
 }
