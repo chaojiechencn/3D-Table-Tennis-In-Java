@@ -49,7 +49,7 @@ public final class Aim {
      * position. The ball is 40 mm across.
      *
      * It was 60, which bisects to the last bit of a double and is free when this only ever ran
-     * twelve times at startup to solve the shot presets. It is not free now: play/ShotAssist
+     * twelve times at startup to solve the shot presets. It is not free now: ShotAssist
      * calls this for every candidate shot, a dozen or more on the frame a racket contact lands
      * on, and each iteration flies a whole trajectory. Cutting the count less than halves the
      * accuracy of anything that matters and more than halves the cost of a contact.

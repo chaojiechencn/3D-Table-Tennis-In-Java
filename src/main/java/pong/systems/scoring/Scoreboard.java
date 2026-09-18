@@ -3,7 +3,7 @@ package pong.systems.scoring;
 /**
  * The score, kept by the ITTF's rules rather than by a counter that goes up.
  *
- * This is plain Java with no view and no `World`, for the same reason the rest of `play/` is:
+ * This is plain Java with no view and no `World`, for the same reason the rest of `systems/` is:
  * scoring is a rule system, rule systems are exactly what a headless test can pin down, and a
  * scoreboard that can only be checked by playing a match is a scoreboard that does not get
  * checked. Every number below is a rule, and every rule has a check in {@code pong._tests.RallyTest}.
@@ -21,10 +21,12 @@ package pong.systems.scoring;
  *       reaches 10-all. That switch is the part everyone gets wrong, and it is why the server is
  *       computed from the score below rather than tracked as a flag that gets toggled.</li>
  *   <li><b>A match is the best of an odd number of games</b>, best of 5 by default (first to 3).</li>
- *   <li><b>Ends change after every game</b>, and again in the deciding game as soon as one player
- *       reaches 5. Exposed as {@link #endsChangeAt} for the renderer; the rule does not affect
- *       the score, only which way round the table is drawn.</li>
  * </ul>
+ *
+ * <p>Ends-changing (after every game, and at 5 in the decider) is NOT implemented. It is purely
+ * a presentation rule -- it decides which way round the table is drawn, never the score -- and
+ * the code for it was removed rather than left sitting unused and ungraded. It belongs with
+ * serving, which is also not built.
  *
  * <b>The server is derived, never stored.</b> A toggled "whose serve" flag is the classic way to
  * get this wrong: it drifts the first time a point is awarded twice, or not at all, and the

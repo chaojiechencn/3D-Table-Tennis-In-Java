@@ -9,11 +9,11 @@ With Python 3 installed and this project open in IntelliJ with the Claude Code
 plugin enabled, run from the repository root:
 
 ```powershell
-python tools/intellij-mcp-bridge/bridge.py --workspace . --probe
+python _tools/intellij-mcp-bridge/bridge.py --workspace . --probe
 ```
 
 For an MCP client, configure Python as the command and pass the absolute path to
-`tools/intellij-mcp-bridge/bridge.py`, followed by `--workspace` and the absolute
+`_tools/intellij-mcp-bridge/bridge.py`, followed by `--workspace` and the absolute
 project path. Omit `--probe` for normal forwarding. The workspace defaults to the
 current directory if it is not supplied.
 

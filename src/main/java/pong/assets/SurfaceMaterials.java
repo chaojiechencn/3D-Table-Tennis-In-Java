@@ -14,7 +14,7 @@ import static pong.config.Physical.*;
  *
  * JavaFX's bump input is a tangent-space NORMAL map, not a greyscale height image. The nearly
  * blue normals below only perturb the highlights; strong normals would make a regulation
- * flat table look dented. TUNED colours and grain amplitudes describe finishes, not pong.
+ * flat table look dented. TUNED colours and grain amplitudes describe finishes, not physics.
  */
 public final class SurfaceMaterials {
 

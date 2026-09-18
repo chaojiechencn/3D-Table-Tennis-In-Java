@@ -17,9 +17,9 @@ import static pong.core.math.Scalars.clamp;
 /**
  * The assisted, arcade shot model: what the ball does after a racket hits it.
  *
- * The impulse solver in physics/ stays exact and still runs on every contact, but an exact
+ * The impulse solver in `systems/collision/` stays exact and still runs on every contact, but an exact
  * bounce off a moving blade is not a table tennis shot -- see docs/DESIGN.md for the 75-velocity
- * sweep that motivated this. So this sits on top, in play/, and turns the contact into a shot:
+ * sweep that motivated this. So this sits on top, in `systems/`, and turns the contact into a shot:
  * read the racket's motion as INTENT, build a TARGET inside the opponent's court by construction,
  * turn swing speed into strength on a saturating curve, ask {@link Aim} for the launch that lands
  * on the target, blend in a little of the physical reflection for feel, clamp, then VALIDATE by

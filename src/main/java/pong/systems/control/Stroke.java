@@ -49,7 +49,7 @@ public final class Stroke {
 
     /**
      * Where the cursor points, in metres: a full 3D point on the reach surface, depth included.
-     * Solved by {@link pong.MouseAim} out of the aim ray.
+     * Solved by {@link pong.helpers.MouseAim} out of the aim ray.
      */
     private Vec3 target;
     private Vec3 strokeDir = new Vec3(0, 0, -1);   // square to the incoming ball until it moves

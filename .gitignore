@@ -1,7 +1,6 @@
-# Local IDE state; shared VS Code commands stay in version control.
+# Local IDE state. Both are generated, and a running IDE rewrites them.
 /.idea/
-/.vscode/*
-!/.vscode/tasks.json
+/.vscode/
 *.iml
 
 # Generated Java output and Gradle caches, only at the project root.

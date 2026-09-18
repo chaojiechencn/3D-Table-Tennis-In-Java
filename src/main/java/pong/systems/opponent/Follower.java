@@ -11,7 +11,7 @@ import static pong.core.math.Scalars.clamp;
  * the ball's CURRENT position, as fast as it likes, and swings when the ball arrives -- no
  * prediction, no lookahead, no reading of the shot. Difficulty cannot come from slowing it down
  * (a follower just becomes erratic); it has to come from prediction quality, which is why a
- * predicting opponent using {@link pong.World#predict} is the intended replacement, not a
+ * predicting opponent using {@link pong.game_world.World#predict} is the intended replacement, not a
  * tuned version of this class. See docs/DESIGN.md.
  */
 public final class Follower implements Opponent {

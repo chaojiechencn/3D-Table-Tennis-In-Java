@@ -12,9 +12,10 @@ notes when you need the *why* behind a rule.
 
 ## What this is
 
-A 3D table tennis game in Java 21 + JavaFX. Mouse-controlled paddle, a ball carrying real spin,
-and an AI opponent. A validated physics engine (`physics/`) with an arcade game layer (`play/`)
-on top of it.
+A 3D table tennis game in Java 21 + JavaFX. Mouse-controlled racket, a ball carrying real spin,
+and an AI opponent. A validated simulation with an arcade game layer on top of it. Directories
+are named for what the code is FOR -- see `src/main/java/pong/README.md` for the map, and the
+README in each directory for what belongs in it.
 
 ---
 
@@ -43,16 +44,17 @@ Two headless suites. Both print PASS/FAIL per check and exit 0/1. **They must st
 
 ```powershell
 .\gradlew.bat check       # both suites
-.\gradlew.bat selfTest    # physics.SelfTest: 101 checks
-.\gradlew.bat rallyTest   # play.RallyTest: 29 checks
+.\gradlew.bat selfTest    # pong._tests.PhysicsTest: 101 checks
+.\gradlew.bat rallyTest   # pong._tests.RallyTest: 29 checks
 ```
 
-The suites remain plain Java `main` classes under `src/test/java`. Gradle's `test`, `check` and
+The suites remain plain Java `main` classes under `src/test/java/pong/_tests/`. Gradle's `test`, `check` and
 `build` tasks invoke both dedicated suites.
 
-- Touched physics code or its tests → run `physics.SelfTest`.
-- Touched gameplay code or its tests → run `play.RallyTest`.
-- Touched rendering only → still compile, and run both if you changed anything shared.
+- Touched the simulation (`game_objects/`, `game_world/`, `systems/collision/`, `config/Physical`)
+  or its tests → run `pong._tests.PhysicsTest`.
+- Touched game logic (`systems/`, `config/ShotTuning`) or its tests → run `pong._tests.RallyTest`.
+- Touched a `view/`, `ui/` or `_debug/` only → still compile, and run both if you changed anything shared.
 - Changed source layout or build configuration → compile and run both suites.
 
 A failing check is a broken deliverable, not a flaky test. **Never widen a threshold to make a
@@ -69,36 +71,55 @@ actually measured.
 ## Architecture and the rules that keep it from rotting
 
 ```text
-src/
-  main/java/
-    Table_Tennis_In_3D.java  entry point; fixed-timestep loop, input, wiring, capture mode
-    physics/                plain Java. NO javafx imports, ever.
-    play/                   game logic. Plain Java, so it tests headlessly.
-    render/                 JavaFX views. Reads physics state; never writes it.
-  test/java/
-    physics/SelfTest.java    physics validation
-    play/RallyTest.java      game validation
+src/main/java/pong/
+  core/math/        Vec3, Quat, Scalars. Knows nothing about table tennis.
+  config/           Physical (MEASURED, cited) and ShotTuning (TUNED, reasoned).
+  game_objects/     ball/ and racket/ -- simulation at the top, JavaFX in a view/ leaf.
+  game_world/       World (the simulation) + view/ (the court, bounce marks).
+  systems/          collision, aim, control, opponent, scoring, shotmaking.
+    connectors/     RallyRules -- wires World + rackets + Scoreboard together.
+  assets/           Generated materials, shared by two views.
+  screens/          MatchScreen: entry point, fixed-timestep loop, input, wiring.
+  ui/               Hud.
+  _debug/           ShotDebug (V), ControlOverlay (D). The game runs without them.
+  helpers/          Xform (the ONE space conversion), MouseAim (ray geometry).
+src/test/java/pong/_tests/
+  PhysicsTest.java  simulation validation
+  RallyTest.java    game validation
 ```
 
-**Dependency direction is one-way:** `play` → `physics`; `physics` → nothing. A test needing both
-belongs in `play`.
+**Dependency direction is one-way**, and a `view/` depends on the package above it, never the
+reverse:
+
+```
+screens → ui, _debug, systems, game_objects, game_world
+systems → game_objects, game_world, core, config
+game_world → game_objects, systems/collision, core, config
+game_objects → core, config
+core → nothing
+```
 
 Hard invariants — breaking any of these is a defect even if it compiles and the suites pass:
 
-1. **`src/main/java/physics/` must never import `javafx.*`.** It stays headless and frame-rate independent.
-2. **`render.Xform` is the ONLY place physics space becomes scene space**, in both directions.
+1. **JavaFX may only be imported from `screens/`, `ui/`, `_debug/`, `assets/`, `helpers/` and the
+   `view/` leaves.** Everything else stays headless and frame-rate independent, which is the only
+   reason both suites can grade it without opening a window. Check it:
+   `grep -rl --include=*.java "import javafx" src/main/java/pong | grep -vE "/(view|screens|ui|_debug|assets|helpers)/"`
+   must print nothing.
+2. **`helpers.Xform` is the ONLY place physics space becomes scene space**, in both directions.
    Nothing else may multiply or divide by `SPM`.
-3. **`render/` reads physics state, never writes it.**
-4. **One collision solver.** Table, net, floor and both paddles differ only by a `Material` and a
+3. **A `view/` reads simulation state, never writes it.**
+4. **One collision solver.** Table, net, floor and both rackets differ only by a `Material` and a
    shape. Do not add a second bespoke bounce path. Shape hides behind `Collider`'s four questions.
 5. **The solver works in the SURFACE's frame, not the world's.** Written in absolute velocity, a
-   blade swung into a ball reads as "already separating" and does nothing. If a paddle ever passes
+   blade swung into a ball reads as "already separating" and does nothing. If a racket ever passes
    through a ball harmlessly, this is what broke.
-6. **`World.predict` must never see a paddle.** A prediction that gets intercepted predicts nothing.
-7. **The ball never moves the player's paddle.** `Stroke.advance` does not take a `BallState` — the
+6. **`World.predict` must never see a racket.** A prediction that gets intercepted predicts nothing.
+7. **The ball never moves the player's racket.** `Stroke.advance` does not take a `Ball` — the
    rule is enforced by the signature. Anything that reads the ball *before* the blade's target is
    chosen is auto-follow wearing a different hat.
-8. **Physics never sees the frame time.** Passing a JavaFX `dt` into `physics/` breaks determinism.
+8. **The simulation never sees the frame time.** Passing a JavaFX `dt` into `World` or
+   `Integrator` breaks determinism.
 9. **Shot presets state intent** (speed, spin, target) and let `Aim` solve the launch angle. Do not
    hard-code launch velocities.
 
@@ -143,14 +164,14 @@ SECOND descent, out past the end line. **Always ask the landing question of a co
 **IDE configuration is generated.** Import the existing Gradle project so `src/main/java` and
 `src/test/java` are marked correctly. `.idea/` and `.iml` files are local and ignored; a running
 IntelliJ rewrites them. Change source roots in the Gradle project rather than moving or hand-editing
-generated module files. Keep the `Table_Tennis_In_3D`, `physics.SelfTest` and `play.RallyTest`
-entry points stable.
+generated module files. Keep the `pong.screens.MatchScreen`, `pong._tests.PhysicsTest` and
+`pong._tests.RallyTest` entry points stable.
 
 ---
 
 ## Settled — do not undo these
 
-1. **Scoring exists.** `play/Scoreboard.java` keeps the ITTF rules (11, win by 2, no ceiling at
+1. **Scoring exists.** `systems/scoring/Scoreboard.java` keeps the ITTF rules (11, win by 2, no ceiling at
    deuce, service every 2 points and every 1 from 10-all, best of 5). It is derived from the
    score rather than toggled, deliberately — see the class javadoc. 9 checks in `RallyTest`.
 2. **`endPoint()` latches.** It now takes the winning side, awards exactly once however many
@@ -209,8 +230,8 @@ monotone: ±2.5 m/s of swipe lands at ±0.098 m, ±5 at ±0.220, ±10 at ±0.398
   citation or `TUNED` reasoning, the thing that breaks if this is changed carelessly. The full
   derivation, measurement tables and rejected alternatives belong in `docs/DESIGN.md`, not in the
   source — check there before re-deriving something that already has a measured answer.
-- **Cite a source for every real-world number.** A bare constant with no citation in `physics/` is
-  a bug.
+- **Cite a source for every real-world number.** A bare constant with no citation in
+  `config/Physical` is a bug.
 - Anything tuned by eye is labelled `TUNED` and says what it stands in for.
-- Every tuning knob for the arcade layer lives in `ShotAssist.Tuning`. Nothing below it is
-  hardcoded. Measured physical values stay single-sourced in `physics/Constants`.
+- Every tuning knob for the arcade layer lives in `config/ShotTuning`. Nothing below it is
+  hardcoded. Measured physical values stay single-sourced in `config/Physical`.

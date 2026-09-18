@@ -14,7 +14,7 @@ import pong.core.math.Vec3;
  * Because the plane's height is a parameter rather than something read off the ray, the two
  * screen axes come apart cleanly (cursor X -> world X, cursor Y -> world Z, monotonically); see
  * docs/DESIGN.md, "The control mapping", for the one-screen-axis-meant-two-things bug this
- * replaced. No clamping and no envelope -- {@link pong.PlayerReach} owns that -- and nothing
+ * replaced. No clamping and no envelope -- {@link pong.systems.control.PlayerReach} owns that -- and nothing
  * here has ever seen the ball. The ray work happens in scene units; the result is converted
  * once, through {@link Xform}, which stays the only place the two spaces meet.
  */

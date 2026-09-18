@@ -195,7 +195,7 @@ public final class CameraRig {
     /**
      * Ease the live pose toward whichever fixed view the last hit selected. Called once per
      * FRAME off the real frame time -- this is a view, not physics, so unlike everything under
-     * physics/ it may see a wall-clock dt.
+     * the simulation it may see a wall-clock dt.
      *
      * Nothing here tracks the ball: the camera only ever sits at RALLY_IN or RALLY_OUT (or
      * between them, mid-cut), both fixed behind the near end.
@@ -246,7 +246,7 @@ public final class CameraRig {
      * collided head-on with bare mouse movement driving the racket. A left drag orbits (and
      * drops the rally-cam); bare movement aims.
      *
-     * addEventHandler, not setOnMouseDragged. Those are single-slot properties, and MrPong
+     * addEventHandler, not setOnMouseDragged. Those are single-slot properties, and MatchScreen
      * has to put its own aiming handler on this same SubScene; whichever assigned second would
      * silently unhook the other.
      */

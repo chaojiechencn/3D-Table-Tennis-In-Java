@@ -18,7 +18,8 @@ import pong.systems.collision.Contacts.Hit;
 /**
  * The simulated world: the ball, the three things it can hit, and the log of what happened.
  *
- * Deliberately free of JavaFX. Nothing in this package imports the renderer, which is what
+ * Deliberately free of JavaFX -- the views for this package live in its {@code view/} leaf and
+ * depend on it, never the other way round. That one-way arrow is what
  * lets {@code pong._tests.PhysicsTest} run the exact same physics headlessly and check it against published
  * numbers. If the physics could only be observed by looking at it, "checking my simulation
  * against real numbers" would not be possible.
@@ -350,7 +351,7 @@ public final class World {
      *
      * The one caller is the arcade shot assist (`pong.ShotAssist`): right after a racket
      * contact it swaps the raw impulse result for a trajectory the game can rally on. Nothing
-     * in `physics/` touches this -- PhysicsTest and {@link #predict} never call it, so the
+     * in the simulation itself touches this -- PhysicsTest and {@link #predict} never call it, so the
      * validated model is unchanged underneath.
      */
     public void setState(Ball s) { state = s; }

@@ -31,10 +31,6 @@ public record Ball(Vec3 pos, Vec3 vel, Vec3 spin, Quat orient) {
     public double speed()    { return vel.length(); }
     public double spinRate() { return spin.length(); }
 
-    /** Spin in revolutions per second — the unit table tennis is actually discussed in.
-     *  A heavy loop is 100-150 rev/s; a serve can exceed 150. */
-    public double spinRevsPerSec() { return spinRate() / (2 * Math.PI); }
-
     /** Kinetic energy, translational + rotational. Used by PhysicsTest to prove no contact
      *  ever adds energy to the ball. */
     public double kineticEnergy() {

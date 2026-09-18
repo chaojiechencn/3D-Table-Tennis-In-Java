@@ -29,7 +29,7 @@ import pong.helpers.Xform;
  *
  * Reading it: magenta and green apart means the solve did not land where it aimed; cyan and
  * orange apart means a clamp is fighting the solve; a green dot outside the table means the
- * validator gave up and the fallback shot is in pong. The numeric readout (speed, spin,
+ * validator gave up and the fallback shot is in play. The numeric readout (speed, spin,
  * correction passes, and whether the finished shot was legal) goes to the HUD.
  */
 public final class ShotDebug {

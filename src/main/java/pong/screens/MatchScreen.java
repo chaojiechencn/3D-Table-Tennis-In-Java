@@ -50,16 +50,17 @@ import pong.ui.Hud;
  * mode; see docs/GAMEPLAY.md for what it plays like and docs/DESIGN.md for the architecture.
  *
  * A racket at each end (near follows the mouse, far is the AI); the player's CONTROL is two
- * horizontal dimensions while the ball's flight stays three ({@link pong.PlayerReach}); the shot
- * is entirely mouse motion, constrained to a playable target by {@link pong.ShotAssist} on both
+ * horizontal dimensions while the ball's flight stays three ({@link PlayerReach}); the shot
+ * is entirely mouse motion, constrained to a playable target by {@link ShotAssist} on both
  * rackets; the ITTF one-bounce rule is enforced by handing {@link World} a null racket until the
  * ball has bounced on that side; a rally-cam cuts between two fixed views on who last hit; `V`
  * shows what {@code ShotAssist} did and `D` shows the control/reachability overlay -- see their
  * readout methods below for why each exists. `S` skips {@code ShotAssist} altogether, on both
  * rackets, so every contact keeps the raw impulse-solver bounce instead of an authored shot.
  *
- * The physics lives in {@code physics} and the game logic in {@code play}; neither imports
- * JavaFX, so both run headlessly under {@code pong._tests.PhysicsTest} and {@code pong._tests.RallyTest}.
+ * Everything outside {@code screens/}, {@code ui/}, {@code _debug/}, {@code assets/} and the
+ * {@code view/} leaves is free of JavaFX, which is what lets the whole simulation and every game
+ * rule run headlessly under {@code pong._tests.PhysicsTest} and {@code pong._tests.RallyTest}.
  */
 public class MatchScreen extends Application {
 
@@ -124,7 +125,7 @@ public class MatchScreen extends Application {
     // Runs the whole simulation well below real time. Table tennis at 1:1 is a blur on a first
     // play -- the ball crosses the table in a third of a second -- so the game opens in slow
     // motion that leaves time to actually move to the ball. [ and ] still walk it up and down
-    // (up to 2x), and it changes nothing in physics/: fewer fixed steps run per second, every
+    // (up to 2x), and it changes nothing in the simulation: fewer fixed steps run per second, every
     // one of them identical to a full-speed step.
     private double timeScale = 0.45;
     private boolean paused = false;
@@ -265,7 +266,7 @@ public class MatchScreen extends Application {
         sub.setFill(Color.web("#17232e"));
         sub.setCamera(rig.camera());
         rig.attachControls(sub);
-        attachPaddleControls(sub);
+        attachRacketControls(sub);
 
         StackPane layers = new StackPane(sub, hud.node());
         Scene scene = new Scene(layers, 1280, 780, Color.web("#17232e"));
@@ -425,13 +426,13 @@ public class MatchScreen extends Application {
         ball.update(shown);
 
         // Ease the rally-cam toward whichever fixed view the last hit picked. Real frame time
-        // -- it is a view, not pong.
+        // -- it is a view, not physics.
         rig.updateRally(frameSeconds, world.state().pos());
 
         // The same alpha, so the blade and the ball never disagree about where they are at
         // the instant of contact -- which is the one frame anybody is looking closely at.
-        drawPaddle(playerView, prevPlayerPose, playerRacket, alpha);
-        drawPaddle(aiView, prevAiPose, aiRacket, alpha);
+        drawRacket(playerView, prevPlayerPose, playerRacket, alpha);
+        drawRacket(aiView, prevAiPose, aiRacket, alpha);
 
         // The deque is handed over as-is. Copying it built a fresh 300-element list every
         // frame to describe a path that only changes by one point every other physics step.
@@ -458,7 +459,7 @@ public class MatchScreen extends Application {
      * million -- this is not the ball's orientation, which tumbles fast enough to need the
      * real thing.
      */
-    private static void drawPaddle(RacketView view, Racket.Blade from, Racket to, double alpha) {
+    private static void drawRacket(RacketView view, Racket.Blade from, Racket to, double alpha) {
         view.update(Vec3.lerp(from.centre(), to.pos(), alpha),
                     Vec3.lerp(from.normal(), to.normal(), alpha).normalized());
     }
@@ -483,7 +484,7 @@ public class MatchScreen extends Application {
      * addEventHandler rather than setOnMouseMoved, a single-slot property that would silently
      * unhook the camera orbit CameraRig already installed on this SubScene.
      */
-    private void attachPaddleControls(SubScene sub) {
+    private void attachRacketControls(SubScene sub) {
         sub.addEventHandler(MouseEvent.MOUSE_MOVED, e -> aim(sub, e));
 
         // MOUSE_MOVED stops firing the moment any button is down, so the brush needs DRAGGED as
@@ -648,7 +649,7 @@ public class MatchScreen extends Application {
 
     /**
      * Offline capture, used to check the rendering without a human watching:
-     *   java MrPong --shot="Topspin loop" --at=0.45 --view=SIDE --out=frame.png
+     *   java pong.screens.MatchScreen --shot="Topspin loop" --at=0.45 --view=SIDE --out=frame.png
      */
     private void parseArgs() {
         // Capture mode has to disable the replay loop, or a requested --at beyond the loop

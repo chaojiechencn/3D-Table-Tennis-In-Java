@@ -21,18 +21,18 @@ import pong.systems.scoring.Scoreboard;
 import pong.systems.shotmaking.ShotAssist;
 
 /**
- * Headless validation of the opponent, in the same style as pong._tests.PhysicsTest.
+ * Headless validation of the opponent and the player's controls, beside {@link PhysicsTest}.
  *
- * It lives here rather than in PhysicsTest for a structural reason. PhysicsTest is in `physics`,
- * Opponent is in `play`, and `play` depends on `physics`. Having pong._tests.PhysicsTest import
- * pong.Follower would invert that dependency, and the package rules exist precisely to stop
- * that kind of rot. So the physics has its checks and the game has its own.
+ * Two suites rather than one, because they grade different things. PhysicsTest grades the
+ * simulation against published measurements and closed-form solutions; this grades the GAME
+ * built on top -- the opponent, the shot model, the control envelope, the rally rules and the
+ * score. A failure here means the game is wrong. A failure there means the physics is.
  *
  * What it is for: "impossible to beat" is a claim, and a claim about behaviour is worth
  * proving rather than asserting. These checks feed the opponent every preset shot in the menu
  * and require it to reach each one, put it back over the net, and land it on the table.
  *
- * The contacts run through {@link ShotAssist}, because that is what MrPong does with every
+ * The contacts run through {@link ShotAssist}, because that is what the game does with every
  * racket contact on both sides. The one number taken from before the assist is the raw
  * outgoing speed, which is what the "does not cheat" check is actually about -- the impulse
  * solver is still exactly as raw as PhysicsTest grades it.
@@ -91,7 +91,7 @@ public final class RallyTest {
      * The player's end is left empty on purpose: this is testing the opponent alone, so the
      * ball is fed from the near end and the rally ends once the opponent has answered it.
      *
-     * The contact goes through {@link ShotAssist}, because that is what MrPong does with every
+     * The contact goes through {@link ShotAssist}, because that is what the game does with every
      * racket contact on BOTH sides. Grading the raw impulse here would be grading a code path
      * the game no longer takes.
      */
@@ -224,7 +224,7 @@ public final class RallyTest {
      * between 3.5 and 18.4 m/s carrying 25 to 125 rev/s, and one fixed stroke cannot be the
      * right answer to both ends of that.
      *
-     * What changed is not the tuning and not the threshold: it is that MrPong now runs every
+     * What changed is not the tuning and not the threshold: it is that the game now runs every
      * racket contact, the follower's included, through {@link ShotAssist}, which authors the
      * outgoing trajectory instead of accepting the raw bounce. So the stroke no longer has to
      * be the right answer to every incoming ball -- the assist is. That makes "the returns
@@ -625,7 +625,7 @@ public final class RallyTest {
     private static boolean isFedAtTheOpponent(Shots shot) {
         if (shot.state().pos().z() <= 0) return false;
 
-        World w = new World();          // no paddles
+        World w = new World();          // no rackets
         w.launch(shot.state());
         for (int i = 0; i < (int) (3.0 / DT); i++) {
             w.step();

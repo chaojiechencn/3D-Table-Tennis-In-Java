@@ -56,12 +56,12 @@ public final class PhysicsTest {
         outOfBoundsIsDetected();
         longRunStaysStable();
         noTunnellingAtSmashSpeed();
-        paddleImpartsItsOwnVelocity();
+        racketImpartsItsOwnVelocity();
         swingSpeedSplitsIntoPaceAndSpin();
         brushingContactGeneratesTopspin();
-        paddleReversesIncomingBackspin();
-        paddleContactAddsNoFreeEnergy();
-        noTunnellingThroughASwungPaddle();
+        racketReversesIncomingBackspin();
+        racketContactAddsNoFreeEnergy();
+        noTunnellingThroughASwungRacket();
 
         System.out.println("=".repeat(74));
         if (failures.isEmpty()) {
@@ -718,7 +718,7 @@ public final class PhysicsTest {
      *
      * @return the ball afterwards, or null if the blade missed
      */
-    private static Ball paddleStrike(Ball ball, Vec3 endPos, Vec3 swing,
+    private static Ball racketStrike(Ball ball, Vec3 endPos, Vec3 swing,
                                           Vec3 normal, Physical.Material mat) {
         Racket racket = new Racket(endPos.minus(swing.scale(DT)), normal);
         racket.moveTo(endPos, normal, DT);
@@ -736,12 +736,12 @@ public final class PhysicsTest {
      * a solver that only looks at the ball's absolute velocity sees a contact that is already
      * separating and pushes the ball out untouched.
      */
-    private static void paddleImpartsItsOwnVelocity() {
+    private static void racketImpartsItsOwnVelocity() {
         double swing = 10.0;
         Vec3 n = new Vec3(0, 0, -1);
         Ball ball = Ball.at(new Vec3(0, 0.30, 0), Vec3.ZERO, Vec3.ZERO);
 
-        Ball after = paddleStrike(ball, new Vec3(0, 0.30, 0.025),
+        Ball after = racketStrike(ball, new Vec3(0, 0.30, 0.025),
                                        new Vec3(0, 0, -swing), n, RACKET_MAT);
         check("a swung blade actually hits a stationary ball", after != null, "");
         if (after == null) return;
@@ -800,7 +800,7 @@ public final class PhysicsTest {
     private static Ball brush(Ball ball, double speed, double upDeg) {
         double a = Math.toRadians(upDeg);
         Vec3 swing = new Vec3(0, speed * Math.sin(a), -speed * Math.cos(a));
-        return paddleStrike(ball, new Vec3(0, 0.245, 0.0263), swing, closedFace(0.45),
+        return racketStrike(ball, new Vec3(0, 0.245, 0.0263), swing, closedFace(0.45),
                             RACKET_MAT);
     }
 
@@ -814,7 +814,7 @@ public final class PhysicsTest {
     private static void brushingContactGeneratesTopspin() {
         Ball ball = Ball.at(new Vec3(0, 0.30, 0), new Vec3(0, 0, 4), Vec3.ZERO);
 
-        Ball after = paddleStrike(ball, new Vec3(0, 0.245, 0.0263),
+        Ball after = racketStrike(ball, new Vec3(0, 0.245, 0.0263),
                                        new Vec3(0, 12, -9), closedFace(0.45), RACKET_MAT);
         check("an upward brush makes contact", after != null, "");
         if (after == null) return;
@@ -844,7 +844,7 @@ public final class PhysicsTest {
      * The negative control at the end is the important half: the SAME stroke, the same
      * geometry, against a material whose only difference is that e_t is zero.
      */
-    private static void paddleReversesIncomingBackspin() {
+    private static void racketReversesIncomingBackspin() {
         // A ball arriving with heavy backspin. It is travelling toward +Z (at the player), and
         // backspin on such a ball is rotation about -X.
         Vec3 backspin = new Vec3(-90 * 2 * Math.PI, 0, 0);
@@ -854,7 +854,7 @@ public final class PhysicsTest {
         Vec3 end = new Vec3(0, 0.245, 0.0263);
         Vec3 swing = new Vec3(0, 14, -10);
 
-        Ball rubber = paddleStrike(chop, end, swing, face, RACKET_MAT);
+        Ball rubber = racketStrike(chop, end, swing, face, RACKET_MAT);
         check("the blade reaches the chopped ball", rubber != null, "");
         if (rubber == null) return;
 
@@ -871,7 +871,7 @@ public final class PhysicsTest {
         // Same stroke, rigid surface. It can strip spin, but it cannot reverse it.
         Physical.Material noSpringback = Physical.Material.rigid(
                 RACKET_MAT.restitutionAt(0), RACKET_MAT.friction(), 1.0, 1.0);
-        Ball rigid = paddleStrike(chop, end, swing, face, noSpringback);
+        Ball rigid = racketStrike(chop, end, swing, face, noSpringback);
         double rigidRevs = rigid == null ? 0 : -rigid.spin().x() / (2 * Math.PI);
         check("a grip-only surface generates strictly less spin (this is why rubber needs e_t)",
               rigidRevs < outRevs,
@@ -884,13 +884,13 @@ public final class PhysicsTest {
      * the swing could actually have done. Two bounds: a STATIONARY blade must never add any,
      * and a moving one must never beat the (1+e) limit its own speed sets.
      */
-    private static void paddleContactAddsNoFreeEnergy() {
+    private static void racketContactAddsNoFreeEnergy() {
         Vec3 n = new Vec3(0, 0, -1);
         Ball incoming = Ball.at(new Vec3(0, 0.30, 0), new Vec3(0, 0, 8),
                                           new Vec3(-300, 0, 0));
 
         // A blade held perfectly still is just a wall.
-        Ball off = paddleStrike(incoming, new Vec3(0, 0.30, 0.025), Vec3.ZERO, n,
+        Ball off = racketStrike(incoming, new Vec3(0, 0.30, 0.025), Vec3.ZERO, n,
                                      RACKET_MAT);
         check("a ball into a STATIONARY blade never gains energy",
               off != null && off.kineticEnergy() <= incoming.kineticEnergy() + 1e-12,
@@ -900,7 +900,7 @@ public final class PhysicsTest {
         // A swung blade may add energy, but not more than (1+e)*u + |v_in| allows.
         double swing = 15.0, arriving = 6.0;
         Ball ball = Ball.at(new Vec3(0, 0.30, 0), new Vec3(0, 0, arriving), Vec3.ZERO);
-        Ball hit = paddleStrike(ball, new Vec3(0, 0.30, 0.025),
+        Ball hit = racketStrike(ball, new Vec3(0, 0.30, 0.025),
                                      new Vec3(0, 0, -swing), n, RACKET_MAT);
         double limit = (1 + RACKET_MAT.restitutionAt(swing + arriving)) * swing + arriving;
         check("a swung blade cannot send the ball faster than its own swing allows",
@@ -916,7 +916,7 @@ public final class PhysicsTest {
      * a swept test in world coordinates does not, because neither body moves 16.7 cm on its
      * own.
      */
-    private static void noTunnellingThroughASwungPaddle() {
+    private static void noTunnellingThroughASwungRacket() {
         int caught = 0, tried = 0;
         double blade = 20.0;
 

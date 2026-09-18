@@ -25,7 +25,7 @@ From the project root:
 | Validate gameplay | `.\gradlew.bat rallyTest` | `bash ./gradlew rallyTest` |
 | Build and validate | `.\gradlew.bat build` | `bash ./gradlew build` |
 
-The application entry point remains `Table_Tennis_In_3D`.
+The application entry point is `pong.screens.MatchScreen`.
 
 ## IDE setup
 
@@ -42,19 +42,20 @@ hand-editing a generated module to change the source layout; update the Gradle p
 
 ### VS Code
 
-Open the project root and use the committed tasks for running the game and its validation suites.
-The tasks invoke the wrapper, so they use the same source layout and dependencies as terminal builds.
+Open the project root and run the Gradle wrapper from the integrated terminal — the commands in the
+table above are the whole interface. `.vscode/` is ignored, so no task definitions are committed;
+add your own locally if you want them on a keybinding.
 
 ## Validation
 
-`physics.SelfTest` and `play.RallyTest` are executable Java classes with `main` methods. They do
-not require JUnit. Their package names remain unchanged even though they live under
-`src/test/java`.
+`pong._tests.PhysicsTest` and `pong._tests.RallyTest` are executable Java classes with `main`
+methods. They do not require JUnit. See
+[their README](../src/test/java/pong/_tests/README.md) for what each suite is responsible for.
 
-- `physics.SelfTest`: **101 checks** against analytic results, published measurements and ITTF
-  rules. It covers flight, spin, energy, collision handling, preset shots and fast-moving paddles.
-- `play.RallyTest`: **29 checks** covering opponent returns, shot assistance, paddle reach and
-  speed, cursor control, brushing and match scoring.
+- `pong._tests.PhysicsTest`: **101 checks** against analytic results, published measurements and ITTF
+  rules. It covers flight, spin, energy, collision handling, preset shots and fast-moving rackets.
+- `pong._tests.RallyTest`: **29 checks** covering opponent returns, shot assistance, racket reach
+  and speed, cursor control, brushing and match scoring.
 
 The Gradle `test`, `check` and `build` tasks all run both suites through the dedicated `selfTest`
 and `rallyTest` tasks. Each suite prints PASS/FAIL and measured details, then exits non-zero if
@@ -66,22 +67,36 @@ least compile. Both suites must stay at 100%; do not widen a threshold to fit a 
 
 ## Source layout
 
+Directories are named for what the code is **for**, following
+[How I structure my game projects](https://joshanthony.info/2021/12/06/how-i-structure-my-game-projects/).
+Every directory has a README stating what belongs in it; start at
+[`src/main/java/pong/README.md`](../src/main/java/pong/README.md).
+
 ```text
-src/
-  main/java/
-    Table_Tennis_In_3D.java    Application, fixed-step loop, input and wiring
-    physics/                  Headless simulation and measured physical constants
-    play/                     Headless game logic, shot assistance and scoring
-    render/                   JavaFX views and input geometry
-  test/java/
-    physics/SelfTest.java      Physics validation
-    play/RallyTest.java        Game and control validation
+src/main/java/pong/
+  core/math/        Vec3, Quat, Scalars -- nothing table-tennis about them
+  config/           Physical (measured, cited), ShotTuning (tuned, reasoned)
+  game_objects/     ball/, racket/ -- simulation, each with a JavaFX view/ leaf
+  game_world/       World (the simulation) + view/ (court, bounce marks)
+  systems/          collision, aim, control, opponent, scoring, shotmaking
+    connectors/     RallyRules -- wires World + rackets + Scoreboard together
+  assets/           Generated materials, shared by two views
+  screens/          MatchScreen (entry point, loop, input, wiring), CameraRig
+  ui/               Hud
+  _debug/           ShotDebug (V), ControlOverlay (D)
+  helpers/          Xform (the one space conversion), MouseAim (ray geometry)
+src/test/java/pong/_tests/
+  PhysicsTest.java  Simulation validation
+  RallyTest.java    Game and control validation
 ```
 
-Tests retain their `physics` and `play` packages. Production code stays in the same packages and
-keeps the same public entry points. The game layer depends on physics; physics does not depend
-on gameplay or JavaFX. See [Design rationale](DESIGN.md#architecture) for class responsibilities
-and the boundaries that must remain intact.
+An underscore prefix means the contents do not ship: `_debug/`, `_tests/`, `_tools/`.
+
+**JavaFX may only be imported from `screens/`, `ui/`, `_debug/`, `assets/`, `helpers/` and the
+`view/` leaves.** Everything else is headless, which is what lets both suites grade the whole
+simulation and every game rule without opening a window. See
+[Design rationale](DESIGN.md#architecture) for class responsibilities and the boundaries that must
+remain intact.
 
 ## Manual build with Liberica Full JDK 21
 
@@ -93,17 +108,17 @@ JavaFX. Adjust the example path to your installation.
 $JDK = "$env:USERPROFILE\.jdks\jdk-21.0.12.1-full\bin"
 $javaSources = (Get-ChildItem -Path src/main/java,src/test/java -Recurse -Filter *.java).FullName
 & "$JDK\javac" -d out/production/3D-Table-Tennis-In-Java $javaSources
-& "$JDK\java" -cp out/production/3D-Table-Tennis-In-Java Table_Tennis_In_3D
-& "$JDK\java" -cp out/production/3D-Table-Tennis-In-Java physics.SelfTest
-& "$JDK\java" -cp out/production/3D-Table-Tennis-In-Java play.RallyTest
+& "$JDK\java" -cp out/production/3D-Table-Tennis-In-Java pong.screens.MatchScreen
+& "$JDK\java" -cp out/production/3D-Table-Tennis-In-Java pong._tests.PhysicsTest
+& "$JDK\java" -cp out/production/3D-Table-Tennis-In-Java pong._tests.RallyTest
 ```
 
 ```bash
 JDK=~/.jdks/jdk-21.0.12.1-full/bin
 "$JDK/javac" -d out/production/3D-Table-Tennis-In-Java $(find src/main/java src/test/java -name '*.java')
-"$JDK/java" -cp out/production/3D-Table-Tennis-In-Java Table_Tennis_In_3D
-"$JDK/java" -cp out/production/3D-Table-Tennis-In-Java physics.SelfTest
-"$JDK/java" -cp out/production/3D-Table-Tennis-In-Java play.RallyTest
+"$JDK/java" -cp out/production/3D-Table-Tennis-In-Java pong.screens.MatchScreen
+"$JDK/java" -cp out/production/3D-Table-Tennis-In-Java pong._tests.PhysicsTest
+"$JDK/java" -cp out/production/3D-Table-Tennis-In-Java pong._tests.RallyTest
 ```
 
 No `--module-path` or `--add-modules` is needed with the Full distribution. A missing
@@ -116,11 +131,11 @@ The application has an offline capture mode for examining a fixed shot and camer
 After a manual compilation with the Full JDK:
 
 ```powershell
-& "$JDK\java" -cp out/production/3D-Table-Tennis-In-Java Table_Tennis_In_3D "--shot=Topspin loop" --at=0.18 --view=SIDE --ball2x=true --out=out/frame.png
+& "$JDK\java" -cp out/production/3D-Table-Tennis-In-Java pong.screens.MatchScreen "--shot=Topspin loop" --at=0.18 --view=SIDE --ball2x=true --out=out/frame.png
 ```
 
 `--shot` accepts a name from `Shots.ALL`; quote names containing spaces. `--view` accepts a
-`render.CameraRig.View` value (`BEHIND`, `SIDE`, `HIGH`, `LOW`, `TOP`). `--at` is in simulated
+`pong.screens.CameraRig.View` value (`BEHIND`, `SIDE`, `HIGH`, `LOW`, `TOP`). `--at` is in simulated
 seconds. `--out` disables auto-replay so a capture past the end of a rally still completes.
 
 ## Files and generated output
@@ -129,8 +144,8 @@ seconds. `--out` disables auto-replay so a capture past the end of a rally still
 - Gradle writes generated output to `build/`; manual compilation uses the ignored `out/`.
 - `.gradle/`, `bin/`, IDE state, compiled classes and Python bytecode are generated or local.
 - Keep the repository root for project entry points. Put longer documentation in `docs/`
-  and optional development utilities in `tools/`.
+  and optional development utilities in `_tools/`.
 
-The [IntelliJ MCP bridge](../tools/intellij-mcp-bridge/README.md) is a development utility,
+The [IntelliJ MCP bridge](../_tools/intellij-mcp-bridge/README.md) is a development utility,
 separate from the Java game. Its Python dependencies are vendored with the tool; they are not
 application dependencies.

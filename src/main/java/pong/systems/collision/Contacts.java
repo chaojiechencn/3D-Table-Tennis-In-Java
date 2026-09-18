@@ -169,7 +169,7 @@ public final class Contacts {
         Vec3 contactPoint = s.pos().plusScaled(n, -BALL_R);
 
         // Everything here is measured RELATIVE TO THE SURFACE (AGENTS.md invariant 5) -- u is
-        // zero for the table, net and floor, but for a racket it is the whole of the pong.
+        // zero for the table, net and floor, but for a racket it is the whole of its physics.
         // Written in absolute velocity, a racket catching up to a receding ball would read as
         // "already separating" and do nothing at all.
         Vec3 u = box.velocityAt(contactPoint);

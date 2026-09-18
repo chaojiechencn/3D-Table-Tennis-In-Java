@@ -6,7 +6,7 @@ The original design notes and measured development history, retained here as the
 
 ## Project
 
-A 3D table tennis game — mouse-controlled paddle, spin/physics simulation, AI opponent.
+A 3D table tennis game — mouse-controlled racket, spin/physics simulation, AI opponent.
 
 The [project overview](../README.md) introduces the game; [Gameplay](GAMEPLAY.md) covers controls.
 [Development](DEVELOPMENT.md) covers builds and validation. [AGENTS.md](../AGENTS.md) is the short
@@ -19,11 +19,11 @@ looks arbitrary, the paragraph under it is the measurement that produced it.
 
 A finished 3D ping pong game with good graphics and player control.
 
-**Core:** a mouse-controlled paddle with the ball reflecting off it; real physics, so spin is real
+**Core:** a mouse-controlled racket with the ball reflecting off it; real physics, so spin is real
 and shot speed comes from the power applied; collision and rules — table, net, out of bounds; an AI
 good enough to play a full point against; serving and scoring.
 
-**Stretch:** multiple paddles with different characteristics, trading spin against power; currency
+**Stretch:** multiple rackets with different characteristics, trading spin against power; currency
 earned by beating the AI and spent in a shop.
 
 Physics correctness is the core of the work and everything else is presentation. Do not start a
@@ -32,17 +32,17 @@ that cannot play a point.
 
 ## Where this stands
 
-**Built and validated.** Both headless suites are green: `physics.SelfTest` 101 checks,
-`play.RallyTest` 29 checks.
+**Built and validated.** Both headless suites are green: `pong._tests.PhysicsTest` 101 checks,
+`pong._tests.RallyTest` 29 checks.
 
-- **The physics engine** (`physics/`) — a ball flying with real spin: measured drag, a Magnus lift
+- **The simulation** (`game_objects/`, `game_world/`, `systems/collision/`) — a ball flying with real spin: measured drag, a Magnus lift
   curve with the real lift crisis in it, spin transfer on every contact, swept collisions, RK4 on a
-  fixed 1/480 s step. Plain Java, no JavaFX, graded entirely by `SelfTest`.
-- **The game layer** (`play/`) — the player's blade on the cursor and nothing else (`Stroke`), a
+  fixed 1/480 s step. Plain Java, no JavaFX, graded entirely by `PhysicsTest`.
+- **The game layer** (`systems/`) — the player's blade on the cursor and nothing else (`Stroke`), a
   measured control envelope (`PlayerReach`), the arcade shot model that keeps a rally alive
   (`ShotAssist`), an opponent behind an interface (`Follower`), and the match score kept to ITTF
   rules (`Scoreboard`). Plain Java, graded by `RallyTest`.
-- **The game itself** (`Table_Tennis_In_3D` + `render/`) — both rackets wired in, mouse control,
+- **The game itself** (`screens/MatchScreen` + the views) — both rackets wired in, mouse control,
   the ITTF one-bounce rule, points that are awarded and reset the rally, a two-view rally-cam, a
   room to play in, and two debug overlays (`V` for the shot decision, `D` for the control).
 
@@ -59,8 +59,8 @@ that cannot play a point.
    just gets erratic. Difficulty has to come from prediction quality. `World.predict` exists,
    stays headless and side-effect free, and is what the predicting opponent is owed.
 3. **Menus** — a front end, so the game is something you start rather than something you launch.
-4. **Multiple paddles** that play differently (more spin against more power). The tuning is
-   already isolated in `ShotAssist.Tuning`, so a paddle is a set of those values, not a new code
+4. **Multiple rackets** that play differently (more spin against more power). The tuning is
+   already isolated in `config/ShotTuning`, so a racket is a set of those values, not a new code
    path.
 5. **Currency and the shop** — stretch, and last.
 
@@ -69,15 +69,15 @@ that cannot play a point.
 How the work gets done here. These are the habits that produced everything above, and most of the
 rules further down this file are one of them applied to a specific case.
 
-- **Measure; do not eyeball.** Every constant in `play/` was read off a sweep, not chosen because
+- **Measure; do not eyeball.** Every constant in `systems/` was read off a sweep, not chosen because
   it looked right: `Z_FAR = 2.40` is where the reachability curve flattens, `HIT_Y = 0.16` is the
   peak of a measured touchable window. Scratch probes (`Sweep`, `Trace`, `ReachProbe`,
   `CoverageProbe`) exist to answer one question with a number and then get thrown away. A tuning
   change with no measurement behind it is a guess wearing a commit message.
 - **Validate before claiming.** Two headless suites, both at 100%, both anchored against published
   and ITTF numbers rather than against themselves — that is what makes them catch changes that
-  still look plausible on screen. Run `physics.SelfTest` after touching `src/main/java/physics/` and
-  `play.RallyTest` after touching `src/main/java/play/`. A failing check is a broken deliverable, not a
+  still look plausible on screen. Run `pong._tests.PhysicsTest` after touching the simulation packages
+  and `pong._tests.RallyTest` after touching `systems/`. A failing check is a broken deliverable, not a
   flaky test.
 - **Never widen a threshold to fit a regression.** Re-deriving a threshold because the model got
   *more accurate* is legitimate. Say why in a comment, with the number the new model predicts —
@@ -86,7 +86,7 @@ rules further down this file are one of them applied to a specific case.
   "the measured number")` call. The detail string prints on **pass as well as fail**, so it has to
   state what was actually measured: a PASS reading "(it clipped the cord)" contradicts its own
   result.
-- **Cite every real-world number.** A bare constant with no citation in `physics/` is a bug.
+- **Cite every real-world number.** A bare constant with no citation in `config/Physical` is a bug.
   Anything tuned by eye is labelled `TUNED` and says what it is standing in for. Where two
   published sources genuinely conflict, record both and say which one wins and why, rather than
   picking quietly.
@@ -94,8 +94,8 @@ rules further down this file are one of them applied to a specific case.
   in this file is the thing that was tried and did not work — hand-picked launch velocities, a
   monotonic lift curve, a grip-only bounce, slowing the follower down. Each is cheap to re-propose
   and expensive to re-disprove.
-- **Keep the realistic model separable from the arcade layer.** `physics/` is the real simulation
-  and is graded on its own; `play/ShotAssist` is a layer on top that constrains the *outgoing*
+- **Keep the realistic model separable from the arcade layer.** the simulation packages are the real simulation
+  and is graded on its own; `systems/shotmaking/ShotAssist` is a layer on top that constrains the *outgoing*
   trajectory so a rally survives. The assist can be switched off and the model underneath is
   untouched. Preserving that separation is worth more than any single tuning win, because it is
   what lets the physics work stand on its own.
@@ -108,7 +108,7 @@ explanation is the point:
 
 | Area | Specifically |
 | --- | --- |
-| **Physics** | How a spinning ball moves through air, what happens to spin on table/paddle contact, and keeping the simulation stable over long runs. |
+| **Physics** | How a spinning ball moves through air, what happens to spin on table/racket contact, and keeping the simulation stable over long runs. |
 | **JavaFX** | The 3D scene graph — meshes, materials, camera, lighting — and a game loop on `AnimationTimer` that runs the same on fast and slow machines. |
 | **AI** | Getting the opponent to predict where the ball is going rather than following it. |
 
@@ -148,89 +148,120 @@ space.** Convert at the boundary and nowhere else.
 
 ## Architecture
 
+Directories are named for **what the code is for**, following
+[How I structure my game projects](https://joshanthony.info/2021/12/06/how-i-structure-my-game-projects/):
+a `core/` holding only what would transplant into another game unchanged, `game_objects/` and
+`game_world/` for the things in the world and the world they live in, `systems/` for the rules,
+`connectors/` for the wiring between systems, and a leading underscore on anything that does not
+ship. Every directory carries a README stating what belongs in it — start at
+[`src/main/java/pong/README.md`](../src/main/java/pong/README.md).
+
 ```text
-src/
-  main/java/
-    Table_Tennis_In_3D.java  entry point; fixed-timestep loop, input, wiring, capture mode
-    physics/                no javafx imports, ever
-      Vec3.java             immutable 3D vector (record)
-      Quat.java             unit quaternion; carries the ball's VISUAL orientation only
-      Constants.java        every real-world number, each with its source cited
-      BallState.java        position, velocity, spin, orientation
-      Aero.java             gravity + drag + Magnus + spin decay -> derivative
-      Integrator.java       RK4 over Aero, fixed dt
-      Collider.java         the 4 questions the solver asks a surface (sealed: Box, Blade)
-      Contacts.java         ONE impulse solver, for every surface including a moving paddle
-      Paddle.java           kinematic racket + its disc-slab Blade collider
-      World.java            owns the state, steps it, emits events, predicts trajectories
-      Aim.java              solves launch angle for a target; also builds spin vectors
-      Shots.java            named launch presets, defined by intent and solved by Aim
-    play/                   game logic; plain Java, tested headlessly
-      Stroke.java           player's paddle: follows the cursor, and nothing else
-      PlayerReach.java      control envelope: where the racket may be, and can it get there
-      ShotAssist.java       arcade shot model: shapes outgoing racket contacts
-      Opponent.java         interface: look at the ball, move the blade, swing
-      Follower.java         current opponent: tracks the ball, does NOT predict
-      DemoPlayer.java       automated demonstration player
-      Scoreboard.java       ITTF match score; server is DERIVED, never stored
-    render/
-      Xform.java            ONLY physics<->scene conversion, in both directions
-      MouseAim.java         cursor -> ray -> point on ONE horizontal hitting plane
-      Court.java            table, net, floor, legs, ITTF markings and room
-      SurfaceMaterials.java deterministic textures, built once
-      BallView.java         ball and procedural spin-visible texture
-      BallShadow.java       soft vertical projection; a height cue
-      PaddleView.java       blade, red/black rubber and handle
-      Trail.java            fading dots for live and ghost paths
-      BounceMarks.java      discs where the ball landed
-      CameraRig.java        rally-cam, orbit/zoom and preset views
-      ShotDebug.java        V-toggled shot-decision overlay
-      Hud.java              key legend, feed name and debug readouts
-  test/java/
-    physics/SelfTest.java    headless physics validation vs. published numbers
-    play/RallyTest.java      headless game, scoring and control validation
+src/main/java/pong/
+  core/math/              nothing here knows what a ball is
+    Vec3.java             immutable 3D vector (record)
+    Quat.java             unit quaternion; carries the ball's VISUAL orientation only
+    Scalars.java          clamp, frac -- once five identical private copies
+  config/
+    Physical.java         every MEASURED number, each with its source cited
+    ShotTuning.java       every TUNED knob of the shot model, each with its reasoning
+  game_objects/
+    ball/Ball.java        position, velocity, spin, orientation
+    ball/Aero.java        gravity + drag + Magnus + spin decay -> derivative
+    ball/Integrator.java  RK4 over Aero, fixed dt
+    ball/view/            BallView (spin-visible texture), BallShadow, Trail
+    racket/Racket.java    kinematic racket + its disc-slab Blade collider
+    racket/view/          RacketView: blade, red/black rubber and handle
+  game_world/
+    World.java            owns the state, steps it, emits events, predicts trajectories
+    view/CourtView.java   table, net, floor, legs, ITTF markings and room
+    view/BounceMarks.java discs where the ball landed
+  systems/
+    collision/Collider    the 4 questions the solver asks a surface
+    collision/Contacts    ONE impulse solver, for every surface including a moving racket
+    aim/Aim.java          solves launch angle for a target; also builds spin vectors
+    aim/Shots.java        named launch presets, defined by intent and solved by Aim
+    control/Stroke        player's racket: follows the cursor, and nothing else
+    control/PlayerReach   control envelope: where the racket may be, and can it get there
+    opponent/Opponent     interface: look at the ball, move the blade, swing
+    opponent/Follower     current opponent: tracks the ball, does NOT predict
+    opponent/DemoPlayer   automated demonstration player
+    scoring/Scoreboard    ITTF match score; server is DERIVED, never stored
+    shotmaking/ShotAssist arcade shot model: shapes outgoing racket contacts
+    connectors/RallyRules the one-bounce rule and the point-ending rules
+  assets/
+    SurfaceMaterials.java deterministic textures, built once, shared by two views
+  screens/
+    MatchScreen.java      entry point; fixed-timestep loop, input, wiring, capture mode
+    CameraRig.java        rally-cam, orbit/zoom and preset views
+  ui/Hud.java             key legend, feed name and debug readouts
+  _debug/
+    ShotDebug.java        V-toggled shot-decision overlay
+    ControlOverlay.java   D-toggled control/reachability readout
+  helpers/
+    Xform.java            ONLY physics<->scene conversion, in both directions
+    MouseAim.java         cursor -> ray -> point on ONE horizontal hitting plane
+src/test/java/pong/_tests/
+  PhysicsTest.java        headless simulation validation vs. published numbers
+  RallyTest.java          headless game, scoring and control validation
 ```
 
-**Two packages, one dependency direction.** `play` depends on `physics`; `physics` depends on
-nothing. That is why the opponent's checks live in `src/test/java/play/RallyTest.java` and not in
-`src/test/java/physics/SelfTest.java` — importing `play.Follower` from `physics` would invert it. If a new test
-needs both, it belongs in `play`.
+**Dependencies run one way**, and a `view/` depends on the package above it, never the reverse:
+
+```
+screens → ui, _debug, systems, game_objects, game_world
+systems → game_objects, game_world, core, config
+game_world → game_objects, systems/collision, core, config
+game_objects → core, config
+core → nothing
+```
+
+The two suites grade different things, which is why the opponent's checks live in `RallyTest` and
+not `PhysicsTest`: a failure in one tells you whether the physics is wrong or the game is. See
+[their README](../src/test/java/pong/_tests/README.md).
 
 Rules that keep this from rotting:
 
-- **`src/main/java/physics/` must not import anything from `javafx.*`.** It is plain Java so the simulation can be
-  checked headlessly and so it can never accidentally depend on the frame rate or on the renderer.
-  `SelfTest` enforces this by existing.
-- **`src/main/java/render/` reads physics state; it never writes it.** Physics state is plain math on vectors;
-  JavaFX nodes are a *view* of that state, updated once per frame.
+- **JavaFX may only be imported from `screens/`, `ui/`, `_debug/`, `assets/`, `helpers/` and the
+  `view/` leaves.** Everything else — the whole simulation and every game rule — is plain Java, so it
+  can be checked headlessly and can never accidentally depend on the frame rate or on a view. To
+  check it directly:
+  `grep -rl --include=*.java "import javafx" src/main/java/pong | grep -vE "/(view|screens|ui|_debug|assets|helpers)/"`
+  must print nothing.
+- **A `view/` reads simulation state; it never writes it.** Simulation state is plain math on
+  vectors; JavaFX nodes are a *view* of that state, updated once per frame.
+- **A connector owns no simulation and no rendering.** `systems/connectors/RallyRules` exists only
+  to make `World`, the two rackets and the `Scoreboard` interact, so none of the three has to learn
+  about the others. That is what keeps a scoreboard out of the physics engine — and it is why the
+  rally rules are testable at all, having previously run only inside the JavaFX Application.
 - **Shot presets state intent** (speed, spin, target) and let `Aim` solve the launch angle. Do not
   hard-code launch velocities: it was tried, and with drag this strong almost every hand-picked shot
   sailed off the end of the table.
-- **One collision solver, still.** Table, net, floor and *both paddles* differ only by a `Material`
+- **One collision solver, still.** Table, net, floor and *both rackets* differ only by a `Material`
   and a shape — do not add a second bespoke bounce path. The net has to steal spin by the same rules
-  the table uses to make it, and the paddle has to put spin on by them too.
+  the table uses to make it, and the racket has to put spin on by them too.
   - Shape is behind `Collider`: `closestPoint`, `escapeNormal`, `sweep`, `velocityAt`. Those are the
     only four questions `Contacts` asks. A new shape answers them; it does not touch the impulse.
   - **The solver works in the SURFACE's frame, not the world's.** Every velocity in `applyImpulse`
     is relative to `velocityAt(contact)`. This is not a refinement — written in absolute velocity, a
     blade swung into a ball reads as "already separating" and does nothing at all, and a brushing
-    stroke generates exactly zero spin. If you ever see a paddle that passes through the ball
+    stroke generates exactly zero spin. If you ever see a racket that passes through the ball
     harmlessly, this is what broke.
-  - Contacts resolve **earliest-first**, not in list order. With a paddle that can be over the table,
+  - Contacts resolve **earliest-first**, not in list order. With a racket that can be over the table,
     "first in the list" and "the one it actually hit first" stop being the same answer.
   - A swept contact **flies the rest of the step** afterwards, and bounces the velocity the ball had
     *at impact*, not at the end of the step. Skipping either hands the ball free energy every bounce.
-- **The ball never moves the player's paddle.** `Stroke` is handed a cursor point and a
-  timestep, and that is all — deliberately not a `BallState`, so the rule is enforced by the
+- **The ball never moves the player's racket.** `Stroke` is handed a cursor point and a
+  timestep, and that is all — deliberately not a `Ball`, so the rule is enforced by the
   signature rather than by discipline. Ball position, velocity and `World.predict` are for the
   opponent, the renderer and the assist; none of them may reach the near blade. The blade DOES
   move in depth -- it reaches in over the table -- but that depth comes from the cursor's aim
-  ray in `render/MouseAim`, which is geometry the player drives. That is the only shape a reach
+  ray in `helpers/MouseAim`, which is geometry the player drives. That is the only shape a reach
   may ever take here.
 
   The one sanctioned exception is **validation**: `PlayerReach.timeToDepth` /
   `reachableInTime` and the `D` overlay read the ball to answer "could the player have got
-  there", and Table_Tennis_In_3D's `controlReadout()` calls them *after* the target has already been
+  there", and `MatchScreen`'s `controlReadout()` calls them *after* the target has already been
   computed and handed to `Stroke`. Read-only, downstream, and never on the path that sets the
   blade's target. Anything that reads the ball *before* the target is chosen is auto-follow
   wearing a different hat.
@@ -241,21 +272,21 @@ Rules that keep this from rotting:
   meaning "reach deeper" and "lift the bat" at the same time is exactly the control bug the
   control-mapping section below records, and neither gesture can be made alone once they share
   an axis.
-- **Spin is core, not a bonus.** Magnus in flight, and spin transfer on table/paddle/net contact. It
+- **Spin is core, not a bonus.** Magnus in flight, and spin transfer on table/racket/net contact. It
   shapes the collision code, so design for it up front rather than bolting it on.
 - **The AI predicts, it does not follow — but the one in the repo right now follows.**
-  `play/Follower.java` tracks the ball's *current* position and is unbeatable by moving faster than a
+  `systems/opponent/Follower.java` tracks the ball's *current* position and is unbeatable by moving faster than a
   person can. That is a deliberate, requested placeholder, not an oversight, and it is behind the
   `Opponent` interface so the predicting version is a second class rather than a rewrite. The real
   one still owes `World.predict`, which stays headless and side-effect free for exactly that.
   Note the limitation: a follower **cannot** be made beatable by slowing it down, it just gets
   erratic. Difficulty has to come from prediction quality — which is why the next AI work is
   prediction rather than tuning.
-- **`World.predict` must never see a paddle.** It builds a private `World` to fly a trajectory
-  forward; a prediction that gets intercepted is a prediction of nothing. `setPaddles` is opt-in and
+- **`World.predict` must never see a racket.** It builds a private `World` to fly a trajectory
+  forward; a prediction that gets intercepted is a prediction of nothing. `setRackets` is opt-in and
   `predict` leaves them null.
 - **Nothing outside `Xform` may divide by `SPM`.** The conversion now runs both ways (`toPhysics`
-  exists so the mouse can drive a paddle), which makes it *more* tempting to do it inline, not less.
+  exists so the mouse can drive a racket), which makes it *more* tempting to do it inline, not less.
 
 ## The game loop
 
@@ -263,7 +294,7 @@ Gaffer On Games, *Fix Your Timestep!*: an accumulator with a fixed `DT = 1/480 s
 rendering that interpolates between the last two states. Consequences to respect:
 
 - **Physics never sees the frame time.** If you find yourself passing a JavaFX `dt` into anything under
-  `physics/`, you have broken determinism.
+  the simulation, you have broken determinism.
 - The accumulator is clamped (`MAX_FRAME`) so a stall cannot spiral into a death loop.
 - Rendering lerps position and slerps orientation. Do not snap to the raw state.
 - `DT` is 1/480 s, far smaller than a display frame, so a 30 m/s smash moves 6 cm per step and cannot
@@ -273,7 +304,7 @@ rendering that interpolates between the last two states. Consequences to respect
 
 ## Physics model (and where the numbers came from)
 
-All constants live in `physics/Constants.java` with per-value citations. Summary:
+All constants live in `config/Physical.java` with per-value citations. Summary:
 
 - **Ball** 40 mm, 2.7 g, hollow shell → `I = (2/3)mr²`. The 2/3 (not the solid sphere's 2/5) is why the
   grip impulse is `-(2/5)m·v_contact` and not `-(2/7)m·v_contact` — it changes how much spin a bounce
@@ -289,7 +320,7 @@ All constants live in `physics/Constants.java` with per-value citations. Summary
     has a *valley* near `S ≈ 0.5–0.8` (the "lift crisis", Miyazaki et al. 2017), and normal play spans
     `S ≈ 0.1–1.4`, so a rally crosses it constantly. The old curve was ~15% too weak below S = 0.5 and
     up to **1.9× too strong** at S ≈ 0.8. Do not "simplify" this back to a formula: no monotonic
-    function can represent a valley, and `SelfTest` asserts the valley exists.
+    function can represent a valley, and `PhysicsTest` asserts the valley exists.
 - **Spin decay** `dω/dt = -k·ω·|v|`, per metre rather than per second. Still `TUNED` — no
   table-tennis-specific time constant exists in the literature, and sources disagree on whether spin
   decays in flight at all. The value is pinned so it reproduces the previous 5%/s at 12 m/s, so the
@@ -300,19 +331,19 @@ All constants live in `physics/Constants.java` with per-value citations. Summary
   dead ball — it is the whole point, and none of it is scripted.
 - **Rubber** adds a *tangential* restitution `e_t ≈ 0.82`: the topsheet stores tangential energy and
   springs it back. That, and only that, is what **reverses** incoming spin rather than merely
-  absorbing it. A grip-or-slide model provably cannot do it, and `SelfTest` has the negative control
+  absorbing it. A grip-or-slide model provably cannot do it, and `PhysicsTest` has the negative control
   proving so. Perfect grip is just the `e_t = 0` case, so this is still one solver.
 - **Collisions are swept**, not overlap-only. At 60 m/s the ball moves 12.5 cm per step against a 6.5 cm
   crossing, so an overlap test alone drops the hardest shots straight through the table.
 
-What `SelfTest` anchors against (**101 checks**, +4 for the Serve preset): terminal velocity vs. the closed form; free fall vs.
+What `PhysicsTest` anchors against (**101 checks**, +4 for the Serve preset): terminal velocity vs. the closed form; free fall vs.
 the exact `tanh`/`ln cosh` solution to 1 mm over 3 s; the ITTF drop test; RK4 convergence order;
 `C_d` and `C_L` vs. measured values; the lift crisis; Magnus direction for top, back and side spin;
 no contact ever adding energy; topspin kicking forward and backspin checking off the bounce; the net
 killing a ball; in/out detection; every preset shot being legal; 10 simulated minutes of stability;
-no tunnelling from 20 to 60 m/s; and the whole paddle group below.
+no tunnelling from 20 to 60 m/s; and the whole racket group below.
 
-`play.RallyTest` (**29 checks**) is separate and covers the game logic: the opponent reaches every
+`pong._tests.RallyTest` (**29 checks**) is separate and covers the game logic: the opponent reaches every
 shot fed at it, returns every one over the net, **lands every one on the table**, never sends the
 ball out faster than the impulse allows, and never launches it out of the hall; and a thrown mouse
 cannot move the player's blade faster than `Stroke.TRACK_SPEED`, which itself sits below a real
@@ -332,7 +363,7 @@ The landing check is new, and the reason it can exist now is worth keeping strai
 be a printout with a long comment explaining why it could not be a check: the follower's RAW
 return cleared the net every time and put ONE of ten on the table, and a sweep of its face angle,
 swing speed and lift proved no fixed stroke could do both — settings that land three of ten
-cannot return all ten. That is still true of the raw stroke. What changed is that `Table_Tennis_In_3D` runs
+cannot return all ten. That is still true of the raw stroke. What changed is that `MatchScreen` runs
 every contact, the follower's included, through `ShotAssist`, so **grading the raw return was
 grading a code path the game no longer takes.** `RallyTest` now feeds contacts through the assist
 exactly as the game does, and the answer went from 1 of 10 to **10 of 10**. The one number still
@@ -340,7 +371,7 @@ taken from before the assist is the raw outgoing speed, because that is what the
 check is actually about. This makes the follower *legal*, not intelligent — it still tracks the
 ball rather than reading it, and a predicting opponent is still owed.
 
-**Three things in `SelfTest` are load-bearing and easy to wreck by accident:**
+**Three things in `PhysicsTest` are load-bearing and easy to wreck by accident:**
 
 - **The two closed-form checks are pinned to `Aero.DragModel.constant(C_DRAG)`.** `v_t = √(g/kC_d)`
   and the `tanh`/`ln cosh` solution *only exist for constant `C_d`*, and the free-fall one is the
@@ -350,7 +381,7 @@ ball rather than reading it, and a predicting opponent is still owed.
   interpolation puts a kink in the force field at every node, and RK4 only reaches 4th order on a
   smooth right-hand side. With linear interpolation the convergence check measured 30× error
   reduction for a 4× smaller step; with smootherstep it measures 255× against a theoretical 256×.
-- **The paddle checks fail against any solver that works in absolute velocity.** That is their point.
+- **The racket checks fail against any solver that works in absolute velocity.** That is their point.
 
 **Two published claims genuinely conflict, and the code records both rather than picking quietly.**
 A terminal velocity of 9.0–9.6 m/s implies `C_d ≈ 0.40`; the measured `C_d ≈ 0.47–0.55` implies
@@ -361,16 +392,16 @@ CFD and a 277-match fit agree), and the check says so in its own failure text.
 tangential stiffness `k_p ≈ 0.019` implies a tangential restitution of 16.6 — the contact patch
 leaving sixteen times faster than it arrived. Working back from the same paper's own `e_t = 0.819`
 gives `k_p ≈ 0.0019`: a factor of ten. The model uses `e_t`, which is dimensionless and cannot hide
-a units error like that. The arithmetic is written out in `Constants.RACKET_MAT`.
+a units error like that. The arithmetic is written out in `Physical.RACKET_MAT`.
 
 ## Why the shot is authored, not raw — the game is assisted arcade
 
-The validated physics engine is **still there and still green** — four of `SelfTest`'s checks
+The validated physics engine is **still there and still green** — four of `PhysicsTest`'s checks
 are the `Serve` preset's own legality. But the game on top of it is deliberately **arcade, not
 realistic**, because a rally you can actually keep needs it.
 
-**The pivot: `play/ShotAssist.java`.** After the impulse solver resolves a paddle contact,
-`Table_Tennis_In_3D.advanceOne()` hands the raw result to `ShotAssist`, which turns it into an authored
+**The pivot: `systems/shotmaking/ShotAssist.java`.** After the impulse solver resolves a racket contact,
+`MatchScreen.advanceOne()` hands the raw result to `ShotAssist`, which turns it into an authored
 shot in one direction only: **solve → constrain → validate → correct.** Nothing is mutated
 after its last check, which is the rule the first version broke.
 
@@ -396,14 +427,14 @@ after its last check, which is the rule the first version broke.
    overlay so it is visible rather than mysterious.
 
 Then `world.setState(...)` swaps it in. **Both rackets** go through it, so the follower's returns
-land too. `World.setState` is the only new `physics/` code — one setter, never called by SelfTest
+land too. `World.setState` is the only new simulation code — one setter, never called by PhysicsTest
 or `predict`, so the model underneath is untouched. The player's blade is still moved by the raw
 solver at contact; the *outgoing* trajectory is what gets civilised.
 
-**Every tuning number lives in `ShotAssist.Tuning`**, a public nested class with a field per
+**Every tuning number lives in `config/ShotTuning`**, a public nested class with a field per
 knob — speeds, influences, clamps, the target box, the correction and rescue searches, spin.
 Nothing is hardcoded below it. (Restitution and friction are deliberately NOT duplicated there:
-they are measured values with citations, single-sourced in `physics/Constants`, and SelfTest
+they are measured values with citations, single-sourced in `config/Physical`, and PhysicsTest
 grades them.)
 
 **What it measurably fixed.** `Sweep` (scratch) fires a realistic incoming ball at the blade
@@ -427,12 +458,12 @@ first crossing reported is the SECOND descent, out past the end line. It made `S
 landing question has to be asked of a contact-free flight (`Aim.landingPoint`), and the code
 now says so in three places.
 
-**The one-bounce rule.** `Table_Tennis_In_3D` enforces ITTF's "return only after it has bounced on your
+**The one-bounce rule.** `MatchScreen` enforces ITTF's "return only after it has bounced on your
 side" by handing `World` a null racket for whoever may not hit yet — the blade still tracks the
 ball on screen, it just phases through. A table bounce opens the receiver's racket; a *second*
 bounce on the same side, a ball back on the hitter's own half, or a ball past the end line calls
 `endPoint(winner)`, which cuts to the next serve after `POINT_END_DELAY` (0.9 s) rather than
-waiting for the ball to trickle to a stop. The point is awarded to `play/Scoreboard`, which keeps
+waiting for the ball to trickle to a stop. The point is awarded to `systems/scoring/Scoreboard`, which keeps
 the match to ITTF rules.
 
 **A net cord does not decide the point**, and that is deliberate: `World` emits `NET` for *any*
@@ -455,11 +486,11 @@ event — but the serial still has to advance, or the next real bounce is compar
 This is a real departure from "real physics, with shot speed from the power applied", and a
 deliberate one. The realistic solver is intact and can be switched back to by dropping the
 `ShotAssist` call. **Keeping both is the point** — the physics work stands on its own in
-`physics/` + `SelfTest`, and the playable game is a `play/` layer on top of it. Either can be
+the simulation + `PhysicsTest`, and the playable game is a `systems/` layer on top of it. Either can be
 shown, demonstrated or reasoned about without the other, which is the whole reason the seam is
 where it is.
 
-Tuning lives entirely in `ShotAssist.Tuning`. `play.Trace` (scratch) rallies a brain-dead autoplay
+Tuning lives entirely in `config/ShotTuning`. `play.Trace` (scratch) rallies a brain-dead autoplay
 bot — it lunges to every ball and parks, the worst case — against the follower. It used to manage
 about 3 exchanges per point; it now runs to the 40 s timeout on **every** feed (96 exchanges a
 point on Serve, Flat drive, Topspin loop and Heavy backspin push alike). A human who lets the ball
@@ -499,7 +530,7 @@ the blade parked mid-table and was out of position for everything.
 - **Face eased toward the ball** (`FACE_TAU`), **`Stroke.TRACK_SPEED` 8 → 13**, **`timeScale`
   0.45**, **default feed = `Serve`** (gentle no-spin corner to corner).
 
-## The player's paddle does not follow the ball
+## The player's racket does not follow the ball
 
 Reported as a gameplay bug and fixed at the source: with the mouse completely still, the near
 blade was still moving, because `Stroke.advance` read the ball twice.
@@ -511,12 +542,12 @@ blade was still moving, because `Stroke.advance` read the ball twice.
   once the ball was behind it. That is auto-aim: the face turned to track a ball the player had
   not reacted to.
 
-Both are gone. `advance(Paddle, double)` no longer takes a `BallState` at all, so the rule is
+Both are gone. `advance(Racket, double)` no longer takes a `Ball` at all, so the rule is
 enforced by the signature. Measured: over every preset and a 30 m/s ball driven straight at it,
 with the cursor set once and then still, blade drift, face turn and blade speed are **exactly
 0**.
 
-### The reach came back as geometry — `render/MouseAim`
+### The reach came back as geometry — `helpers/MouseAim`
 
 > **Superseded — see *The control mapping* below.** The reach surface described here fixed
 > auto-follow and did it correctly, but it bought the reach by deriving depth AND height from
@@ -563,7 +594,7 @@ follower's actual returns): all **10 of 10** returns pass within 3 mm of a point
 put the blade on, met at z = +0.69 to +1.57. Under the pinned plane, `Serve` and `Cross-court
 loop` arrived below the table top and could not be played at all.
 
-### The shot goes where the player aims it — `play/ShotAssist`
+### The shot goes where the player aims it — `systems/shotmaking/ShotAssist`
 
 The other half of the same report: the ball came back to the middle of the table however you
 swiped. It was not a weak aim. It was that **the rescue path had quietly become the normal
@@ -606,21 +637,21 @@ Found while measuring the above, and worth keeping because the shape of it is no
 a contact lands. It was never the flights. It was `Aim.atTarget`: 60 bisection halvings, each
 flying a whole trajectory, called once per candidate shot, a dozen-plus times per contact.
 
-- **`Aim.ITERATIONS` 60 → 28** (`physics/`). 60 halvings of an 80-degree bracket is the last bit
+- **`Aim.ITERATIONS` 60 → 28** (`systems/aim/`). 60 halvings of an 80-degree bracket is the last bit
   of a double; 28 is 5e-9 rad, which is 14 nanometres of landing position on a 2.7 m shot. Free
   when it solved twelve presets at startup, not free once the assist calls it per contact.
-  SelfTest grades every preset through this solver and is unchanged at 101/101.
+  PhysicsTest grades every preset through this solver and is unchanged at 101/101.
 - **The search stops at the first legal candidate** rather than finishing the pass. The speed
   ladder already tries the asked-for pace first and alternates outward, so the first legal
   candidate is the one that would have won on score anyway.
 - **`ShotAssist.VALIDATE_DT` = 1/120**, four times the game's step, for validation flights only.
-  RK4 error is O(h⁴), so that is 256x an error SelfTest measures in tenths of a millimetre over
+  RK4 error is O(h⁴), so that is 256x an error PhysicsTest measures in tenths of a millimetre over
   three seconds — millimetres, against the 5 cm landing margin it feeds. Not to be taken coarser
   without redoing that arithmetic.
 
 **25.8 → 11.9 ms**, and an ordinary contact is now 2–3 ms; the worst case measured (a cord-high
 ball at the net, which does go through the rescue) is 12.4 ms. Note that this is the second
-change to `physics/` since the assist landed — `World.setState` is no longer the only one, though
+change to the simulation since the assist landed — `World.setState` is no longer the only one, though
 `Aim.ITERATIONS` is a cost knob with no effect on any answer the model gives.
 
 **What this work left open** is tracked in *Where this stands* at the top of this file. One
@@ -635,7 +666,7 @@ behaviour, not a regression — the before/after numbers are in the git history 
 
 One consequence of `timeScale = 0.45`: the game opens in slow motion. `[` and `]` still change it
 live (down to 0.02, up to 2.0). It is a pure display-rate knob — fewer fixed steps run per wall
-second, each identical to a full-speed step — so nothing under `physics/` sees it.
+second, each identical to a full-speed step — so nothing in the simulation sees it.
 
 ## The control mapping — the cursor means one thing at a time
 
@@ -710,11 +741,11 @@ prints cursor, raw ray aim, racket and target positions, the legal bounds, the t
 and its time at `TRACK_SPEED`, the ball, its arrival time at the racket's depth, and a
 reachable yes/no with the margin. `--controldebug=true` turns it on for a capture.
 
-## The demo player, and the paddle's face settling to square
+## The demo player, and the racket's face settling to square
 
-**`play/DemoPlayer.java`** is a stand-in hand, not a shortcut into the blade: it produces a
+**`systems/opponent/DemoPlayer.java`** is a stand-in hand, not a shortcut into the blade: it produces a
 cursor point through the same `Stroke` / `PlayerReach` path a mouse does, and never touches a
-`Paddle` directly. What it knows that a beginner does not comes down to three things: it predicts
+`Racket` directly. What it knows that a beginner does not comes down to three things: it predicts
 where the ball is going (`World.predict`) rather than chasing where it is, it aims at the point on
 that path closest to `PlayerReach.HIT_Y` rather than the first reachable point (always at the
 rim, where a contact is a graze), and it sets up `SETBACK` (0.20 m) behind and `PREP_ACROSS`
@@ -748,7 +779,7 @@ be strong enough to reach genuine backspin, not just less topspin: a still blade
 brush of -6.4, so `14 + (-6.4 * topspinPerLift 2.6) ≈ -2.6 rev/s` -- just past square, into a
 genuine chop. Below about 0.7 here the whole backspin half of the gesture is unreachable.
 
-**Ball-control ease (`ShotAssist.Tuning`).** For an average player rather than a bot that always
+**Ball-control ease (`config/ShotTuning`).** For an average player rather than a bot that always
 points exactly at the ball, the clean-contact core was widened (`qualityCore` 0.50 → 0.58,
 `qualityFalloff` 0.42 → 0.50), a fast incoming ball shrinks that core less (`qualityPaceLoss`
 0.22 → 0.15), and a mishit earns more assist (`assistFloor` 0.25 → 0.35). A mishit is still
@@ -758,7 +789,7 @@ clearly worse than a clean hit; it stops reading as close to an automatic loss.
 
 - Java 21, 4-space indent.
 - Comments stay short: what a constant is, its citation or `TUNED` reasoning, and the one
-  sentence someone needs before changing it. **A bare constant with no citation in `physics/` is
+  sentence someone needs before changing it. **A bare constant with no citation in `config/Physical` is
   a bug.** The full derivation, history and measurements belong here, in this file, not in the
   source — search this document for the class or field name before re-deriving something that
   already has a measured answer.
