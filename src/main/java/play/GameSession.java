@@ -257,6 +257,7 @@ public final class GameSession {
     public List<World.Event> events()    { return world.events(); }
     public Scoreboard.Snapshot score()   { return score.snapshot(); }
     public boolean demoMode()            { return demoMode; }
+    public boolean autoReplay()          { return autoReplay; }
     public boolean playerMayHit()        { return playerMayHit && !pointOver; }
     public boolean opponentMayHit()      { return opponentMayHit && !pointOver; }
     public boolean pointOver()           { return pointOver; }

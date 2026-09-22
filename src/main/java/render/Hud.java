@@ -6,6 +6,7 @@ import javafx.scene.control.Label;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import play.Scoreboard;
 
 /**
  * The key legend, and the one readout the controls cannot work without.
@@ -72,8 +73,25 @@ public final class Hud {
     /** The feed currently selected with the number keys. */
     public void setFeed(String name) { feed.setText("feed: " + name); }
 
-    /** The match score, already formatted by {@code play.Scoreboard.line()}. */
-    public void setScore(String text) { score.setText(text); }
+    /**
+     * The match score on one line: games, the running points, and who is serving. The serving
+     * dot sits next to the server's own score, where a player looks for it, and "deuce" is
+     * spelled out because at 10-all the rule has changed and the numbers alone do not say so.
+     */
+    public void setScore(Scoreboard.Snapshot s) {
+        score.setText(scoreLine(s));
+    }
+
+    static String scoreLine(Scoreboard.Snapshot s) {
+        String games = "games " + s.playerGames() + " - " + s.opponentGames();
+        if (s.matchWinner() != null) {
+            return (s.matchWinner() == Scoreboard.Side.PLAYER ? "YOU WIN" : "OPPONENT WINS") + "   " + games;
+        }
+        String youDot = s.server() == Scoreboard.Side.PLAYER ? "* " : "  ";
+        String oppDot = s.server() == Scoreboard.Side.OPPONENT ? " *" : "  ";
+        return games + "    " + youDot + s.playerPoints() + " - " + s.opponentPoints() + oppDot
+             + (s.deuce() ? "   deuce" : "");
+    }
 
     /** The shot-assist readout, or null to hide the line entirely (V off, or nothing hit yet).
      *  It has to go unmanaged as well as invisible or it leaves a blank row in the panel. */

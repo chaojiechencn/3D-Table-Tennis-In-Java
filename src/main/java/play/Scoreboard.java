@@ -203,27 +203,4 @@ public final class Scoreboard {
         playerGames = opponentGames = 0;
         openingServer = Side.PLAYER;
     }
-
-    // ------------------------------------------------------------------ display
-
-    /**
-     * One line for the HUD: games, the running point score, and who is serving.
-     *
-     * The serving dot goes next to the server's own score because that is where a player looks
-     * for it, and "deuce" is spelled out because at 10-all the rule the player needs to know has
-     * changed and the numbers alone do not say so.
-     */
-    public String line() {
-        if (matchOver()) {
-            return (matchWinner() == Side.PLAYER ? "YOU WIN" : "OPPONENT WINS")
-                 + "   games " + playerGames + " - " + opponentGames;
-        }
-        String youDot = server() == Side.PLAYER ? "* " : "  ";
-        String oppDot = server() == Side.OPPONENT ? " *" : "  ";
-        return "games " + playerGames + " - " + opponentGames
-             + "    " + youDot + playerPoints + " - " + opponentPoints + oppDot
-             + (isDeuce() ? "   deuce" : "");
-    }
-
-    @Override public String toString() { return line(); }
 }
