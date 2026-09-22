@@ -32,211 +32,14 @@ import static physics.Constants.TABLE_WIDTH;
  */
 public final class ShotAssist {
 
-    // ================================================================== tuning
-    //
-    // Every number the shot model uses lives here. Nothing is hardcoded further down; to change
-    // the feel, change these. (Bounce restitution and friction are deliberately NOT duplicated
-    // here -- they are real measured values with citations, already single-sourced in
-    // physics/Constants.TABLE_MAT and RACKET_MAT, and SelfTest grades them.)
+    // Every number the shot model uses lives in ShotTuning; nothing below is hardcoded.
+    private final ShotTuning t;
 
-    public static final class Tuning {
+    public ShotAssist()                  { this(ShotTuning.defaults()); }
+    public ShotAssist(ShotTuning tuning) { this.t = tuning; }
+    public ShotTuning tuning()           { return t; }
 
-        /** Shot strength, m/s. Swing speed maps onto this range and never beyond it. The ceiling
-         *  is ASPIRATIONAL -- a shot still has to land, and geometry alone caps most contacts
-         *  well under it, so raising this alone does nothing. */
-        public double minShotSpeed = 5.0;
-        public double maxShotSpeed = 17.0;
-
-        /** Racket speed, m/s, that produces a full-strength shot. Faster adds nothing -- this is
-         *  what stops repeated hits from compounding. */
-        public double maxSwingSpeed = 16.0;
-
-        /** How much a sideways or upward swipe counts toward shot STRENGTH, next to the forward
-         *  drive. Low on purpose: driving through the ball is what makes it go, moving across is
-         *  how you aim. */
-        public double lateralEffort = 0.25;
-
-        /** How much of the swing reaches the shot at all (0 = every shot the same strength). */
-        public double swingInfluence = 1.0;
-
-        /** Shape of swing -> strength. 1 = linear; below 1 = quick early response then
-         *  diminishing returns, which is what makes a hard swing feel controlled. */
-        public double swingCurve = 0.7;
-
-        /** How far a sideways swipe moves the aim, as a fraction of the target box per m/s.
-         *  TUNED: 0.20 puts an ordinary firm sweep on the edge of the box. */
-        public double aimInfluence = 0.20;
-
-        /** How much a forward drive deepens the target, per m/s. Pulls against `arcInfluence`
-         *  below by design -- driving forward deepens the target through this term and raises
-         *  `brush`, which shortens it through that one. See docs/DESIGN.md before retuning
-         *  either. */
-        public double depthInfluence = 0.100;
-
-        /** How much an up/down swipe arcs the shot: up = shorter and higher, down = flatter and
-         *  deeper. Fraction of the target depth range per m/s; see `depthInfluence`, which this
-         *  partly cancels on purpose. */
-        public double arcInfluence = 0.018;
-
-        /** How much the racket's own tilt aims the shot, on top of where it is moving. */
-        public double faceInfluence = 0.25;
-
-        /** How much hitting off-centre on the blade shifts the aim. Deliberately small -- edge
-         *  contacts should feel different, not random. */
-        public double contactPointInfluence = 0.30;
-
-        /** Fraction of the physical reflection blended into the authored shot -- there so a
-         *  contact feels like an impact, not so it can steer the shot on its own. */
-        public double physicalBlend = 0.15;
-
-        // ---- contact quality -------------------------------------------------------------
-        // How well the ball was struck, and how much help the shot earns for it. Without these
-        // a shank could never be punished and a rally could not be won or lost on skill; see
-        // docs/DESIGN.md.
-
-        /**
-         * The clean core of the blade, as a fraction of its radius: inside this a contact counts
-         * as fully struck. FLOOR 0.50, measured against RallyTest's own competent-play probe;
-         * TUNED up to 0.58 above that floor for an average player. See docs/DESIGN.md.
-         */
-        public double qualityCore = 0.58;
-
-        /** How far past the core the quality falls from 1 to 0; core + this is the rim. TUNED
-         *  wider (was 0.42) so the drop from clean to mishit is a slope, not a cliff. */
-        public double qualityFalloff = 0.50;
-
-        /** Incoming speed (m/s) at which the core starts shrinking, and the span over which it
-         *  shrinks the whole way. A fast ball has to be met more precisely than a slow one. */
-        public double qualityPaceFrom = 6.0;
-        public double qualityPaceSpan = 12.0;
-
-        /** How much of the core the fastest ball takes away, and the floor it cannot shrink
-         *  below. TUNED down from 0.22 so a fast ball -- already the hardest thing to time --
-         *  does not lose the forgiveness qualityCore just bought. */
-        public double qualityPaceLoss = 0.15;
-        public double qualityCoreMin = 0.26;
-
-        /**
-         * The assist a zero-quality contact still gets. Not zero -- the raw rim impulse lands on
-         * the table only 11 times in 75 (see docs/DESIGN.md), which would make a shank fatal
-         * every time. TUNED up to 0.35 so a shank stays clearly worse than a clean hit without
-         * being close to an automatic loss.
-         */
-        public double assistFloor = 0.35;
-
-        /** The quality below which the rescue search does not run at all -- it still exists for
-         *  a ball met right at the net with no fast legal shot, but a contact off the rim no
-         *  longer qualifies for it. */
-        public double rescueQualityFloor = 0.60;
-
-        /** How much forward drive counts as brushing over the ball; 0.8 is what lets a hard
-         *  pull-back reach genuine backspin rather than merely less topspin. */
-        public double driveBrush = 0.8;
-
-        /** The reflection is capped at this speed before blending, so a violent impulse cannot
-         *  leak through even at a small blend fraction. */
-        public double reflectionCap = 6.0;
-
-        /** Hard ceiling on the sideways component of the finished shot: a cone (degrees off
-         *  straight) and an absolute m/s, whichever binds first. Widening either cannot make a
-         *  shot illegal on its own -- every candidate is still flown and graded. */
-        public double maxHorizontalDeviationDeg = 30.0;
-        public double maxLateralVelocity = 4.5;
-
-        /** Launch elevation band -- a SANITY GUARD, not a shaping tool. Aim owns the elevation; a
-         *  real drive off a low ball near the baseline genuinely launches downward, so do not
-         *  raise the floor above zero without re-deriving it (see docs/DESIGN.md). */
-        public double maxVerticalLaunchAngleDeg = 45.0;
-        public double minVerticalLaunchAngleDeg = -20.0;
-
-        /** Shot speed and target depth are not independent, so the search tries a spread of
-         *  speeds around the one the swing asked for and keeps the legal candidate closest to
-         *  it. */
-        public int speedCandidates = 5;
-        public double speedSpread = 0.42;
-
-        /** Penalty per m/s for not being the speed the swing asked for, and per correction pass
-         *  for having had to give ground. Only ever separates candidates that are both already
-         *  legal -- illegality outweighs both by two orders of magnitude. */
-        public double speedPreference = 1.0;
-        public double passPenalty = 2.0;
-
-        /** Always at least this much pace toward the opponent. */
-        public double minForwardVelocity = 4.5;
-
-        /** The slowest shot the MAIN search may consider, m/s -- separate from minShotSpeed (the
-         *  slowest the swing may ASK for) because some contacts have no legal fast answer and
-         *  must fall back to a slow, legal one rather than the rescue. See docs/DESIGN.md. */
-        public double minSearchSpeed = 3.0;
-
-        /** The search may not slow a shot below this fraction of the pace the swing ASKED for,
-         *  or the ladder could disguise any over-ambitious swing as a legal dink -- see
-         *  docs/DESIGN.md for the measured case this guards against. */
-        public double searchSpeedFloorFrac = 0.60;
-
-        /** Above this much swing, the rescue does not run at all -- it is for a ball met right
-         *  at the net with no fast legal answer, not for a hard swing that simply would not
-         *  land. */
-        public double rescueEffortCeiling = 0.75;
-
-        /** The target box on the opponent's half, as fractions of half-width / half-length.
-         *  Deliberately not the whole table -- `landingMargin` keeps the last few centimetres
-         *  out of reach. See docs/DESIGN.md for the widening history. */
-        public double targetHalfWidthFrac = 0.90;
-        public double targetDepthMinFrac = 0.20;
-        public double targetDepthMaxFrac = 0.92;
-
-        /** Where the "safe" shot goes when a correction pass has to give ground. */
-        public double safeDepthFrac = 0.55;
-
-        /** How far each correction pass pulls the target toward safe, and how much it slows the
-         *  shot. Kept small -- too much silently drags an over-hit shot back to the middle
-         *  instead of letting the player see they overhit it. */
-        public int maxCorrectionPasses = 2;
-        public double targetAssist = 0.18;
-        public double speedBackoffPerPass = 0.13;
-
-        /** Clearance above the cord the validator insists on, metres. */
-        public double netClearance = 0.055;
-
-        /** Margin inside the sidelines / end line the landing must keep, metres. */
-        public double landingMargin = 0.05;
-
-        /** The rescue search, used only when the normal search finds nothing legal. Allowed to
-         *  go slower than minShotSpeed and to re-aim, for a ball met right at the net that can
-         *  only be lifted softly over. */
-        public double rescueMinSpeed = 3.0;
-        public int rescueSpeedSteps = 9;
-        public double[] rescueDepthFracs = {0.55, 0.72, 0.88, 0.40};
-
-        /** How much of the player's lateral aim the rescue keeps, tried in this order -- the
-         *  full aim first, given up only if nothing there is legal, so a rescued shot keeps the
-         *  player's aim instead of always centring. */
-        public double[] rescueAimFracs = {1.0, 0.6, 0.3, 0.0};
-
-        /** Spin, rev/s. Topspin comes from an upward swipe, sidespin from a sideways one. Capped
-         *  so spin stays a secondary influence and never a source of chaos. */
-        public double spinInfluence = 1.0;
-        public double baseTopspin = 14.0;
-        public double topspinPerLift = 2.6;
-
-        /**
-         * TUNED, standing in for how hard a player brushes ACROSS the back of the ball. This
-         * knob SATURATES: every candidate shot is solved to a target and validated, so more spin
-         * mostly makes the solver pick a different launch to the same legal landing rather than
-         * visibly curving the ball more. See docs/DESIGN.md for the measured A/B before reaching
-         * for this again. Note the sign: a swipe right AIMS the ball right but SPINS it to bend
-         * back left, which is real -- brushing across curves the ball opposite the brush.
-         */
-        public double sidespinPerSwipe = 4.5;
-        public double maxSpin = 55.0;
-    }
-
-    private final Tuning t;
-
-    public ShotAssist()            { this(new Tuning()); }
-    public ShotAssist(Tuning tune) { this.t = tune; }
-    public Tuning tuning()         { return t; }
+    private static final double HALF_WIDTH = TABLE_WIDTH / 2, HALF_LENGTH = TABLE_LENGTH / 2;
 
     // ================================================================== debug
 
@@ -266,131 +69,123 @@ public final class ShotAssist {
      */
     public BallState assist(BallState incoming, BallState physical, Paddle racket, boolean playerHit) {
         double toOpp = playerHit ? -1.0 : 1.0;
-        double halfW = TABLE_WIDTH / 2, halfLen = TABLE_LENGTH / 2;
-
         Vec3 contact = physical.pos();
         Vec3 reflect = physical.vel();
-        Vec3 swing = racket.vel();
 
-        // ---- 1-4. intent, contact quality, target, strength, spin ------------------------
-        // Each of these is a pure read of the contact -- no branching, no state -- so they are
-        // split out for their own sake; see each helper for what it means and why.
+        // Intent, contact quality, target, strength and spin: pure reads of the contact.
         Intent in = readIntent(contact, racket, toOpp);
         double quality = quality(incoming, in.offX(), in.offY());
         double assist = playerHit ? t.assistFloor + (1 - t.assistFloor) * quality : 1.0;
-
-        Target tgt = readTarget(in, toOpp, halfLen);
-        Vec3 wantTarget = tgt.want(), safeTarget = tgt.safe();
-        double wantX = wantTarget.x();
-
+        Target target = readTarget(in, toOpp);
         double wantSpeed = readSpeed(in.swingAmount(), incoming);
-        Spin startSpin = readSpin(in.brush(), in.swipeX());
-        double topRevs = startSpin.top(), sideRevs = startSpin.side();
-        // Both may be reset below: the safe fallback flies with plain topspin.
+        Spin spin = readSpin(in.brush(), in.swipeX());
 
-        // ---- 5-7. solve, constrain, validate, correct ------------------------------------
-        //
-        // Every candidate is a (target, speed) pair: solved by Aim, blended, clamped, and then
-        // FLOWN and graded. Nothing is mutated after its last check -- that is the whole point.
-        // A correction pass pulls the target toward the middle of the opponent's court; the
-        // speed ladder inside each pass is there because target depth and speed constrain each
-        // other. The winner is the legal candidate closest to what the swing asked for. An
-        // illegal one can only win if nothing legal was found at all.
-        Vec3 bestVel = null;
-        Vec3 bestTarget = wantTarget;
-        Flight bestFlight = null;
-        double bestCost = Double.MAX_VALUE;
-        double bestScore = Double.MAX_VALUE;
-        int passes = 0;
+        Candidate best = search(contact, reflect, target, wantSpeed, spin, toOpp);
 
-        search:
-        for (int pass = 0; pass <= t.maxCorrectionPasses; pass++) {
-            double give = Math.min(1, pass * t.targetAssist);
-            Vec3 target = Vec3.lerp(wantTarget, safeTarget, give);
-            double pace = wantSpeed * (1 - t.speedBackoffPerPass * pass);
-
-            for (int k = 0; k < t.speedCandidates; k++) {
-                double floor = Math.max(t.minSearchSpeed, wantSpeed * t.searchSpeedFloorFrac);
-                double speed = clamp(pace * speedFactor(k), Math.min(floor, t.maxShotSpeed),
-                                     t.maxShotSpeed);
-
-                Aim.Solution sol = Aim.atTarget(contact, target, speed, topRevs, sideRevs);
-                // Capped at the candidate's OWN speed, not the band's top -- a shot that only
-                // works slowly must be allowed to stay slow.
-                Vec3 vel = constrain(
-                        Vec3.lerp(sol.state().vel(), reflect(reflect), t.physicalBlend),
-                        toOpp, speed);
-                Vec3 spin = Aim.spin(new Vec3(vel.x(), 0, vel.z()), topRevs, sideRevs);
-
-                Flight f = fly(contact, vel, spin, toOpp);
-                double cost = illegality(f, toOpp, halfW, halfLen);
-                double score = cost * 100
-                             + Math.abs(speed - wantSpeed) * t.speedPreference
-                             + pass * t.passPenalty;
-
-                if (score < bestScore) {
-                    bestScore = score; bestCost = cost;
-                    bestVel = vel; bestTarget = target; bestFlight = f; passes = pass;
-                }
-                // Legal: stop. The ladder tries the asked-for pace first then alternates
-                // outward, so the first legal candidate in a pass is already the closest one --
-                // finishing the pass can only find worse, and each candidate costs a real solve.
-                if (cost == 0) break search;
-            }
-            if (bestCost == 0) break;
-        }
-
-        // Nothing legal came out of the normal search. Rather than let a wild trajectory
-        // through -- the "ball must not fly everywhere" floor -- sweep the whole envelope:
-        // every sensible depth down the middle, at speeds from a soft lift up to full pace.
-        // Some contacts have no fast answer at all and the honest shot is a slow one.
+        // Nothing legal: rather than let a wild trajectory through, sweep the whole envelope --
+        // unless a player's mishit or over-ambitious swing is what put it there.
         boolean mayRescue = !playerHit
                 || (quality >= t.rescueQualityFloor && in.swingAmount() <= t.rescueEffortCeiling);
-        if (bestCost > 0 && mayRescue) {
-            // The player's own spin first, plain topspin only as a last resort: a chop that
-            // has to be rescued should still come back as a chop if any speed works with it.
-            double[][] spins = {{topRevs, sideRevs}, {t.baseTopspin, 0}};
-            rescue:
-            for (double aimFrac : t.rescueAimFracs) {
-              for (double[] sp : spins) {
-                for (double depth : t.rescueDepthFracs) {
-                    Vec3 target = new Vec3(wantX * aimFrac, 0, toOpp * depth * halfLen);
-                    for (int k = 0; k < t.rescueSpeedSteps; k++) {
-                        double speed = t.rescueMinSpeed + (t.maxShotSpeed - t.rescueMinSpeed)
-                                * k / (double) (t.rescueSpeedSteps - 1);
-                        Aim.Solution sol = Aim.atTarget(contact, target, speed, sp[0], sp[1]);
-                        Vec3 vel = constrain(sol.state().vel(), toOpp, speed);
-                        Vec3 spin = Aim.spin(new Vec3(vel.x(), 0, vel.z()), sp[0], sp[1]);
-                        Flight f = fly(contact, vel, spin, toOpp);
-                        double cost = illegality(f, toOpp, halfW, halfLen);
-                        if (cost < bestCost) {
-                            bestCost = cost; bestVel = vel; bestTarget = target; bestFlight = f;
-                            topRevs = sp[0]; sideRevs = sp[1];
-                            passes = t.maxCorrectionPasses + 1;   // "rescued", for the overlay
-                        }
-                        if (cost == 0) break rescue;
-                    }
-                }
-              }
-            }
-        }
+        if (best.cost() > 0 && mayRescue) best = rescue(contact, target.want().x(), spin, toOpp, best);
 
         // The authored shot is what a properly hit ball gets; the raw bounce is what a shank
         // gets, blended by `assist` so a mishit keeps the most real physics and never carries
         // authored spin it did nothing to earn.
-        Vec3 authoredVel = bestVel;
-        Vec3 authoredSpin = Aim.spin(new Vec3(authoredVel.x(), 0, authoredVel.z()), topRevs, sideRevs);
+        Vec3 finalVel  = Vec3.lerp(reflect(reflect), best.vel(), assist);
+        Vec3 finalSpin = Vec3.lerp(physical.spin(), spinFor(best.vel(), best.spin()), assist);
 
-        Vec3 finalVel  = Vec3.lerp(reflect(reflect), authoredVel, assist);
-        Vec3 finalSpin = Vec3.lerp(physical.spin(), authoredSpin, assist);
-
-        debug = new Debug(contact, swing, incoming.vel(), safeDir(reflect),
-                          safeDir(new Vec3(bestTarget.x() - contact.x(), 0,
-                                           bestTarget.z() - contact.z())),
-                          safeDir(finalVel), bestTarget, bestFlight.landing(),
-                          finalVel.length(), finalSpin, passes, bestCost == 0);
+        debug = new Debug(contact, racket.vel(), incoming.vel(), safeDir(reflect),
+                          safeDir(new Vec3(best.target().x() - contact.x(), 0,
+                                           best.target().z() - contact.z())),
+                          safeDir(finalVel), best.target(), best.flight().landing(),
+                          finalVel.length(), finalSpin, best.passes(), best.cost() == 0);
 
         return new BallState(physical.pos(), finalVel, finalSpin, physical.orient());
+    }
+
+    /** One launch that was solved, constrained and flown, and how illegal it came out. */
+    private record Candidate(Vec3 vel, Vec3 target, Flight flight, double cost, int passes, Spin spin) {}
+
+    /** {@link Debug#passes} for a shot the rescue produced. */
+    private int rescuedPasses() { return t.maxCorrectionPasses + 1; }
+
+    /**
+     * The main search. Every candidate is a (target, speed) pair: solved by Aim, blended with a
+     * little reflection, constrained, then FLOWN and graded -- nothing is mutated after its last
+     * check. Each correction pass pulls the target toward the safe middle and slows the pace;
+     * the speed ladder inside a pass exists because depth and speed constrain each other. The
+     * lowest score wins, and illegality outweighs any preference, so an illegal candidate only
+     * wins when nothing legal was found.
+     */
+    private Candidate search(Vec3 contact, Vec3 reflect, Target target, double wantSpeed, Spin spin,
+                             double toOpp) {
+        Candidate best = null;
+        double bestScore = Double.MAX_VALUE;
+        double floor = Math.max(t.minSearchSpeed, wantSpeed * t.searchSpeedFloorFrac);
+
+        for (int pass = 0; pass <= t.maxCorrectionPasses; pass++) {
+            double give = Math.min(1, pass * t.targetAssist);
+            Vec3 aimAt = Vec3.lerp(target.want(), target.safe(), give);
+            double pace = wantSpeed * (1 - t.speedBackoffPerPass * pass);
+
+            for (int k = 0; k < t.speedCandidates; k++) {
+                double speed = clamp(pace * speedFactor(k), Math.min(floor, t.maxShotSpeed),
+                                     t.maxShotSpeed);
+                Aim.Solution sol = Aim.atTarget(contact, aimAt, speed, spin.top(), spin.side());
+                // Capped at the candidate's OWN speed, not the band's top -- a shot that only
+                // works slowly must be allowed to stay slow.
+                Vec3 vel = constrain(Vec3.lerp(sol.state().vel(), reflect(reflect), t.physicalBlend),
+                                     toOpp, speed);
+                Candidate c = evaluate(contact, aimAt, vel, spin, toOpp, pass);
+
+                double score = c.cost() * ILLEGALITY_WEIGHT
+                             + Math.abs(speed - wantSpeed) * t.speedPreference
+                             + pass * t.passPenalty;
+                if (score < bestScore) { bestScore = score; best = c; }
+
+                // Legal: stop. The ladder tries the asked-for pace first then alternates outward,
+                // so the first legal candidate is already the closest -- and each costs a solve.
+                if (c.cost() == 0) return best;
+            }
+        }
+        return best;
+    }
+
+    /**
+     * The rescue: every sensible depth down the middle, from a soft lift up to full pace, keeping
+     * as much of the player's aim as still works. The player's own spin is tried first and plain
+     * topspin only as a last resort -- a chop that has to be rescued should come back a chop.
+     * Some contacts have no fast answer at all, and the honest shot is a slow one.
+     */
+    private Candidate rescue(Vec3 contact, double wantX, Spin spin, double toOpp, Candidate best) {
+        Spin[] spins = {spin, new Spin(t.baseTopspin, 0)};
+        for (double aimFrac : t.rescueAimFracs) {
+            for (Spin sp : spins) {
+                for (double depth : t.rescueDepthFracs) {
+                    Vec3 aimAt = new Vec3(wantX * aimFrac, 0, toOpp * depth * HALF_LENGTH);
+                    for (int k = 0; k < t.rescueSpeedSteps; k++) {
+                        double speed = t.rescueMinSpeed + (t.maxShotSpeed - t.rescueMinSpeed)
+                                * k / (double) (t.rescueSpeedSteps - 1);
+                        Aim.Solution sol = Aim.atTarget(contact, aimAt, speed, sp.top(), sp.side());
+                        Vec3 vel = constrain(sol.state().vel(), toOpp, speed);
+                        Candidate c = evaluate(contact, aimAt, vel, sp, toOpp, rescuedPasses());
+                        if (c.cost() < best.cost()) best = c;
+                        if (c.cost() == 0) return best;
+                    }
+                }
+            }
+        }
+        return best;
+    }
+
+    private Candidate evaluate(Vec3 contact, Vec3 target, Vec3 vel, Spin spin, double toOpp, int passes) {
+        Flight f = fly(contact, vel, spinFor(vel, spin), toOpp);
+        return new Candidate(vel, target, f, illegality(f, toOpp), passes, spin);
+    }
+
+    /** The spin a launch carries: topspin and sidespin about its own horizontal heading. */
+    private static Vec3 spinFor(Vec3 vel, Spin spin) {
+        return Aim.spin(new Vec3(vel.x(), 0, vel.z()), spin.top(), spin.side());
     }
 
     // ================================================================== intent
@@ -449,7 +244,7 @@ public final class ShotAssist {
     /** Where the shot is aimed, inside the opponent's court by construction. */
     private record Target(Vec3 want, Vec3 safe) {}
 
-    private Target readTarget(Intent in, double toOpp, double halfLen) {
+    private Target readTarget(Intent in, double toOpp) {
         double aim = in.swipeX() * t.aimInfluence
                    + in.faceX() * t.faceInfluence
                    + in.offX() * t.contactPointInfluence;
@@ -457,19 +252,20 @@ public final class ShotAssist {
 
         double depthFrac = t.targetDepthMinFrac
                 + (t.targetDepthMaxFrac - t.targetDepthMinFrac)
-                  * clamp(0.35 + in.drive() * t.depthInfluence - in.brush() * t.arcInfluence
-                               - in.offY() * t.contactPointInfluence * 0.5, 0, 1);
-        double wantZ = toOpp * clamp(depthFrac, t.targetDepthMinFrac, t.targetDepthMaxFrac) * halfLen;
+                  * clamp(t.baseDepthFrac + in.drive() * t.depthInfluence - in.brush() * t.arcInfluence
+                               - in.offY() * t.contactPointInfluence * t.contactDepthShare, 0, 1);
+        double wantZ = toOpp * clamp(depthFrac, t.targetDepthMinFrac, t.targetDepthMaxFrac) * HALF_LENGTH;
 
         return new Target(new Vec3(wantX, 0, wantZ),
-                          new Vec3(0, 0, toOpp * t.safeDepthFrac * halfLen));
+                          new Vec3(0, 0, toOpp * t.safeDepthFrac * HALF_LENGTH));
     }
 
     /** Swing maps onto a fixed band; the incoming ball nudges it slightly but is never ADDED to
      *  it, which is what stops a rally from compounding into a rocket. */
     private double readSpeed(double swingAmount, BallState incoming) {
         double wantSpeed = t.minShotSpeed + (t.maxShotSpeed - t.minShotSpeed) * swingAmount;
-        wantSpeed += clamp((incoming.speed() - 9.0) * 0.05, -0.6, 0.6);
+        wantSpeed += clamp((incoming.speed() - t.incomingPaceNeutral) * t.incomingPaceGain,
+                           -t.incomingPaceNudge, t.incomingPaceNudge);
         return clamp(wantSpeed, t.minShotSpeed, t.maxShotSpeed);
     }
 
@@ -507,13 +303,8 @@ public final class ShotAssist {
     /**
      * Pull a velocity into the playable envelope: a guaranteed forward component, a horizontal
      * cone AND an absolute lateral cap, an elevation band, and a top speed.
-     */
-    private Vec3 constrain(Vec3 v, double toOpp) {
-        return constrain(v, toOpp, t.maxShotSpeed);
-    }
-
-    /**
-     * @param cap the top speed this candidate is allowed. The rescue search passes its own,
+     *
+     * @param cap the top speed this candidate is allowed -- its own. The rescue passes speeds
      *            below {@code minForwardVelocity}, because forcing a minimum pace onto a shot
      *            that only works slowly would undo the search that just found it.
      */
@@ -549,26 +340,37 @@ public final class ShotAssist {
      */
     private static final double VALIDATE_DT = 1.0 / 120;
 
+    /** Long enough for any shot to come down; a flight still up after this has no landing. */
+    private static final double MAX_FLIGHT_TIME = 3.0;
+
+    // Illegality is measured in metres of violation, weighted so the parts compare: missing the
+    // net outright dominates, a shortfall at the cord counts double a miss at the lines, and any
+    // illegality outweighs the search's speed and pass preferences by two orders of magnitude.
+    private static final double NEVER_CROSSED_COST = 10;
+    private static final double NET_SHORTFALL_WEIGHT = 20;
+    private static final double LANDING_MISS_WEIGHT = 10;
+    private static final double ILLEGALITY_WEIGHT = 100;
+
     /**
      * How illegal a flight is: 0 means it clears the net and lands inside the opponent's half.
      * Anything else is the size of the violation, so a correction pass can keep the least-bad
      * candidate if none is perfect.
      */
-    private double illegality(Flight f, double toOpp, double halfW, double halfLen) {
+    private double illegality(Flight f, double toOpp) {
         double cost = 0;
 
         double needed = NET_HEIGHT + BALL_R + t.netClearance;
-        if (Double.isNaN(f.netHeight())) cost += 10;                       // never crossed
-        else if (f.netHeight() < needed) cost += (needed - f.netHeight()) * 20;
+        if (Double.isNaN(f.netHeight())) cost += NEVER_CROSSED_COST;
+        else if (f.netHeight() < needed) cost += (needed - f.netHeight()) * NET_SHORTFALL_WEIGHT;
 
         Vec3 L = f.landing();
         double depth = L.z() * toOpp;                                      // + is into their half
-        if (depth < t.landingMargin) cost += (t.landingMargin - depth) * 10;
-        double maxDepth = halfLen - t.landingMargin;
-        if (depth > maxDepth) cost += (depth - maxDepth) * 10;
+        if (depth < t.landingMargin) cost += (t.landingMargin - depth) * LANDING_MISS_WEIGHT;
+        double maxDepth = HALF_LENGTH - t.landingMargin;
+        if (depth > maxDepth) cost += (depth - maxDepth) * LANDING_MISS_WEIGHT;
 
-        double side = Math.abs(L.x()) - (halfW - t.landingMargin);
-        if (side > 0) cost += side * 10;
+        double side = Math.abs(L.x()) - (HALF_WIDTH - t.landingMargin);
+        if (side > 0) cost += side * LANDING_MISS_WEIGHT;
 
         return cost;
     }
@@ -586,7 +388,7 @@ public final class ShotAssist {
         double netHeight = Double.NaN;
         double prevZ = from.z();
 
-        for (int i = 0; i < (int) (3.0 / VALIDATE_DT); i++) {
+        for (int i = 0; i < (int) (MAX_FLIGHT_TIME / VALIDATE_DT); i++) {
             BallState next = Integrator.step(s, VALIDATE_DT);
             Vec3 p = next.pos();
 

@@ -7,7 +7,6 @@ import physics.World;
 import java.util.List;
 
 import static physics.Constants.DT;
-import static physics.Constants.TABLE_LENGTH;
 
 /**
  * A stand-in HAND: plays the game the way a competent person would, by moving the cursor.
@@ -74,7 +73,6 @@ public final class DemoPlayer {
      *  bat for the rest of the rally. */
     public static final double STALE = 0.12;
 
-    private Vec3 lastAim = PlayerReach.NEUTRAL;
     private Meeting cached;
     private double sincePredict = Double.MAX_VALUE;
 
@@ -104,10 +102,7 @@ public final class DemoPlayer {
         Meeting m = cached;
 
         // Nothing coming: stand ready rather than drifting wherever the last shot left us.
-        if (m == null) {
-            lastAim = PlayerReach.clamp(PlayerReach.NEUTRAL);
-            return lastAim;
-        }
+        if (m == null) return PlayerReach.clamp(PlayerReach.NEUTRAL);
 
         // The aim comes from the direction the bat is TRAVELLING as it arrives, not from where
         // it is standing (ShotAssist reads aim off lateral velocity) -- so the stroke sets up to
@@ -126,8 +121,7 @@ public final class DemoPlayer {
             aim = new Vec3(m.point.x(), PlayerReach.HIT_Y, m.point.z());
         }
 
-        lastAim = PlayerReach.clamp(aim);
-        return lastAim;
+        return PlayerReach.clamp(aim);
     }
 
     /** Where and when the ball will cross the bat's plane on our side. */
@@ -177,10 +171,4 @@ public final class DemoPlayer {
         }
         return best;
     }
-
-    /** Where the hand is pointing, for the overlay. */
-    public Vec3 lastAim() { return lastAim; }
-
-    /** The far edge of the table, for callers that want to draw the intended target. */
-    public static double tableHalfLength() { return TABLE_LENGTH / 2; }
 }

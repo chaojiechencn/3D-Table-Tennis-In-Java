@@ -28,6 +28,10 @@ import static physics.Constants.*;
  * "you cannot cheat by flinging the mouse" is a claim about behaviour that nothing on screen
  * would contradict loudly enough to notice.
  *
+ * Anything that plays a whole point drives {@link GameSession} -- the game the application runs --
+ * rather than a copy of its loop, so the rally rules are tested where they live. The component
+ * probes above (the opponent alone, the envelope, the stroke) stay focused on their component.
+ *
  * Run from the project root: bash ./gradlew rallyTest (Windows: .\gradlew.bat rallyTest).
  * Exits 0 if everything passes, 1 otherwise.
  */
@@ -55,6 +59,7 @@ public final class RallyTest {
         theSessionAppliesTheRallyRules();
         theSessionSchedulesReplaysAndKeepsTheScore();
         theSessionIsDeterministic();
+        theShotTuningKeepsItsDefaultsAndRejectsNonsense();
 
         System.out.println("=".repeat(74));
         if (failures.isEmpty()) {
@@ -298,7 +303,6 @@ public final class RallyTest {
         for (int i = 0; i < (int) (6.0 / DT); i++) {
             ai.advance(world.state(), blade, DT);
             BallState prev = world.state();
-            double before = prev.pos().y();
             world.step();
 
             if (!hit && world.paddleHits() > 0) {
@@ -819,8 +823,8 @@ public final class RallyTest {
 
         // Own half: a shot that comes straight back off a still blade onto the player's own half.
         // A tuning with no clean core leaves every contact raw, so nothing authors it over the net.
-        ShotAssist.Tuning raw = new ShotAssist.Tuning();
-        raw.qualityCore = 0; raw.qualityCoreMin = 0; raw.qualityFalloff = 1e-9; raw.assistFloor = 0;
+        ShotTuning raw = ShotTuning.builder()
+                .qualityCore(0).qualityCoreMin(0).qualityFalloff(1e-9).assistFloor(0).build();
         GameSession own = new GameSession(STATUE, new ShotAssist(raw));
         own.setAim(PlayerReach.clamp(new Vec3(0, 0, risingThroughTheHittingPlane(BOUNCER).z())));
         own.launch(BOUNCER);
@@ -953,6 +957,100 @@ public final class RallyTest {
               firstDiff < 0 && contacts > 0,
               firstDiff < 0 ? String.format("%d steps and %d contacts, every ball state equal", steps, contacts)
                             : "diverged at step " + firstDiff);
+    }
+
+    /**
+     * The shipped tuning, restated here rather than read back from the builder, so a changed
+     * default fails loudly; and a tuning the model cannot run on refuses to build.
+     */
+    private static void theShotTuningKeepsItsDefaultsAndRejectsNonsense() {
+        System.out.println("\n-- the shot tuning --");
+
+        Object[][] expected = {
+            {"minShotSpeed", 5.0}, {"maxShotSpeed", 17.0}, {"maxSwingSpeed", 16.0},
+            {"lateralEffort", 0.25}, {"swingInfluence", 1.0}, {"swingCurve", 0.7},
+            {"incomingPaceNeutral", 9.0}, {"incomingPaceGain", 0.05}, {"incomingPaceNudge", 0.6},
+            {"aimInfluence", 0.20}, {"depthInfluence", 0.100}, {"arcInfluence", 0.018},
+            {"faceInfluence", 0.25}, {"contactPointInfluence", 0.30}, {"baseDepthFrac", 0.35},
+            {"contactDepthShare", 0.5}, {"physicalBlend", 0.15},
+            {"qualityCore", 0.58}, {"qualityFalloff", 0.50}, {"qualityPaceFrom", 6.0},
+            {"qualityPaceSpan", 12.0}, {"qualityPaceLoss", 0.15}, {"qualityCoreMin", 0.26},
+            {"assistFloor", 0.35}, {"rescueQualityFloor", 0.60},
+            {"driveBrush", 0.8}, {"reflectionCap", 6.0}, {"maxHorizontalDeviationDeg", 30.0},
+            {"maxLateralVelocity", 4.5}, {"maxVerticalLaunchAngleDeg", 45.0},
+            {"minVerticalLaunchAngleDeg", -20.0}, {"minForwardVelocity", 4.5},
+            {"speedCandidates", 5}, {"speedSpread", 0.42}, {"speedPreference", 1.0},
+            {"passPenalty", 2.0}, {"minSearchSpeed", 3.0}, {"searchSpeedFloorFrac", 0.60},
+            {"rescueEffortCeiling", 0.75}, {"maxCorrectionPasses", 2}, {"targetAssist", 0.18},
+            {"speedBackoffPerPass", 0.13}, {"targetHalfWidthFrac", 0.90},
+            {"targetDepthMinFrac", 0.20}, {"targetDepthMaxFrac", 0.92}, {"safeDepthFrac", 0.55},
+            {"netClearance", 0.055}, {"landingMargin", 0.05}, {"rescueMinSpeed", 3.0},
+            {"rescueSpeedSteps", 9}, {"rescueDepthFracs", List.of(0.55, 0.72, 0.88, 0.40)},
+            {"rescueAimFracs", List.of(1.0, 0.6, 0.3, 0.0)}, {"spinInfluence", 1.0},
+            {"baseTopspin", 14.0}, {"topspinPerLift", 2.6}, {"sidespinPerSwipe", 4.5},
+            {"maxSpin", 55.0},
+        };
+        ShotTuning defaults = ShotTuning.defaults();
+        List<String> changed = new ArrayList<>();
+        for (Object[] e : expected) {
+            try {
+                Object got = ShotTuning.class.getField((String) e[0]).get(defaults);
+                if (!got.equals(e[1])) changed.add(e[0] + "=" + got + " (expected " + e[1] + ")");
+            } catch (ReflectiveOperationException ex) {
+                changed.add(e[0] + " missing");
+            }
+        }
+        int knobs = ShotTuning.class.getFields().length;
+        check("every default shot-tuning value is unchanged",
+              changed.isEmpty() && knobs == expected.length,
+              changed.isEmpty() ? String.format("%d of %d knobs match", expected.length, knobs)
+                                : String.join("; ", changed));
+
+        record Bad(String what, java.util.function.UnaryOperator<ShotTuning.Builder> edit) {}
+        Bad[] bad = {
+            new Bad("NaN shot speed",            b -> b.maxShotSpeed(Double.NaN)),
+            new Bad("infinite spin",             b -> b.baseTopspin(Double.POSITIVE_INFINITY)),
+            new Bad("speed range upside down",   b -> b.minShotSpeed(18)),
+            new Bad("rescue faster than the top", b -> b.rescueMinSpeed(20)),
+            new Bad("depth range upside down",   b -> b.targetDepthMinFrac(0.95)),
+            new Bad("zero quality falloff",      b -> b.qualityFalloff(0)),
+            new Bad("zero pace span",            b -> b.qualityPaceSpan(0)),
+            new Bad("zero swing speed",          b -> b.maxSwingSpeed(0)),
+            new Bad("zero swing curve",          b -> b.swingCurve(0)),
+            new Bad("blend past 1",              b -> b.physicalBlend(1.5)),
+            new Bad("negative assist floor",     b -> b.assistFloor(-0.1)),
+            new Bad("aim fraction past 1",       b -> b.rescueAimFracs(1.0, 1.2)),
+            new Bad("NaN rescue depth",          b -> b.rescueDepthFracs(0.5, Double.NaN)),
+            new Bad("vertical angle at 90",      b -> b.maxVerticalLaunchAngleDeg(90)),
+            new Bad("elevation band inverted",   b -> b.minVerticalLaunchAngleDeg(50)),
+            new Bad("horizontal cone at 90",     b -> b.maxHorizontalDeviationDeg(90)),
+            new Bad("no speed candidates",       b -> b.speedCandidates(0)),
+            new Bad("one rescue speed step",     b -> b.rescueSpeedSteps(1)),
+            new Bad("backoff that stops the shot", b -> b.speedBackoffPerPass(0.5)),
+            new Bad("negative reflection cap",   b -> b.reflectionCap(-1)),
+        };
+        List<String> accepted = new ArrayList<>();
+        for (Bad b : bad) {
+            try { b.edit().apply(ShotTuning.builder()).build(); accepted.add(b.what()); }
+            catch (IllegalArgumentException expectedRejection) { /* rejected, as it should be */ }
+        }
+        check("a shot tuning the model cannot run on is rejected when built",
+              accepted.isEmpty(),
+              accepted.isEmpty() ? bad.length + " invalid tunings rejected" : "accepted: " + accepted);
+
+        // The limits are the model's own, not arbitrary: each boundary it can run on is allowed.
+        String refused = null;
+        try {
+            ShotTuning.builder().physicalBlend(0).assistFloor(1).speedCandidates(1)
+                    .rescueSpeedSteps(2).maxCorrectionPasses(0).spinInfluence(0)
+                    .minForwardVelocity(0).landingMargin(0).build();
+            ShotTuning.builder().physicalBlend(1).targetDepthMinFrac(0.92).build();
+        } catch (IllegalArgumentException e) {
+            refused = e.getMessage();
+        }
+        check("boundary values the model can run on are accepted",
+              refused == null, refused == null ? "blend 0 and 1, one candidate, two rescue steps, no passes"
+                                               : "refused: " + refused);
     }
 
     /** Where a feed's ball first rises through the player's hitting plane after its bounce. */
