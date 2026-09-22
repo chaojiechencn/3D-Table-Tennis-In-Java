@@ -1,67 +1,27 @@
-plugins {
-    id 'application'
-    id 'org.openjfx.javafxplugin' version '0.1.0'
-}
+subprojects {
+    apply plugin: 'java'
 
-repositories {
-    mavenCentral()
-}
-
-java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
+    repositories {
+        mavenCentral()
     }
-}
 
-javafx {
-    version = '21.0.2'
-    modules = ['javafx.controls', 'javafx.graphics', 'javafx.swing']
-}
+    java {
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(21)
+        }
+    }
 
-application {
-    mainClass = 'TableTennisIn3D'
-}
+    dependencies {
+        testImplementation platform('org.junit:junit-bom:5.14.4')
+        testImplementation 'org.junit.jupiter:junit-jupiter'
+        testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    }
 
-dependencies {
-    testImplementation platform('org.junit:junit-bom:5.14.4')
-    testImplementation 'org.junit.jupiter:junit-jupiter'
-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-}
-
-tasks.register('selfTest', JavaExec) {
-    group = 'verification'
-    description = 'Runs the headless physics validation suite'
-    dependsOn tasks.named('testClasses')
-    mainClass = 'physics.SelfTest'
-    classpath = sourceSets.test.runtimeClasspath
-    javaLauncher = javaToolchains.launcherFor(java.toolchain)
-}
-
-tasks.register('rallyTest', JavaExec) {
-    group = 'verification'
-    description = 'Runs the headless gameplay validation suite'
-    dependsOn tasks.named('testClasses')
-    mainClass = 'play.RallyTest'
-    classpath = sourceSets.test.runtimeClasspath
-    javaLauncher = javaToolchains.launcherFor(java.toolchain)
-}
-
-tasks.register('writeGoldenTrace', JavaExec) {
-    group = 'verification'
-    description = 'Rewrites the golden trace fixture; only after a deliberate behavior change'
-    dependsOn tasks.named('testClasses')
-    mainClass = 'play.GoldenTrace'
-    classpath = sourceSets.test.runtimeClasspath
-    args file('src/test/resources/play/golden-trace.txt').absolutePath
-    javaLauncher = javaToolchains.launcherFor(java.toolchain)
-}
-
-// These suites are executable mains, so test/check/build must invoke them explicitly.
-tasks.named('test') {
-    useJUnitPlatform()
-    dependsOn tasks.named('selfTest'), tasks.named('rallyTest')
-    testLogging {
-        showStandardStreams = true
-        exceptionFormat = 'full'
+    tasks.named('test') {
+        useJUnitPlatform()
+        testLogging {
+            showStandardStreams = true
+            exceptionFormat = 'full'
+        }
     }
 }

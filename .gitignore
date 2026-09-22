@@ -4,8 +4,8 @@
 /.claude/
 *.iml
 
-# Generated Java output and Gradle caches.
-/out/
-/bin/
-/build/
-/.gradle/
+# Generated Java output and Gradle caches, in the root and in every module.
+out/
+bin/
+build/
+.gradle/
