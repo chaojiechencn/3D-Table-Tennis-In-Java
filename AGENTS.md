@@ -44,7 +44,7 @@ Two headless suites. Both print PASS/FAIL per check and exit 0/1. **They must st
 ```powershell
 .\gradlew.bat check       # both suites
 .\gradlew.bat selfTest    # physics.SelfTest: 101 checks
-.\gradlew.bat rallyTest   # play.RallyTest: 29 checks
+.\gradlew.bat rallyTest   # play.RallyTest: 44 checks
 ```
 
 The suites remain plain Java `main` classes under `src/test/java`. Gradle's `test`, `check` and
@@ -71,9 +71,10 @@ actually measured.
 ```text
 src/
   main/java/
-    Table_Tennis_In_3D.java  entry point; fixed-timestep loop, input, wiring, capture mode
+    Table_Tennis_In_3D.java  JavaFX entry point and composition root: frame loop, input, views, capture
     physics/                plain Java. NO javafx imports, ever.
     play/                   game logic. Plain Java, so it tests headlessly.
+      GameSession.java      the ONE gameplay implementation the app and RallyTest both drive
     render/                 JavaFX views. Reads physics state; never writes it.
   test/java/
     physics/SelfTest.java    physics validation
@@ -101,6 +102,10 @@ Hard invariants — breaking any of these is a defect even if it compiles and th
 8. **Physics never sees the frame time.** Passing a JavaFX `dt` into `physics/` breaks determinism.
 9. **Shot presets state intent** (speed, spin, target) and let `Aim` solve the launch angle. Do not
    hard-code launch velocities.
+10. **One gameplay implementation.** Stepping, racket eligibility, contact handling, point
+   decisions and replay scheduling live in `play.GameSession`. The application and `RallyTest`
+   drive it and must not re-implement a rule. Rendering reads its immutable snapshots, never its
+   `World`, `Paddle` or `Scoreboard`.
 
 ---
 
@@ -153,7 +158,7 @@ entry points stable.
 1. **Scoring exists.** `play/Scoreboard.java` keeps the ITTF rules (11, win by 2, no ceiling at
    deuce, service every 2 points and every 1 from 10-all, best of 5). It is derived from the
    score rather than toggled, deliberately — see the class javadoc. 9 checks in `RallyTest`.
-2. **`endPoint()` latches.** It now takes the winning side, awards exactly once however many
+2. **`GameSession.endPoint()` latches.** It now takes the winning side, awards exactly once however many
    rules fire on the same step, and withdraws both rackets so a decided ball stops being
    playable.
 3. **A net cord no longer loses the point.** `NET` was removed from the immediate point-enders:
@@ -190,6 +195,13 @@ Do not "rediscover" these, and do not undo a fix for them.
    `Z_FAR = 2.40`). Left alone deliberately — they are inspection views, not ones a rally is
    played from. Both rally views now reach 2.400, measured through the real rig.
 
+3. **A missed legal return scores for the receiver.** When a return bounces legally on the
+   receiver's half and then reaches the floor untouched, the floor rule awards the point against
+   the last HITTER. With no input at all the player wins every point on the `Serve` feed.
+   Preserved deliberately during the session refactor (gameplay changes are out of scope there);
+   the fix belongs in `GameSession.handleOutOrFloor`, which should score a floor contact against
+   the receiver once the hitter's shot has already bounced on the receiver's half.
+
 ### Retracted — do NOT re-report these
 
 **"Aim is asymmetric, right swipes have 4× the authority of left."** Not real. It was an
@@ -212,5 +224,5 @@ monotone: ±2.5 m/s of swipe lands at ±0.098 m, ±5 at ±0.220, ±10 at ±0.398
 - **Cite a source for every real-world number.** A bare constant with no citation in `physics/` is
   a bug.
 - Anything tuned by eye is labelled `TUNED` and says what it stands in for.
-- Every tuning knob for the arcade layer lives in `ShotAssist.Tuning`. Nothing below it is
-  hardcoded. Measured physical values stay single-sourced in `physics/Constants`.
+- Every tuning knob for the arcade layer lives in `play.ShotTuning`, immutable and validated
+  when built; defaults and their reasoning live on its `Builder`. Nothing below it is hardcoded. Measured physical values stay single-sourced in `physics/Constants`.

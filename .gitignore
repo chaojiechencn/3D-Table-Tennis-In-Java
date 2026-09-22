@@ -13,3 +13,6 @@
 # Python tools regenerate bytecode on import.
 __pycache__/
 *.py[cod]
+
+# The optional IntelliJ bridge installs its dependency into a tool-local environment.
+/tools/intellij-mcp-bridge/.venv/

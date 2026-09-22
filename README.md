@@ -40,7 +40,7 @@ See [Gameplay and controls](docs/GAMEPLAY.md) for every control, current feature
 .\gradlew.bat check
 ```
 
-This runs both headless suites: `physics.SelfTest` (101 checks) and `play.RallyTest` (29 checks).
+This runs both headless suites: `physics.SelfTest` (101 checks) and `play.RallyTest` (44 checks).
 See [Validation](docs/DEVELOPMENT.md#validation) for individual suites and what they cover.
 
 ## Find your way around

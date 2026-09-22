@@ -6,8 +6,17 @@ from pathlib import Path
 import sys
 import threading
 
-sys.path.insert(0, str(Path(__file__).parent / "vendor"))
-import websocket
+try:
+    import websocket
+except ImportError:
+    websocket = None
+
+MISSING_DEPENDENCY = """websocket-client is not installed for this Python ({python}).
+Install it into the bridge's virtual environment, from the repository root:
+  python -m venv tools/intellij-mcp-bridge/.venv
+  tools/intellij-mcp-bridge/.venv/Scripts/python -m pip install -r tools/intellij-mcp-bridge/requirements.txt   (Windows)
+  tools/intellij-mcp-bridge/.venv/bin/python -m pip install -r tools/intellij-mcp-bridge/requirements.txt       (macOS/Linux)
+then run bridge.py with that environment's python."""
 
 
 def normalized(path):
@@ -97,6 +106,8 @@ def main():
     parser.add_argument("--workspace", default=str(Path.cwd()))
     parser.add_argument("--probe", action="store_true")
     args = parser.parse_args()
+    if websocket is None:
+        raise RuntimeError(MISSING_DEPENDENCY.format(python=sys.executable))
     connection = connect(args.workspace)
     try:
         if args.probe:

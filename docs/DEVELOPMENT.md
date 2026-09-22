@@ -53,8 +53,9 @@ not require JUnit. Their package names remain unchanged even though they live un
 
 - `physics.SelfTest`: **101 checks** against analytic results, published measurements and ITTF
   rules. It covers flight, spin, energy, collision handling, preset shots and fast-moving paddles.
-- `play.RallyTest`: **29 checks** covering opponent returns, shot assistance, paddle reach and
-  speed, cursor control, brushing and match scoring.
+- `play.RallyTest`: **44 checks** covering opponent returns, shot assistance and its tuning,
+  paddle reach and speed, cursor control, brushing, match scoring, and the rally rules played
+  through `play.GameSession`.
 
 The Gradle `test`, `check` and `build` tasks all run both suites through the dedicated `selfTest`
 and `rallyTest` tasks. Each suite prints PASS/FAIL and measured details, then exits non-zero if
@@ -69,9 +70,9 @@ least compile. Both suites must stay at 100%; do not widen a threshold to fit a 
 ```text
 src/
   main/java/
-    Table_Tennis_In_3D.java    Application, fixed-step loop, input and wiring
+    Table_Tennis_In_3D.java    JavaFX entry point: frame loop, input, views and capture
     physics/                  Headless simulation and measured physical constants
-    play/                     Headless game logic, shot assistance and scoring
+    play/                     Headless game logic: GameSession, shot assistance, scoring
     render/                   JavaFX views and input geometry
   test/java/
     physics/SelfTest.java      Physics validation
@@ -79,7 +80,9 @@ src/
 ```
 
 Tests retain their `physics` and `play` packages. Production code stays in the same packages and
-keeps the same public entry points. The game layer depends on physics; physics does not depend
+keeps the same public entry points. `play.GameSession` is the one gameplay implementation: the
+application drives it for play and `RallyTest` drives it for validation, and rendering reads its
+immutable snapshots. The game layer depends on physics; physics does not depend
 on gameplay or JavaFX. See [Design rationale](DESIGN.md#architecture) for class responsibilities
 and the boundaries that must remain intact.
 
@@ -131,6 +134,11 @@ seconds. `--out` disables auto-replay so a capture past the end of a rally still
 - Keep the repository root for project entry points. Put longer documentation in `docs/`
   and optional development utilities in `tools/`.
 
-The [IntelliJ MCP bridge](../tools/intellij-mcp-bridge/README.md) is a development utility,
-separate from the Java game. Its Python dependencies are vendored with the tool; they are not
-application dependencies.
+The [IntelliJ MCP bridge](../tools/intellij-mcp-bridge/README.md) is an optional development
+utility, separate from the Java game. It installs its one Python dependency into a tool-local
+virtual environment; Java development never needs Python.
+
+## Continuous integration
+
+GitHub Actions runs `check` on Ubuntu and Windows with Java 21 for every push and pull request
+(`.github/workflows/ci.yml`), using the committed wrapper. Both validation suites must pass.

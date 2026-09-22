@@ -60,7 +60,7 @@ that cannot play a point.
    stays headless and side-effect free, and is what the predicting opponent is owed.
 3. **Menus** — a front end, so the game is something you start rather than something you launch.
 4. **Multiple paddles** that play differently (more spin against more power). The tuning is
-   already isolated in `ShotAssist.Tuning`, so a paddle is a set of those values, not a new code
+   already isolated in `ShotTuning`, so a paddle is a set of those values, not a new code
    path.
 5. **Currency and the shop** — stretch, and last.
 
@@ -151,7 +151,7 @@ space.** Convert at the boundary and nowhere else.
 ```text
 src/
   main/java/
-    Table_Tennis_In_3D.java  entry point; fixed-timestep loop, input, wiring, capture mode
+    Table_Tennis_In_3D.java  JavaFX entry point and composition root: frame loop, input, views, capture
     physics/                no javafx imports, ever
       Vec3.java             immutable 3D vector (record)
       Quat.java             unit quaternion; carries the ball's VISUAL orientation only
@@ -166,9 +166,11 @@ src/
       Aim.java              solves launch angle for a target; also builds spin vectors
       Shots.java            named launch presets, defined by intent and solved by Aim
     play/                   game logic; plain Java, tested headlessly
+      GameSession.java      ONE headless game: world, rackets, rally rules, score, replays
       Stroke.java           player's paddle: follows the cursor, and nothing else
       PlayerReach.java      control envelope: where the racket may be, and can it get there
       ShotAssist.java       arcade shot model: shapes outgoing racket contacts
+      ShotTuning.java       every arcade knob; immutable, validated when built
       Opponent.java         interface: look at the ball, move the blade, swing
       Follower.java         current opponent: tracks the ball, does NOT predict
       DemoPlayer.java       automated demonstration player
@@ -197,6 +199,13 @@ nothing. That is why the opponent's checks live in `src/test/java/play/RallyTest
 needs both, it belongs in `play`.
 
 Rules that keep this from rotting:
+
+- **One gameplay implementation.** `play/GameSession` owns everything that decides the game:
+  advancing a step, which racket may hit, contact handling through `ShotAssist`, bounce tracking,
+  point decisions, feed resets and replay scheduling. The application and `RallyTest` both drive
+  it, so the game that is tested is the game that is played. Rendering receives immutable
+  snapshots (`BallState`, `Paddle.Blade`, `Scoreboard.Snapshot`) and a `StepResult` per step --
+  never the session's own `World`, `Paddle` or `Scoreboard`.
 
 - **`src/main/java/physics/` must not import anything from `javafx.*`.** It is plain Java so the simulation can be
   checked headlessly and so it can never accidentally depend on the frame rate or on the renderer.
@@ -265,6 +274,9 @@ rendering that interpolates between the last two states. Consequences to respect
 - **Physics never sees the frame time.** If you find yourself passing a JavaFX `dt` into anything under
   `physics/`, you have broken determinism.
 - The accumulator is clamped (`MAX_FRAME`) so a stall cannot spiral into a death loop.
+- The application owns the accumulator, pause, single-step and time scale; `GameSession.step()`
+  advances exactly one `DT` and says what happened. A replay is launched at the loop boundary when
+  `replayDue()` reports it, so the frame that launches it discards the rest of its accumulator.
 - Rendering lerps position and slerps orientation. Do not snap to the raw state.
 - `DT` is 1/480 s, far smaller than a display frame, so a 30 m/s smash moves 6 cm per step and cannot
   tunnel through the 2.5 cm table slab.
@@ -332,7 +344,7 @@ The landing check is new, and the reason it can exist now is worth keeping strai
 be a printout with a long comment explaining why it could not be a check: the follower's RAW
 return cleared the net every time and put ONE of ten on the table, and a sweep of its face angle,
 swing speed and lift proved no fixed stroke could do both — settings that land three of ten
-cannot return all ten. That is still true of the raw stroke. What changed is that `Table_Tennis_In_3D` runs
+cannot return all ten. That is still true of the raw stroke. What changed is that the game (now `GameSession`) runs
 every contact, the follower's included, through `ShotAssist`, so **grading the raw return was
 grading a code path the game no longer takes.** `RallyTest` now feeds contacts through the assist
 exactly as the game does, and the answer went from 1 of 10 to **10 of 10**. The one number still
@@ -370,7 +382,7 @@ are the `Serve` preset's own legality. But the game on top of it is deliberately
 realistic**, because a rally you can actually keep needs it.
 
 **The pivot: `play/ShotAssist.java`.** After the impulse solver resolves a paddle contact,
-`Table_Tennis_In_3D.advanceOne()` hands the raw result to `ShotAssist`, which turns it into an authored
+`GameSession.step()` hands the raw result to `ShotAssist`, which turns it into an authored
 shot in one direction only: **solve → constrain → validate → correct.** Nothing is mutated
 after its last check, which is the rule the first version broke.
 
@@ -400,8 +412,8 @@ land too. `World.setState` is the only new `physics/` code — one setter, never
 or `predict`, so the model underneath is untouched. The player's blade is still moved by the raw
 solver at contact; the *outgoing* trajectory is what gets civilised.
 
-**Every tuning number lives in `ShotAssist.Tuning`**, a public nested class with a field per
-knob — speeds, influences, clamps, the target box, the correction and rescue searches, spin.
+**Every tuning number lives in `play/ShotTuning`**, an immutable value built by a validating
+builder that keeps each default beside its reasoning — speeds, influences, clamps, the target box, the correction and rescue searches, spin.
 Nothing is hardcoded below it. (Restitution and friction are deliberately NOT duplicated there:
 they are measured values with citations, single-sourced in `physics/Constants`, and SelfTest
 grades them.)
@@ -427,7 +439,7 @@ first crossing reported is the SECOND descent, out past the end line. It made `S
 landing question has to be asked of a contact-free flight (`Aim.landingPoint`), and the code
 now says so in three places.
 
-**The one-bounce rule.** `Table_Tennis_In_3D` enforces ITTF's "return only after it has bounced on your
+**The one-bounce rule.** `play/GameSession` enforces ITTF's "return only after it has bounced on your
 side" by handing `World` a null racket for whoever may not hit yet — the blade still tracks the
 ball on screen, it just phases through. A table bounce opens the receiver's racket; a *second*
 bounce on the same side, a ball back on the hitter's own half, or a ball past the end line calls
@@ -459,7 +471,7 @@ deliberate one. The realistic solver is intact and can be switched back to by dr
 shown, demonstrated or reasoned about without the other, which is the whole reason the seam is
 where it is.
 
-Tuning lives entirely in `ShotAssist.Tuning`. `play.Trace` (scratch) rallies a brain-dead autoplay
+Tuning lives entirely in `ShotTuning`. `play.Trace` (scratch) rallies a brain-dead autoplay
 bot — it lunges to every ball and parks, the worst case — against the follower. It used to manage
 about 3 exchanges per point; it now runs to the 40 s timeout on **every** feed (96 exchanges a
 point on Serve, Flat drive, Topspin loop and Heavy backspin push alike). A human who lets the ball
@@ -494,7 +506,7 @@ the blade parked mid-table and was out of position for everything.
   BLADE_R centred at 0.02 hangs 5.5 cm through the table top — which is the bug this constant
   was previously changed to fix and did not. It costs no reach, since the disc still spans 0 to
   15 cm and its lower half covers a ball scraping the surface.
-  The `gone` cutoff in `advanceOne` is y < -0.6 (near the floor), not -0.25, so a wide/long ball
+  The `gone` cutoff (now `GameSession.DROPPED_BELOW_Y`) is y < -0.6 (near the floor), not -0.25, so a wide/long ball
   stays chaseable.
 - **Face eased toward the ball** (`FACE_TAU`), **`Stroke.TRACK_SPEED` 8 → 13**, **`timeScale`
   0.45**, **default feed = `Serve`** (gentle no-spin corner to corner).
@@ -742,17 +754,52 @@ landed: a sawtooth in the face angle at the mouse's event rate, felt as a wobbli
 by holding the relax off until the aim target has been unchanged for `AIM_STILL_DELAY` (0.05 s) of
 real time, rather than for a single physics step.
 
-**The brush gain (`ShotAssist.Tuning.driveBrush`).** `brush = lift + drive * driveBrush` has to
+**The brush gain (`ShotTuning.driveBrush`).** `brush = lift + drive * driveBrush` has to
 be strong enough to reach genuine backspin, not just less topspin: a still blade authors
 `baseTopspin` (14 rev/s), and a hard pull-back (~-8 m/s of drive) at `driveBrush = 0.8` gives a
 brush of -6.4, so `14 + (-6.4 * topspinPerLift 2.6) ≈ -2.6 rev/s` -- just past square, into a
 genuine chop. Below about 0.7 here the whole backspin half of the gesture is unreachable.
 
-**Ball-control ease (`ShotAssist.Tuning`).** For an average player rather than a bot that always
+**Ball-control ease (`ShotTuning`).** For an average player rather than a bot that always
 points exactly at the ball, the clean-contact core was widened (`qualityCore` 0.50 → 0.58,
 `qualityFalloff` 0.42 → 0.50), a fast incoming ball shrinks that core less (`qualityPaceLoss`
 0.22 → 0.15), and a mishit earns more assist (`assistFloor` 0.25 → 0.35). A mishit is still
 clearly worse than a clean hit; it stops reading as close to an automatic loss.
+
+## One gameplay implementation — the session extraction
+
+The rally rules used to live in two places: `Table_Tennis_In_3D.advanceOne()`, and hand-built
+copies of that loop inside `RallyTest` that had already drifted (they judged the hitter by ball
+position rather than by the paddle event, never ended a point and never withdrew a racket). Both
+now drive `play/GameSession`.
+
+**Method.** Before any extraction, a scratch harness drove a verbatim copy of the old loop through
+28 scripted scenarios -- the demo hand, a stand-in hand pointing at the ball for every preset, no
+input at all, a sweeping cursor with brush segments, demo and auto-replay toggled mid-rally --
+hashing every step's ball state and logging each contact, point and replay. The session, and later
+the restructured `ShotAssist`, reproduced that trace **bit for bit**. The new `RallyTest` checks
+cover what the trace cannot state as a rule: first-bounce eligibility on each half, double
+bounces, own-half returns, out-then-floor awarding exactly once, legal net cords, withdrawn
+rackets after a point, the same-step contact/bounce window (via a scripted opponent that digs the
+ball off the surface), replay timing on and off, score-preserving feeds and determinism.
+
+**What stayed where.** Frame accumulation, pause, single-step, time scale, mouse mapping and the
+brush, the camera, trail sampling, interpolation and capture remain in the application; they are
+presentation, and the session never sees a frame time. Score formatting moved from `Scoreboard`
+into `render/Hud`, which reads an immutable `Scoreboard.Snapshot`.
+
+**`ShotTuning` validation** follows each knob's mathematical use rather than a blanket range:
+every value finite; divisors and the swing-curve exponent positive; caps and clamp half-widths
+non-negative; speed, depth and elevation ranges ordered; lerp weights and table fractions in
+[0, 1]; `rescueSpeedSteps >= 2` because the ladder divides by `steps - 1`; and
+`speedBackoffPerPass * maxCorrectionPasses < 1` so the last correction pass still moves forward.
+Knobs with no such constraint are left alone.
+
+**Found and deliberately not fixed** (see AGENTS.md, known open defects): a legal return that the
+receiver never touches, which bounces once and then reaches the floor, is awarded to the
+*receiver* -- the floor rule scores against the last hitter without asking whether their shot had
+already landed legally. The characterization shows it directly: with no input at all, the idle
+player wins every point on the `Serve` feed.
 
 ## Conventions
 
