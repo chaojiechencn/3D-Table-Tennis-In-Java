@@ -52,6 +52,9 @@ public final class RallyTest {
         aPlayerPointingAtTheBallCanReturnIt();
         theScoreFollowsTheITTFRules();
         theBrushLiftsTheBatWithoutExtendingItsReach();
+        theSessionAppliesTheRallyRules();
+        theSessionSchedulesReplaysAndKeepsTheScore();
+        theSessionIsDeterministic();
 
         System.out.println("=".repeat(74));
         if (failures.isEmpty()) {
@@ -84,7 +87,7 @@ public final class RallyTest {
      */
     private static Rally feed(Shots shot) {
         World world = new World();
-        Paddle blade = new Paddle(new Vec3(0, 0.20, Follower.PLANE_Z), new Vec3(0, 0, 1));
+        Paddle blade = new Paddle(Follower.READY, Follower.SQUARE);
         Opponent ai = new Follower();
         ShotAssist assist = new ShotAssist();
 
@@ -280,7 +283,7 @@ public final class RallyTest {
      */
     private static Return playOut(Shots shot) {
         World world = new World();
-        Paddle blade = new Paddle(new Vec3(0, 0.20, Follower.PLANE_Z), new Vec3(0, 0, 1));
+        Paddle blade = new Paddle(Follower.READY, Follower.SQUARE);
         Opponent ai = new Follower();
 
         world.setPaddles(null, blade);
@@ -516,95 +519,44 @@ public final class RallyTest {
      * the ball and sent it back over to the opponent's half.
      */
     private static boolean playThePoint(Shots shot) {
-        World world = new World();
-        Paddle ai = new Paddle(new Vec3(0, 0.20, Follower.PLANE_Z), new Vec3(0, 0, 1));
-        Paddle me = new Paddle(PlayerReach.NEUTRAL, new Vec3(0, 0, -1));
-        Stroke hand = new Stroke(PlayerReach.NEUTRAL);
-        Opponent bot = new Follower();
-        ShotAssist assist = new ShotAssist();
-        world.launch(shot.state());
-
-        boolean aiMayHit = false, playerMayHit = false, returned = false;
-        int lastHits = 0, lastSerial = world.bounceSerial(), lastHitSide = 0;
-        double lastHitTime = -1;
+        GameSession game = new GameSession();
+        game.launch(shot);
+        boolean returned = false;
 
         for (int i = 0; i < (int) (14.0 / DT); i++) {
             // The stand-in hand: point the CURSOR at the ball, and let the envelope and the
             // tracking speed decide whether the blade gets there. Both are the real ones.
-            hand.aimAt(PlayerReach.clamp(new Vec3(world.state().pos().x(), 0, world.state().pos().z())));
-            hand.advance(me, DT);
-            bot.advance(world.state(), ai, DT);
-            world.setPaddles(playerMayHit ? me : null, aiMayHit ? ai : null);
-
-            BallState before = world.state();
-            world.step();
-
-            if (world.paddleHits() > lastHits) {
-                lastHits = world.paddleHits();
-                boolean playerHit = before.pos().z() > 0;
-                world.setState(assist.assist(before, world.state(), playerHit ? me : ai, playerHit));
-                playerMayHit = aiMayHit = false;
-                lastHitSide = playerHit ? -1 : 1;
-                lastHitTime = world.time();
-                if (playerHit) returned = true;
-            }
-            if (world.bounceSerial() > lastSerial && world.time() - lastHitTime > DT * 2) {
-                lastSerial = world.bounceSerial();
-                if (world.state().pos().z() > 0) { if (lastHitSide >= 0) playerMayHit = true; }
-                else aiMayHit = true;
-            }
-            lastSerial = world.bounceSerial();
+            Vec3 ball = game.ball().pos();
+            game.setAim(PlayerReach.clamp(new Vec3(ball.x(), 0, ball.z())));
+            if (game.step().hitBy() == Scoreboard.Side.PLAYER) returned = true;
 
             // Returned AND it got to the other side: a ball popped straight up is not a return.
-            if (returned && world.state().pos().z() < -0.1) return true;
-            if (world.state().pos().y() < -TABLE_HEIGHT) break;
+            if (returned && game.ball().pos().z() < -0.1) return true;
+            if (game.ball().pos().y() < -TABLE_HEIGHT) break;
         }
         return false;
     }
 
     /**
-     * One feed, flown until the opponent has returned it and the return has bounced on the
-     * player's half; the ball's path from that bounce onward, or null if no such rally happens.
-     *
-     * Deliberately built the same way MrPong builds it -- Follower, ShotAssist on every
-     * contact, the one-bounce rule gating the rackets -- because a reachability claim about a
-     * ball the game never actually produces would be worth nothing.
+     * One feed, played by the real game until the opponent has returned it and the return has
+     * bounced on the player's half; the ball's path from that bounce onward, or null if no such
+     * rally happens. The player stands aside at the far corner of the envelope, so the path is
+     * the ball's own -- a reachability claim about a ball the game never produces is worthless.
      */
     private static List<Vec3> pathAfterThePlayerSideBounce(Shots shot) {
-        World world = new World();
-        Paddle ai = new Paddle(new Vec3(0, 0.20, Follower.PLANE_Z), new Vec3(0, 0, 1));
-        Opponent bot = new Follower();
-        ShotAssist assist = new ShotAssist();
-        world.launch(shot.state());
+        GameSession game = new GameSession();
+        game.setAim(PlayerReach.clamp(new Vec3(-9, 0, 9)));
+        game.launch(shot);
 
-        boolean aiMayHit = false, returned = false, bounced = false;
-        int lastHits = 0, lastSerial = world.bounceSerial();
-        double lastHitTime = -1;
+        boolean returned = false, bounced = false;
         List<Vec3> path = new ArrayList<>();
 
         for (int i = 0; i < (int) (14.0 / DT); i++) {
-            bot.advance(world.state(), ai, DT);
-            world.setPaddles(null, aiMayHit ? ai : null);      // the PLAYER never hits here
+            if (game.step().hitBy() == Scoreboard.Side.OPPONENT) returned = true;
+            if (returned && game.playerMayHit()) bounced = true;
 
-            BallState before = world.state();
-            world.step();
-
-            if (world.paddleHits() > lastHits) {
-                lastHits = world.paddleHits();
-                world.setState(assist.assist(before, world.state(), ai, false));
-                aiMayHit = false;
-                lastHitTime = world.time();
-                returned = true;
-            }
-            if (world.bounceSerial() > lastSerial && world.time() - lastHitTime > DT * 2) {
-                lastSerial = world.bounceSerial();
-                if (world.state().pos().z() > 0) { if (returned) bounced = true; }
-                else aiMayHit = true;
-            }
-            lastSerial = world.bounceSerial();
-
-            if (bounced) path.add(world.state().pos());
-            if (world.state().pos().y() < -TABLE_HEIGHT) break;
+            if (bounced) path.add(game.ball().pos());
+            if (game.ball().pos().y() < -TABLE_HEIGHT) break;
         }
         return bounced ? path : null;
     }
@@ -770,6 +722,277 @@ public final class RallyTest {
         check("with the modifier up, no aim at any height leaves the hitting plane",
               offPlane == 0,
               String.format("worst height deviation %.1e m", offPlane));
+    }
+
+    // ---------------------------------------------------------------- the game session
+
+    /** An opponent that never plays: its blade stands far behind the table, so feeds run out. */
+    private static final Opponent STATUE = new Opponent() {
+        @Override public void advance(BallState ball, Paddle blade, double dt) {
+            blade.placeAt(new Vec3(0, 0.20, -4.0), Follower.SQUARE);
+        }
+        @Override public String name() { return "statue"; }
+    };
+
+    private static Shots feed(String name, Vec3 pos, Vec3 vel) {
+        return new Shots(name, name, BallState.at(pos, vel, Vec3.ZERO), null);
+    }
+
+    /** Hit well past the far end without touching the table: out, and then the floor. */
+    private static final Shots LONG_FEED = feed("long", new Vec3(0, 0.30, 1.52), new Vec3(0, 1.5, -14));
+
+    /** Dropped short on the player's own half, rising toward the player after its bounce. */
+    private static final Shots BOUNCER = feed("bouncer", new Vec3(0, 0.30, 0.45), new Vec3(0, 0, 1.2));
+
+    /**
+     * An opponent that digs the ball off the table surface: as the ball falls onto the far half
+     * a second time, the blade drops in 3 cm behind it at 3 cm up and pushes forward, so the
+     * racket contact and the ball's table touch fall on the SAME physics step.
+     */
+    private static final class Digger implements Opponent {
+        private boolean bounced, set;
+        @Override public void advance(BallState ball, Paddle blade, double dt) {
+            Vec3 p = ball.pos();
+            if (ball.vel().y() > 0) bounced = true;
+            if (set) {
+                blade.moveTo(blade.pos().plus(new Vec3(0, 0, 0.01)), Follower.SQUARE, dt);
+            } else if (bounced && ball.vel().y() < 0 && p.y() < 0.03) {
+                blade.placeAt(new Vec3(p.x(), p.y(), p.z() - 0.03), Follower.SQUARE);
+                set = true;
+            } else {
+                blade.placeAt(Follower.READY, Follower.SQUARE);
+            }
+        }
+        @Override public String name() { return "digger"; }
+    }
+
+    private static boolean happened(GameSession game, World.EventType type) {
+        return game.events().stream().anyMatch(e -> e.type() == type);
+    }
+
+    /** Point the stand-in hand's cursor at the ball, through the real envelope. */
+    private static void pointAtTheBall(GameSession game) {
+        Vec3 ball = game.ball().pos();
+        game.setAim(PlayerReach.clamp(new Vec3(ball.x(), 0, ball.z())));
+    }
+
+    /**
+     * The rally rules, played through the same session the application runs -- not a copy of
+     * its loop. Each feed is built so one rule decides it, and the check names that rule.
+     */
+    private static void theSessionAppliesTheRallyRules() {
+        System.out.println("\n-- the game session --");
+
+        // First bounce: whichever half a feed lands on first opens that side's racket and no
+        // other; nobody may hit while it is still in the air. One feed for each half.
+        for (Shots shot : new Shots[]{Shots.byName("Serve"), BOUNCER}) {
+            GameSession game = new GameSession();
+            game.launch(shot);
+            boolean shutWhileInAir = true;
+            while (game.bounceSerial() == 0 && game.time() < 2) {
+                shutWhileInAir &= !game.playerMayHit() && !game.opponentMayHit();
+                game.step();
+            }
+            boolean near = game.events().stream()
+                    .filter(e -> e.type() == World.EventType.TABLE_BOUNCE).findFirst()
+                    .map(e -> e.side() < 0).orElse(false);
+            check("the first bounce opens only the racket on that half (" + shot.name() + ")",
+                  shutWhileInAir && game.playerMayHit() == near && game.opponentMayHit() == !near,
+                  String.format("closed in the air=%b; landed %s; player=%b opponent=%b", shutWhileInAir,
+                                near ? "near" : "far", game.playerMayHit(), game.opponentMayHit()));
+        }
+
+        // Double bounce: a dead drop on the opponent's half that nobody plays.
+        GameSession drop = new GameSession(STATUE, new ShotAssist());
+        drop.launch(Shots.byName("ITTF drop test"));
+        boolean openedAfterOne = false;
+        GameSession.StepResult decided = null;
+        for (int i = 0; i < (int) (3.0 / DT) && decided == null; i++) {
+            GameSession.StepResult r = drop.step();
+            openedAfterOne |= drop.opponentMayHit();
+            if (r.pointAwarded()) decided = r;
+        }
+        check("a second bounce on the receiver's half is the receiver's point lost",
+              openedAfterOne && decided != null && decided.pointTo() == Scoreboard.Side.PLAYER,
+              String.format("first bounce opened the opponent=%b; point to %s at t=%.3f s",
+                            openedAfterOne, decided == null ? "nobody" : decided.pointTo(), drop.time()));
+
+        // Own half: a shot that comes straight back off a still blade onto the player's own half.
+        // A tuning with no clean core leaves every contact raw, so nothing authors it over the net.
+        ShotAssist.Tuning raw = new ShotAssist.Tuning();
+        raw.qualityCore = 0; raw.qualityCoreMin = 0; raw.qualityFalloff = 1e-9; raw.assistFloor = 0;
+        GameSession own = new GameSession(STATUE, new ShotAssist(raw));
+        own.setAim(PlayerReach.clamp(new Vec3(0, 0, risingThroughTheHittingPlane(BOUNCER).z())));
+        own.launch(BOUNCER);
+        Scoreboard.Side ownHit = null, ownPoint = null;
+        for (int i = 0; i < (int) (3.0 / DT) && ownPoint == null; i++) {
+            GameSession.StepResult r = own.step();
+            if (r.contact()) ownHit = r.hitBy();
+            if (r.pointAwarded()) ownPoint = r.pointTo();
+        }
+        check("a return that falls back on the hitter's own half loses the point",
+              ownHit == Scoreboard.Side.PLAYER && ownPoint == Scoreboard.Side.OPPONENT
+                  && own.ball().pos().z() > 0,
+              String.format("hit by %s, point to %s, ball at z=%+.2f", ownHit, ownPoint, own.ball().pos().z()));
+
+        // Out, then floor: two terminal events on one rally, exactly one point, against the hitter.
+        GameSession out = new GameSession(STATUE, new ShotAssist());
+        out.launch(LONG_FEED);
+        int awards = 0;
+        for (int i = 0; i < (int) (3.0 / DT); i++) if (out.step().pointAwarded()) awards++;
+        boolean both = happened(out, World.EventType.OUT_OF_BOUNDS) && happened(out, World.EventType.FLOOR);
+        check("out and then the floor end the rally with exactly one point, against the hitter",
+              both && awards == 1 && out.score().opponentPoints() == 1 && out.score().playerPoints() == 0,
+              String.format("out+floor both fired=%b; %d award(s); score %d-%d", both, awards,
+                            out.score().playerPoints(), out.score().opponentPoints()));
+
+        // Net cord: a feed that clips the cord and still lands on the far half is a live ball.
+        Shots cord = netCordFeed();
+        boolean touchedNet = false, opened = false, earlyPoint = false;
+        if (cord != null) {
+            GameSession net = new GameSession(STATUE, new ShotAssist());
+            net.launch(cord);
+            for (int i = 0; i < (int) (2.0 / DT) && !net.opponentMayHit(); i++) {
+                earlyPoint |= net.step().pointAwarded();
+            }
+            touchedNet = happened(net, World.EventType.NET);
+            opened = net.opponentMayHit();
+        }
+        check("a ball that clips the net and lands legally stays in play",
+              touchedNet && opened && !earlyPoint,
+              cord == null ? "no cord-clipping feed found"
+                           : String.format("%s: net touched=%b, far bounce opened the opponent=%b, early point=%b",
+                                           cord.name(), touchedNet, opened, earlyPoint));
+
+        // A decided point withdraws both rackets: a hand still chasing the ball cannot touch it.
+        GameSession dead = new GameSession();
+        dead.launch(Shots.byName("Into the net"));
+        boolean over = false;
+        int lateContacts = 0;
+        double closest = Double.MAX_VALUE;
+        for (int i = 0; i < (int) (4.0 / DT); i++) {
+            pointAtTheBall(dead);
+            GameSession.StepResult r = dead.step();
+            if (over && r.contact()) lateContacts++;
+            if (over) closest = Math.min(closest, dead.playerBlade().centre().minus(dead.ball().pos()).length());
+            over |= r.pointAwarded();
+        }
+        check("once a point is decided, no racket can touch the ball again",
+              over && lateContacts == 0,
+              String.format("point decided=%b; %d contacts after it; blade came within %.3f m of the ball",
+                            over, lateContacts, closest));
+
+        // The contact window: a push dug off the surface touches the table on (or right after)
+        // the racket contact. That touch belongs to the contact -- it is not the opponent's own
+        // shot falling back on the opponent's half.
+        GameSession dig = new GameSession(new Digger(), new ShotAssist());
+        dig.launch(Shots.byName("ITTF drop test"));
+        double contactAt = Double.NaN, bounceGap = Double.NaN;
+        Scoreboard.Side digPoint = null;
+        for (int i = 0; i < (int) (3.0 / DT) && digPoint == null; i++) {
+            int serial = dig.bounceSerial();
+            GameSession.StepResult r = dig.step();
+            if (r.contact() && Double.isNaN(contactAt)) contactAt = dig.time();
+            if (!Double.isNaN(contactAt) && Double.isNaN(bounceGap) && dig.bounceSerial() > serial) {
+                bounceGap = dig.time() - contactAt;
+            }
+            if (r.pointAwarded()) digPoint = r.pointTo();
+            if (!Double.isNaN(contactAt) && dig.time() - contactAt > 0.1) break;
+        }
+        check("a table touch on the contact's own step does not score as the hitter's own half",
+              !Double.isNaN(contactAt) && bounceGap <= GameSession.CONTACT_BOUNCE_WINDOW && digPoint == null,
+              String.format("contact at t=%.4f s, table touch %.1f ms after it (window %.1f ms), point: %s",
+                            contactAt, bounceGap * 1000, GameSession.CONTACT_BOUNCE_WINDOW * 1000,
+                            digPoint == null ? "none" : digPoint));
+    }
+
+    /** Replays fire on the documented delay only when enabled; a new feed keeps the score. */
+    private static void theSessionSchedulesReplaysAndKeepsTheScore() {
+        GameSession on = new GameSession(STATUE, new ShotAssist());
+        on.launch(LONG_FEED);
+        double pointAt = Double.NaN, dueAt = Double.NaN;
+        for (int i = 0; i < (int) (4.0 / DT) && Double.isNaN(dueAt); i++) {
+            if (on.step().pointAwarded()) pointAt = on.time();
+            if (on.replayDue()) dueAt = on.time();
+        }
+        double delay = dueAt - pointAt;
+        check("with auto-replay on, the next feed is due one point-end delay after the point",
+              delay >= GameSession.POINT_END_DELAY - 1e-9 && delay < GameSession.POINT_END_DELAY + DT + 1e-9,
+              String.format("due %.4f s after the point (delay %.3f s, step %.4f s)",
+                            delay, GameSession.POINT_END_DELAY, DT));
+
+        Scoreboard.Snapshot before = on.score();
+        on.launch(LONG_FEED);
+        check("a new feed keeps the match score and reopens the rally",
+              on.score().equals(before) && !on.pointOver() && !on.playerMayHit() && !on.opponentMayHit(),
+              String.format("score %d-%d kept=%b; point over=%b", before.playerPoints(),
+                            before.opponentPoints(), on.score().equals(before), on.pointOver()));
+
+        GameSession off = new GameSession(STATUE, new ShotAssist());
+        off.setAutoReplay(false);
+        off.launch(LONG_FEED);
+        boolean everDue = false;
+        for (int i = 0; i < (int) (6.0 / DT); i++) { off.step(); everDue |= off.replayDue(); }
+        check("with auto-replay off, no feed is scheduled but the point still counts",
+              !everDue && off.score().opponentPoints() == 1,
+              String.format("replay due=%b over 6 s; score %d-%d", everDue,
+                            off.score().playerPoints(), off.score().opponentPoints()));
+    }
+
+    /** The same inputs, step for step, give the same game -- bit for bit. */
+    private static void theSessionIsDeterministic() {
+        GameSession a = new GameSession(), b = new GameSession();
+        for (GameSession g : new GameSession[]{a, b}) { g.setDemoMode(true); g.launch(Shots.byName("Serve")); }
+        int steps = (int) (10.0 / DT), firstDiff = -1, contacts = 0;
+        for (int i = 0; i < steps && firstDiff < 0; i++) {
+            GameSession.StepResult ra = a.step(), rb = b.step();
+            if (ra.contact()) contacts++;
+            if (!ra.equals(rb) || !a.ball().equals(b.ball())) firstDiff = i;
+        }
+        check("two sessions fed the same inputs stay identical",
+              firstDiff < 0 && contacts > 0,
+              firstDiff < 0 ? String.format("%d steps and %d contacts, every ball state equal", steps, contacts)
+                            : "diverged at step " + firstDiff);
+    }
+
+    /** Where a feed's ball first rises through the player's hitting plane after its bounce. */
+    private static Vec3 risingThroughTheHittingPlane(Shots shot) {
+        World w = new World();
+        w.launch(shot.state());
+        for (int i = 0; i < (int) (2.0 / DT); i++) {
+            double y0 = w.state().pos().y();
+            w.step();
+            if (w.bounceSerial() > 0 && y0 < PlayerReach.HIT_Y && w.state().pos().y() >= PlayerReach.HIT_Y) {
+                return w.state().pos();
+            }
+        }
+        throw new IllegalStateException(shot.name() + " never rises through the hitting plane");
+    }
+
+    /**
+     * A feed that touches the net cord and still lands first on the far half, found by search so
+     * it does not hang on hand-tuned numbers: a paddle-free flight is the honest judge.
+     */
+    private static Shots netCordFeed() {
+        for (double vz = 6; vz <= 10; vz += 1) {
+            for (double vy = -0.5; vy <= 2.5; vy += 0.02) {
+                Shots s = feed(String.format("cord feed vz=-%.0f vy=%+.2f", vz, vy),
+                               new Vec3(0, 0.20, 1.2), new Vec3(0, vy, -vz));
+                World w = new World();
+                w.launch(s.state());
+                boolean touched = false;
+                for (int i = 0; i < (int) (1.5 / DT) && w.bounceSerial() == 0; i++) {
+                    w.step();
+                    touched |= w.lastEvent() != null && w.lastEvent().type() == World.EventType.NET;
+                }
+                World.Event bounce = w.lastEvent();
+                if (touched && bounce != null && bounce.type() == World.EventType.TABLE_BOUNCE
+                        && bounce.side() > 0) {
+                    return s;
+                }
+            }
+        }
+        return null;
     }
 
     private static void check(String what, boolean ok, String detail) {

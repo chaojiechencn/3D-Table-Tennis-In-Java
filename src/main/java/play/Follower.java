@@ -33,7 +33,10 @@ public final class Follower implements Opponent {
     private static final double MAX_REACH_Y = 0.55;
 
     /** Where the blade waits before a rally and after it has played its shot. */
-    private static final Vec3 READY = new Vec3(0, 0.20, PLANE_Z);
+    public static final Vec3 READY = new Vec3(0, 0.20, PLANE_Z);
+
+    /** Square to the table, facing the player. */
+    public static final Vec3 SQUARE = new Vec3(0, 0, 1);
 
     /**
      * How far in over the table the blade will step to meet a dying ball, metres. Without this

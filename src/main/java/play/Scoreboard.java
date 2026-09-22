@@ -188,6 +188,15 @@ public final class Scoreboard {
         return (turns % 2 == 0) ? openingServer : openingServer.other();
     }
 
+    /** An immutable reading of the score, for display. {@code matchWinner} is null until decided. */
+    public record Snapshot(int playerPoints, int opponentPoints, int playerGames, int opponentGames,
+                           Side server, boolean deuce, Side matchWinner) {}
+
+    public Snapshot snapshot() {
+        return new Snapshot(playerPoints, opponentPoints, playerGames, opponentGames,
+                            server(), isDeuce(), matchWinner());
+    }
+
     /** Start the whole match again. */
     public void reset() {
         playerPoints = opponentPoints = 0;

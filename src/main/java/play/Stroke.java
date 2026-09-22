@@ -52,7 +52,10 @@ public final class Stroke {
      * Solved by {@link render.MouseAim} out of the aim ray.
      */
     private Vec3 target;
-    private Vec3 strokeDir = new Vec3(0, 0, -1);   // square to the incoming ball until it moves
+    /** Square to the table, facing the opponent: where the face rests when the blade is still. */
+    public static final Vec3 SQUARE = new Vec3(0, 0, -1);
+
+    private Vec3 strokeDir = SQUARE;   // square to the incoming ball until it moves
 
     /**
      * Seconds since {@link #aimAt} last received a point that actually differed from the one
@@ -100,7 +103,7 @@ public final class Stroke {
         } else if (idleTime > AIM_STILL_DELAY) {
             // A blade that has genuinely stopped relaxes back to square -- see docs/DESIGN.md,
             // "the paddle's face settling to square", for the 57-degree bug this replaced.
-            strokeDir = Vec3.lerp(strokeDir, new Vec3(0, 0, -1),
+            strokeDir = Vec3.lerp(strokeDir, SQUARE,
                                   1 - Math.exp(-dt / FACE_TAU)).normalized();
         }
         // else: the blade reached this step's target early, but the hand moved recently enough
