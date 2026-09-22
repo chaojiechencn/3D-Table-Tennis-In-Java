@@ -11,41 +11,32 @@ import java.util.List;
 import static physics.Constants.DT;
 
 /**
- * One headless game of table tennis: the world, both rackets, the rally rules and the score.
+ * One headless game: the world, both rackets, the rally rules and the score. The application and
+ * RallyTest both drive it, so the game that is tested is the game that is played. It advances
+ * only in whole physics steps and hands out immutable snapshots.
  *
- * The JavaFX application and {@code play.RallyTest} both drive this, so the game that is tested is
- * the game that is played. It advances only in whole physics steps ({@link #step}) and never sees
- * a frame time. Rendering reads immutable snapshots; nothing session-owned is handed out mutable.
- *
- * The ITTF one-bounce rule is enforced by handing {@link World} a null racket for whoever may not
- * hit yet: the blade still tracks the ball, it just cannot touch it. A decided point withdraws both.
+ * The one-bounce rule is enforced by giving {@link World} a null racket for whoever may not hit
+ * yet; a decided point withdraws both.
  */
 public final class GameSession {
 
-    /** How long to keep watching after the ball has died without a decision, seconds. */
+    /** Watching time after a ball dies without a decision. */
     static final double REPLAY_DELAY = 1.8;
 
-    /** Shorter pause after a DECIDED point: it is cut early, not left to trickle to a stop. */
+    /** A decided point is cut short rather than left to trickle to a stop. */
     static final double POINT_END_DELAY = 0.9;
 
-    /**
-     * How long after a racket contact a table bounce still belongs to that contact. A push dug out
-     * at surface height fires its table contact on the SAME step as the racket contact; without
-     * this window that reads as "your own shot bounced on your own half". Two steps is enough --
-     * the ball is long gone from the surface by then at any speed the shot model produces.
-     */
+    /** A push dug off the surface touches the table on the contact's own step; that is not a bounce. */
     static final double CONTACT_BOUNCE_WINDOW = DT * 2;
 
-    /** How recent an OUT or FLOOR event must be to still decide the point on this step. */
     private static final double TERMINAL_EVENT_WINDOW = DT * 2;
 
-    /** Fallback end of a rally with no clean event: the ball has dropped this far... */
+    // With no clean event, the rally ends once the ball has dropped this far or all but stopped.
     private static final double DROPPED_BELOW_Y = -0.60;
-    /** ...or has all but stopped once the rally has had time to start. */
     private static final double STOPPED_SPEED = 0.25;
     private static final double STOPPED_AFTER = 1.5;
 
-    /** What one step produced, for the camera and HUD. Either field may be null. */
+    /** What one step produced; either side may be null. */
     public record StepResult(Scoreboard.Side hitBy, Scoreboard.Side pointTo) {
         static final StepResult NONE = new StepResult(null, null);
         public boolean contact()      { return hitBy != null; }
@@ -53,8 +44,6 @@ public final class GameSession {
     }
 
     private final World world = new World();
-    // Both rackets are kinematic and advanced once per physics step, never per frame -- driven at
-    // the frame rate, a slow machine would swing the same stroke harder.
     private final Paddle playerPaddle = new Paddle(PlayerReach.NEUTRAL, Stroke.SQUARE);
     private final Paddle opponentPaddle = new Paddle(Follower.READY, Follower.SQUARE);
     private final Stroke stroke = new Stroke(PlayerReach.NEUTRAL);
@@ -63,16 +52,15 @@ public final class GameSession {
     private final ShotAssist shotAssist;
     private final Scoreboard score = new Scoreboard();
 
-    private Vec3 aim;                     // the mapped cursor, or null before the mouse has moved
+    private Vec3 aim;                     // null until the mouse has moved
     private boolean demoMode;
     private boolean autoReplay = true;
-    private double replayAt = Double.NaN; // when to restart the rally, or NaN while it is live
+    private double replayAt = Double.NaN; // NaN while the rally is live
 
-    // Rally state, reset by every launch.
     private int lastPaddleHits;
     private int lastBounceSerial;
     private double lastHitTime;
-    private Scoreboard.Side lastHitter;   // null while the feed is still the last thing that hit it
+    private Scoreboard.Side lastHitter;   // null while the feed is the last thing that hit it
     private boolean playerMayHit;
     private boolean opponentMayHit;
     private boolean pointOver;
@@ -86,13 +74,7 @@ public final class GameSession {
         world.setPaddles(playerPaddle, opponentPaddle);
     }
 
-    // ------------------------------------------------------------------ control
-
-    /**
-     * Put a ball in play, keeping the match score. Not a serve (not built yet) -- a feed that
-     * stands in for the player's own shot. The one-bounce rule, not the launch geometry, is what
-     * stops it rebounding off the player's own blade on the first step.
-     */
+    /** Put a feed in play, keeping the match score. */
     public void launch(Shots shot) {
         world.launch(shot.state());
         lastPaddleHits = 0;
@@ -105,10 +87,10 @@ public final class GameSession {
         replayAt = Double.NaN;
     }
 
-    /** The player's target on the hitting plane, already mapped and clamped by the caller. */
+    /** Already mapped and clamped by the caller. */
     public void setAim(Vec3 target) { aim = target; }
 
-    /** The demo hand drives the cursor instead of the mouse -- exactly one source, never both. */
+    /** The demo hand replaces the mouse; never both. */
     public void setDemoMode(boolean on) { demoMode = on; }
 
     /** Toggling either way drops any replay already scheduled. */
@@ -117,27 +99,16 @@ public final class GameSession {
         replayAt = Double.NaN;
     }
 
-    /** True once the scheduled replay time has been reached; the caller launches the next feed. */
     public boolean replayDue() { return !Double.isNaN(replayAt) && world.time() >= replayAt; }
 
-    // ------------------------------------------------------------------ the step
-
-    /**
-     * Advance exactly one {@code DT}. Both blades are posed BEFORE the world steps, so the contact
-     * solver strikes the ball with the velocity the blade had while the ball was arriving.
-     */
+    /** Advance exactly one DT. Both blades are posed first, so contact uses this step's swing. */
     public StepResult step() {
         awardedThisStep = null;
-
-        if (demoMode) stroke.aimAt(demo.cursorFor(world.state(), playerMayHit && !pointOver, DT));
-        else if (aim != null) stroke.aimAt(aim);
-        stroke.advance(playerPaddle, DT);
-        opponent.advance(world.state(), opponentPaddle, DT);
-
+        moveRackets();
         world.setPaddles(playerMayHit && !pointOver ? playerPaddle : null,
                          opponentMayHit && !pointOver ? opponentPaddle : null);
 
-        BallState beforeStep = world.state();   // ShotAssist wants the pre-contact velocity
+        BallState beforeStep = world.state();
         world.step();
 
         Scoreboard.Side hitBy = handleContact(beforeStep);
@@ -149,7 +120,13 @@ public final class GameSession {
                 ? StepResult.NONE : new StepResult(hitBy, awardedThisStep);
     }
 
-    /** A racket just hit it: author the shot, and hand the ball to the other side's bounce. */
+    private void moveRackets() {
+        if (demoMode) stroke.aimAt(demo.cursorFor(world.state(), playerMayHit && !pointOver, DT));
+        else if (aim != null) stroke.aimAt(aim);
+        stroke.advance(playerPaddle, DT);
+        opponent.advance(world.state(), opponentPaddle, DT);
+    }
+
     private Scoreboard.Side handleContact(BallState beforeStep) {
         if (world.paddleHits() <= lastPaddleHits) return null;
         lastPaddleHits = world.paddleHits();
@@ -166,14 +143,12 @@ public final class GameSession {
     }
 
     /**
-     * A table bounce opens the receiver's racket -- unless it is the SECOND bounce on that side,
-     * or the hitter's own shot fell back on their own half, either of which decides the point.
-     * A bounce inside the contact window is the contact's own table touch, not a rally event,
-     * but the serial still moves on or the next real bounce is measured against a stale one.
+     * A first bounce opens the receiver's racket; a second, or the hitter's own half, decides the
+     * point. The serial always advances, or the next bounce is compared with a stale one.
      */
     private void handleBounce() {
-        if (world.bounceSerial() > lastBounceSerial
-                && world.time() - lastHitTime > CONTACT_BOUNCE_WINDOW) {
+        boolean newBounce = world.bounceSerial() > lastBounceSerial;
+        if (newBounce && world.time() - lastHitTime > CONTACT_BOUNCE_WINDOW) {
             Scoreboard.Side half = lastBounceHalf();
             if (lastHitter == half) {
                 endPoint(half.other());                        // never crossed the net
@@ -187,22 +162,19 @@ public final class GameSession {
     }
 
     /**
-     * A ball out past the end line, or on the floor, decides the point against whoever hit it
-     * last; the feed counts as the player's. NET is deliberately not here: under ITTF a rally
-     * ball that clips the cord and lands legally is a good shot, and a cord that kills the ball
-     * still decides the point a moment later through the own-half or floor rule.
+     * Out or floor decides against the last hitter; the feed counts as the player's. A net cord is
+     * not here: a ball that clips the cord and lands legally is a good shot.
      */
     private void handleOutOrFloor() {
         World.Event last = world.lastEvent();
-        if (last != null && world.time() - last.time() < TERMINAL_EVENT_WINDOW
-                && (last.type() == World.EventType.OUT_OF_BOUNDS
-                 || last.type() == World.EventType.FLOOR)) {
+        boolean terminal = last != null && world.time() - last.time() < TERMINAL_EVENT_WINDOW
+                && (last.type() == World.EventType.OUT_OF_BOUNDS || last.type() == World.EventType.FLOOR);
+        if (terminal) {
             endPoint(lastHitter == Scoreboard.Side.OPPONENT
                      ? Scoreboard.Side.PLAYER : Scoreboard.Side.OPPONENT);
         }
     }
 
-    /** The ball dropped toward the floor without a clean event, or died on the table. */
     private void scheduleFallbackReplay() {
         BallState b = world.state();
         boolean gone = b.pos().y() < DROPPED_BELOW_Y;
@@ -212,11 +184,7 @@ public final class GameSession {
         }
     }
 
-    /**
-     * Award the point once, however many rules fire on the same step, and withdraw both rackets.
-     * The point counts even with auto-replay off: a score that silently stopped counting while a
-     * rally is being inspected would be a trap.
-     */
+    /** Awards once however many rules fire, and counts even with replay off. */
     private void endPoint(Scoreboard.Side winner) {
         if (pointOver) return;
         pointOver = true;
@@ -225,13 +193,11 @@ public final class GameSession {
         if (autoReplay && Double.isNaN(replayAt)) replayAt = world.time() + POINT_END_DELAY;
     }
 
-    /** Whose racket made the latest contact: the near half is the player's. */
     private boolean lastHitByPlayer() {
         World.Event hit = latest(World.EventType.PADDLE_HIT);
         return hit == null || hit.side() < 0;
     }
 
-    /** The half the latest table bounce landed on. */
     private Scoreboard.Side lastBounceHalf() {
         World.Event bounce = latest(World.EventType.TABLE_BOUNCE);
         return bounce != null && bounce.side() < 0 ? Scoreboard.Side.PLAYER : Scoreboard.Side.OPPONENT;
@@ -244,8 +210,6 @@ public final class GameSession {
         }
         return null;
     }
-
-    // ------------------------------------------------------------------ read-only views
 
     public BallState ball()              { return world.state(); }
     public BallState previousBall()      { return world.previous(); }
@@ -262,7 +226,6 @@ public final class GameSession {
     public boolean opponentMayHit()      { return opponentMayHit && !pointOver; }
     public boolean pointOver()           { return pointOver; }
 
-    /** What the shot assist built the last shot from, for the overlay. */
     public ShotAssist.Debug lastShot()   { return shotAssist.debug(); }
     public double targetHalfWidth()      { return shotAssist.targetHalfWidth(); }
     public double targetNearDepth()      { return shotAssist.targetNearDepth(); }

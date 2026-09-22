@@ -19,7 +19,7 @@ javafx {
 }
 
 application {
-    mainClass = 'Table_Tennis_In_3D'
+    mainClass = 'TableTennisIn3D'
 }
 
 tasks.register('selfTest', JavaExec) {

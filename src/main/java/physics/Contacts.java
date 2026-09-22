@@ -5,35 +5,29 @@ import physics.Constants.Material;
 import static physics.Constants.*;
 
 /**
- * ONE collision solver, used for the table, the net and the floor -- see AGENTS.md invariant 4.
- * Everything the ball can hit is an axis-aligned box responding the same way (a normal impulse
- * with restitution, plus a tangential impulse that grips or slides), differing only by
- * {@link Material}. The spin coupling falls out of that impulse rather than being scripted: a
- * topspin ball's contact patch is already moving backwards relative to the surface, so friction
- * ADDS forward speed and it kicks low and long; a backspin ball's patch moves forwards, so
- * friction subtracts and it checks up short.
+ * The ONE collision solver (AGENTS.md invariant 4): a normal impulse with restitution plus a
+ * tangential impulse that grips, springs back or slides, differing per surface only by
+ * {@link Material}. Spin coupling falls out of the impulse rather than being scripted.
  */
 public final class Contacts {
 
     private Contacts() {}
 
-    /** An axis-aligned collision volume in physics space. The table, the net and the floor. */
+    /** An axis-aligned volume: the table, the net and the floor. */
     public record Box(Vec3 min, Vec3 max) implements Collider {
         public static Box centered(double cx, double cy, double cz,
                                    double sx, double sy, double sz) {
             return new Box(new Vec3(cx - sx / 2, cy - sy / 2, cz - sz / 2),
                            new Vec3(cx + sx / 2, cy + sy / 2, cz + sz / 2));
         }
-        public Vec3 center() { return min.plus(max).scale(0.5); }
 
-        /** Nearest point on the box to p (equals p when p is inside). */
         @Override public Vec3 closestPoint(Vec3 p) {
             return new Vec3(clamp(p.x(), min.x(), max.x()),
                             clamp(p.y(), min.y(), max.y()),
                             clamp(p.z(), min.z(), max.z()));
         }
 
-        /** For a centre inside the box: unit normal of the nearest face. */
+        /** Normal of the nearest face. */
         @Override public Vec3 escapeNormal(Vec3 p) {
             double best = p.x() - min.x();
             Vec3 n = new Vec3(-1, 0, 0);
@@ -52,14 +46,8 @@ public final class Contacts {
         }
 
         /**
-         * Swept sphere vs box, via a ray against the box grown by the ball radius.
-         *
-         * Growing the box squares off its corners instead of rounding them, so a hit on the
-         * exact corner of the table can register up to one radius early. The closest-point
-         * call afterwards still produces the correct rounded normal, so the ball leaves at
-         * the right angle; only the instant is slightly off, and only on true corner clips.
-         *
-         * @return time of impact in [0,1] along p0 -> p1, or -1 for no hit.
+         * A ray against the box grown by the ball radius. Square corners can register a corner
+         * clip up to one radius early; the rounded normal from closestPoint is still correct.
          */
         @Override public double sweep(Vec3 p0, Vec3 p1) {
             Vec3 d = p1.minus(p0);
@@ -86,61 +74,38 @@ public final class Contacts {
             return tEnter;
         }
 
-        /** The table is bolted to the floor. */
         @Override public Vec3 velocityAt(Vec3 point) { return Vec3.ZERO; }
     }
 
-    /** What happened, so World can report it and the renderer can mark the bounce. */
     public record Hit(BallState state, Vec3 point, Vec3 normal,
                       double impactSpeed, boolean resting) {}
 
-    /**
-     * Below this normal speed we stop applying restitution. Without it, a ball settling on
-     * the table enters an infinite sequence of ever smaller bounces, burns steps, and jitters
-     * visibly. 0.15 m/s is under 1 mm of bounce height, so nothing real is lost.
-     */
+    /** Below this normal speed there is no bounce: under 1 mm of height, and it ends the jitter. */
     private static final double RESTING_SPEED = 0.15;
 
-    /** Rolling resistance, applied only while the ball is resting in contact. Without a sink
-     *  here, a ball that comes to rest on the table rolls off the end forever. */
+    /** Applied only while resting, so a settled ball stops instead of rolling forever. */
     private static final double ROLLING_MU = 0.02;
 
-    /** Gap left between ball and surface after a contact, so the next step starts clean. */
+    /** Gap left after a contact so the next step starts clean. */
     private static final double SKIN = 1e-4;
 
     /**
-     * Where and when the ball touches a surface, before anything is done about it.
-     *
-     * Detection is separated from response so the caller can look at EVERY surface first and
-     * then resolve only the earliest contact. With three static surfaces a fixed priority
-     * order was good enough; with a paddle in the way it is not, because "the first one in
-     * the list" and "the one it actually hit first" stop being the same thing.
-     *
-     * @param toi   fraction of the step at which contact happens, 1.0 for an end-of-step overlap
-     * @param swept true if this was found by the swept test, i.e. the ball would otherwise
-     *              have passed clean through and there is still step left to fly afterwards
+     * A detected touch, before any response, so World can resolve the EARLIEST of all surfaces.
+     * {@code toi} is the step fraction (1.0 for an end-of-step overlap); {@code swept} means the
+     * ball would otherwise have passed through and still has step left to fly.
      */
     public record Contact(double toi, Vec3 point, Vec3 normal, boolean swept) {}
 
-    /**
-     * Find the contact, if any, for the motion from {@code prev} to {@code next}.
-     *
-     * @return the contact, or {@code null} if the ball never touched this surface.
-     */
+    /** The contact for the motion prev -> next, or null if the ball never touched the surface. */
     public static Contact detect(BallState prev, BallState next, Collider surface) {
         Vec3 p0 = prev.pos(), p1 = next.pos();
 
-        // Case 1: the ball ends the step overlapping the surface.
         if (surface.closestPoint(p1).minus(p1).lengthSquared() < BALL_R * BALL_R) {
             return new Contact(1.0, p1, normalAt(surface, p1), false);
         }
 
-        // Case 2: it passed clean through between steps -- a real risk, not theoretical: a
-        // 30 m/s smash covers 6.25 cm per step, close to the 6.5 cm needed to cross the table
-        // slab. Done in the SURFACE's frame (AGENTS.md invariant 5): the collider is already at
-        // its end-of-step pose, so the ball's start position is carried into that frame as
-        // p0 + u*DT, which collapses to the old test wherever u is zero (every surface but a
-        // moving paddle).
+        // Swept in the SURFACE's frame (invariant 5): carry the start into the collider's
+        // end-of-step pose. For every static surface u is zero and this is a plain sweep.
         Vec3 u = surface.velocityAt(p1);
         Vec3 q0 = p0.plusScaled(u, DT);
 
@@ -151,122 +116,89 @@ public final class Contacts {
         return new Contact(t, at, normalAt(surface, at), true);
     }
 
-    /** Apply the impulse for a contact already found by {@link #detect}. */
     public static Hit respond(BallState next, Collider surface, Contact contact, Material mat) {
         return applyImpulse(next.withPos(contact.point()), surface, contact.normal(), mat);
     }
 
-    /** Outward unit normal at a point, falling back to the nearest face when the centre is
-     *  inside the volume (the thin net, hit deep). */
     private static Vec3 normalAt(Collider surface, Vec3 p) {
         Vec3 offset = p.minus(surface.closestPoint(p));
         return offset.lengthSquared() < 1e-18 ? surface.escapeNormal(p) : offset.normalized();
     }
 
-    /** The impulse itself: normal restitution, then grip-or-slide friction. */
-    private static Hit applyImpulse(BallState s, Collider box, Vec3 n, Material mat) {
+    private static Hit applyImpulse(BallState s, Collider surface, Vec3 n, Material mat) {
         Vec3 v = s.vel(), w = s.spin();
         Vec3 contactPoint = s.pos().plusScaled(n, -BALL_R);
-
-        // Everything here is measured RELATIVE TO THE SURFACE (AGENTS.md invariant 5) -- u is
-        // zero for the table, net and floor, but for a paddle it is the whole of the physics.
-        // Written in absolute velocity, a paddle catching up to a receding ball would read as
-        // "already separating" and do nothing at all.
-        Vec3 u = box.velocityAt(contactPoint);
+        // Relative to the surface (invariant 5): in absolute terms a blade catching a receding
+        // ball would read as already separating.
+        Vec3 u = surface.velocityAt(contactPoint);
 
         double vn = v.minus(u).dot(n);
         double impactSpeed = Math.abs(vn);
-
-        // Already separating. We only got here through overlap, so push out and leave the
-        // velocity alone: reflecting here would fling the ball out of a surface it is
-        // already leaving, which looks like the ball being spat out of the table.
         if (vn > 0) {
-            return new Hit(pushOut(s, box, n), contactPoint, n, 0, false);
+            // Already leaving: reflecting would spit the ball out of the surface.
+            return new Hit(pushOut(s, surface, n), contactPoint, n, 0, false);
         }
 
         boolean resting = impactSpeed < RESTING_SPEED;
         double e = resting ? 0.0 : mat.restitutionAt(impactSpeed);
-
-        // Normal impulse magnitude (positive).
         double jn = -(1.0 + e) * vn * BALL_M;
 
-        // Slip: how fast the ball's contact patch is sliding ACROSS the surface. Subtracting
-        // the surface's own velocity is what makes a brushing paddle stroke generate spin --
-        // against a static world this term can only ever take spin off, never put it on.
-        Vec3 arm = n.scale(-BALL_R);                 // centre -> contact point
+        Vec3 arm = n.scale(-BALL_R);
         Vec3 slip = v.plus(w.cross(arm)).minus(u).tangentTo(n);
+        Vec3 jt = tangentialImpulse(slip, jn, mat);
 
-        // Tangential impulse. To exactly kill the slip (perfect grip):
-        //
-        //   dv_contact = J_t/m + (r^2/I) J_t = (1/m + 3/(2m)) J_t = (5/2m) J_t
-        //
-        // using I = (2/3)mr^2 for a HOLLOW shell. A solid sphere gives (7/2m) and a
-        // coefficient of 2/7 below. The hollow ball grips about 40% harder, which is part
-        // of why table tennis carries so much more spin than its scale suggests.
-        //
-        // The (1 + e_t) factor generalises that to a surface with tangential springback.
-        // e_t = 0 is perfect grip and reduces this to exactly the line it replaced, which is
-        // why the table, the net and the floor behave identically to before. Rubber has
-        // e_t ~ 0.8: it does not merely stop the contact patch, it throws it back the other
-        // way, and THAT is what turns an incoming backspin ball into an outgoing topspin one.
-        // No amount of tuning a grip-or-slide model can produce that -- the best it can do is
-        // remove spin, never reverse it.
-        double et = mat.tangentialRestitutionAt(slip.length());
-        Vec3 jtGrip = slip.scale(-(2.0 / 5.0) * (1.0 + et) * BALL_M);
+        Vec3 newVel = v.plusScaled(n.scale(jn).plus(jt), 1.0 / BALL_M);
+        Vec3 newSpin = w.plusScaled(arm.cross(jt), 1.0 / BALL_I);   // normal impulse has no torque
 
-        double maxFriction = mat.friction() * jn;
-        Vec3 jt = (jtGrip.length() <= maxFriction || slip.lengthSquared() < 1e-18)
-                ? jtGrip                                       // inside the friction cone: bites
-                : slip.normalized().scale(-maxFriction);       // Coulomb slide
-
-        Vec3 impulse = n.scale(jn).plus(jt);
-
-        Vec3 newVel = v.plusScaled(impulse, 1.0 / BALL_M);
-        // Only the tangential part exerts torque: arm x (jn*n) is zero by construction.
-        Vec3 newSpin = w.plusScaled(arm.cross(jt), 1.0 / BALL_I);
-
-        // Rolling resistance, so a settled ball eventually stops instead of drifting.
-        //
-        // Only for a ball at rest on a STATIC, upward-facing surface. On a swinging paddle it
-        // is meaningless -- there is no rolling, the contact lasts under two milliseconds, and
-        // it would quietly steal pace from every stroke. It is also the one place the solver
-        // reaches for the global DT, which is another reason to keep it where it belongs.
-        if (resting && u.lengthSquared() < 1e-18 && n.y() > 0.5) {
-            Vec3 tangential = newVel.tangentTo(n);
-            double drop = ROLLING_MU * G * DT;
-            newVel = tangential.length() > drop
-                   ? newVel.minus(tangential.normalized().scale(drop))
-                   : newVel.minus(tangential);
-        }
-
-        // Damp the spin component about the contact normal -- the corkscrew, which the
-        // tangential impulse has almost no purchase on because it acts in the contact plane.
-        // Scoped to that one component on purpose: rubber's measured e_s = 0.805 applied to
-        // the whole spin vector would delete a fifth of the topspin the stroke just made.
-        if (mat.drillSpinDamping() != 1.0) {
-            Vec3 drill = newSpin.projectOnto(n);
-            newSpin = newSpin.minus(drill).plusScaled(drill, mat.drillSpinDamping());
-        }
+        boolean restingOnStaticFloor = resting && u.lengthSquared() < 1e-18 && n.y() > 0.5;
+        if (restingOnStaticFloor) newVel = withRollingResistance(newVel, n);
+        newSpin = dampDrillSpin(newSpin, n, mat);
 
         newVel = newVel.scale(mat.velDamping());
         newSpin = newSpin.scale(mat.spinDamping());
 
-        BallState out = pushOut(s.withVel(newVel).withSpin(newSpin), box, n);
+        BallState out = pushOut(s.withVel(newVel).withSpin(newSpin), surface, n);
         return new Hit(out, contactPoint, n, impactSpeed, resting);
     }
 
-    /** Move the ball back to just touching, along the contact normal. */
-    private static BallState pushOut(BallState s, Collider box, Vec3 n) {
-        Vec3 surface = box.closestPoint(s.pos());
-        Vec3 offset = s.pos().minus(surface);
+    /**
+     * Killing the slip of a HOLLOW shell (I = (2/3)mr²) takes J = -(2/5) m slip; the (1 + e_t)
+     * factor springs the patch back, which is what reverses spin off rubber. Past the friction
+     * cone the patch slides instead.
+     */
+    private static Vec3 tangentialImpulse(Vec3 slip, double jn, Material mat) {
+        double et = mat.tangentialRestitutionAt(slip.length());
+        Vec3 grip = slip.scale(-(2.0 / 5.0) * (1.0 + et) * BALL_M);
+
+        double maxFriction = mat.friction() * jn;
+        boolean insideCone = grip.length() <= maxFriction || slip.lengthSquared() < 1e-18;
+        return insideCone ? grip : slip.normalized().scale(-maxFriction);
+    }
+
+    /** Only on a static, upward-facing surface: on a swinging paddle it would steal pace. */
+    private static Vec3 withRollingResistance(Vec3 vel, Vec3 n) {
+        Vec3 tangential = vel.tangentTo(n);
+        double drop = ROLLING_MU * G * DT;
+        return tangential.length() > drop
+             ? vel.minus(tangential.normalized().scale(drop))
+             : vel.minus(tangential);
+    }
+
+    /** Damps only spin about the normal; applied to all of it, it would erase a stroke's topspin. */
+    private static Vec3 dampDrillSpin(Vec3 spin, Vec3 n, Material mat) {
+        if (mat.drillSpinDamping() == 1.0) return spin;
+        Vec3 drill = spin.projectOnto(n);
+        return spin.minus(drill).plusScaled(drill, mat.drillSpinDamping());
+    }
+
+    private static BallState pushOut(BallState s, Collider surface, Vec3 n) {
+        Vec3 nearest = surface.closestPoint(s.pos());
+        Vec3 offset = s.pos().minus(nearest);
         double dist = offset.length();
 
-        if (dist < 1e-9) {
-            // Centre is inside the box: project out to the nearest face along n.
-            return s.withPos(surface.plusScaled(n, BALL_R + SKIN));
-        }
+        if (dist < 1e-9) return s.withPos(nearest.plusScaled(n, BALL_R + SKIN));
         if (dist >= BALL_R) return s;
-        return s.withPos(surface.plusScaled(offset.scale(1.0 / dist), BALL_R + SKIN));
+        return s.withPos(nearest.plusScaled(offset.scale(1.0 / dist), BALL_R + SKIN));
     }
 
     private static double clamp(double v, double lo, double hi) {

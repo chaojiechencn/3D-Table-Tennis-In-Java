@@ -7,120 +7,77 @@ import javafx.scene.paint.Color;
 import javafx.scene.paint.PhongMaterial;
 import javafx.scene.shape.Sphere;
 import physics.BallState;
-import physics.Quat;
 
 import static physics.Constants.BALL_R;
 
-/**
- * The ball, painted so that its spin is visible.
- *
- * A plain white sphere is rotationally symmetric, so a ball spinning at 110 revolutions per
- * second and a ball spinning at zero look identical. Since "the ball flying with spin" is
- * half of what this checkpoint has to demonstrate, the ball gets a marked surface and is
- * actually rotated by the orientation the integrator has been carrying all along.
- *
- * The pattern is generated rather than loaded: no asset files to lose, and it can be tuned
- * for the one thing it has to do, which is read as rotation from any viewing angle.
- */
+/** The ball, painted and rotated so its spin is visible; a plain sphere looks the same at any spin. */
 public final class BallView {
+
+    private static final int TEXTURE_WIDTH = 512, TEXTURE_HEIGHT = 256;
+    private static final int U_SEGMENTS = 6, V_SEGMENTS = 3;
+    private static final double SEAM_WIDTH = 1.6;
 
     private final Group group = new Group();
     private final Sphere sphere;
     private final BallShadow shadow = new BallShadow();
-
-    /** Presentation-only magnification, off by default. See {@link #setMagnified}. */
     private boolean magnified = false;
 
     public BallView() {
         sphere = new Sphere(Xform.length(BALL_R), 32);
-
         PhongMaterial mat = new PhongMaterial(Color.WHITE);
         mat.setDiffuseMap(spinTexture(1));
-        // A small, pattern-coloured light floor stands in for diffuse room bounce. It keeps
-        // the underside trackable against the wall without flattening the key's shading or
-        // turning the orange training pattern into a white glow.
+        // A faint self-lit copy stands in for room bounce, keeping the underside trackable.
         mat.setSelfIlluminationMap(spinTexture(0.14));
         mat.setSpecularColor(Color.gray(0.32));
         mat.setSpecularPower(42);
         sphere.setMaterial(mat);
-
         group.getChildren().add(sphere);
     }
 
     public Group node() { return group; }
 
-    /** A sibling of the sphere's rotating group: shadows must never inherit ball spin. */
+    /** A sibling of the rotating group: the shadow must never inherit ball spin. */
     public Group shadowNode() { return shadow.node(); }
 
-    /** Place and orient the ball from an interpolated state. */
     public void update(BallState s) {
         Xform.place(group, s.pos());
         group.getTransforms().setAll(Xform.toRotate(s.orient()));
         shadow.update(s.pos(), magnified);
     }
 
-    /** Orientation only, when position comes from an interpolated vector. */
-    public void setOrientation(Quat q) {
-        group.getTransforms().setAll(Xform.toRotate(q));
-    }
-
-    /**
-     * Draw the ball at twice life size.
-     *
-     * A 40 mm ball at an honest camera distance is about nine pixels across, which is what it
-     * genuinely looks like across a table -- but it makes the spin pattern too small to read
-     * on a projector. This scales the SPRITE only: the collision radius, the aerodynamics and
-     * the contact geometry all still use the real 20 mm. The HUD says when it is on, because a
-     * physics demo that silently draws things the wrong size is not worth much.
-     */
+    /** Twice life size for projectors; the sprite only, never the physics radius. */
     public void setMagnified(boolean on) {
         magnified = on;
-        sphere.setScaleX(on ? 2 : 1);
-        sphere.setScaleY(on ? 2 : 1);
-        sphere.setScaleZ(on ? 2 : 1);
+        double scale = on ? 2 : 1;
+        sphere.setScaleX(scale);
+        sphere.setScaleY(scale);
+        sphere.setScaleZ(scale);
     }
 
     public boolean isMagnified() { return magnified; }
 
     /**
-     * A six-by-three chequer wrapped round the sphere, in the orange and white of a training
-     * ball.
-     *
-     * Chequers rather than the more obvious stripe or single spot: a stripe vanishes when the
-     * spin axis points at the camera, and one spot spends half of every revolution hidden
-     * round the back. A chequer always has a visible edge crossing the silhouette, whatever
-     * the axis, which is what makes the rotation legible from behind the table AND from the
-     * side view.
+     * An inked six-by-three chequer: a stripe vanishes end-on and a spot hides round the back,
+     * but a chequer always has an edge crossing the silhouette.
      */
     private static WritableImage spinTexture(double brightness) {
-        final int w = 512, h = 256;
-        final int uSegments = 6, vSegments = 3;
-
         Color light = Color.web("#fdfdfb");
         Color dark = Color.web("#e8622a");
         Color seam = Color.web("#8d8f93");
 
-        WritableImage img = new WritableImage(w, h);
+        WritableImage img = new WritableImage(TEXTURE_WIDTH, TEXTURE_HEIGHT);
         PixelWriter px = img.getPixelWriter();
+        double uStep = TEXTURE_WIDTH / (double) U_SEGMENTS;
+        double vStep = TEXTURE_HEIGHT / (double) V_SEGMENTS;
 
-        double uStep = w / (double) uSegments;
-        double vStep = h / (double) vSegments;
-
-        for (int y = 0; y < h; y++) {
+        for (int y = 0; y < TEXTURE_HEIGHT; y++) {
             int vi = (int) (y / vStep);
-            // Distance to the nearest segment boundary, used to ink a thin seam.
             double vEdge = Math.min(y % vStep, vStep - (y % vStep));
-
-            for (int x = 0; x < w; x++) {
+            for (int x = 0; x < TEXTURE_WIDTH; x++) {
                 int ui = (int) (x / uStep);
                 double uEdge = Math.min(x % uStep, uStep - (x % uStep));
-
                 Color c = ((ui + vi) % 2 == 0) ? light : dark;
-
-                // The seam sells the rotation: a hard colour edge alone can read as a
-                // lighting change, a drawn line cannot.
-                if (uEdge < 1.6 || vEdge < 1.6) c = c.interpolate(seam, 0.75);
-
+                if (uEdge < SEAM_WIDTH || vEdge < SEAM_WIDTH) c = c.interpolate(seam, 0.75);
                 px.setColor(x, y, c.deriveColor(0, 1, brightness, 1));
             }
         }

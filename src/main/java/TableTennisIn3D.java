@@ -4,7 +4,6 @@ import javafx.application.Platform;
 import javafx.embed.swing.SwingFXUtils;
 import javafx.geometry.Point2D;
 import javafx.scene.*;
-import javafx.scene.image.WritableImage;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.StackPane;
@@ -28,113 +27,68 @@ import static physics.Constants.DT;
 import static physics.Constants.MAX_FRAME;
 
 /**
- * Mr. Pong - a 3D table tennis game. The JavaFX entry point and composition root: it owns the
- * frame loop, input, camera, views and capture mode, and drives one {@link GameSession}, which
- * owns everything that decides the game. See docs/GAMEPLAY.md for how it plays and
- * docs/DESIGN.md for the architecture.
- *
- * Mouse events and frame times stay here. The session only ever advances in whole fixed physics
- * steps, so the game plays the same on a fast or a slow machine.
+ * Mr. Pong, a 3D table tennis game. The JavaFX entry point and composition root: frame loop,
+ * input, camera, views and capture mode around one {@link GameSession}, which decides the game.
+ * The session only advances in whole fixed physics steps and never sees a frame time.
  */
-public class Table_Tennis_In_3D extends Application {
+public class TableTennisIn3D extends Application {
 
-    // ------------------------------------------------------------------ game
+    private static final Color BACKGROUND = Color.web("#17232e");
+    private static final int WINDOW_WIDTH = 1280, WINDOW_HEIGHT = 780;
+
+    /** Stops a catch-up spiral after a stall; MAX_FRAME already bounds a normal frame. */
+    private static final int MAX_STEPS_PER_FRAME = 4000;
+
+    /** TUNED: whole physics steps per trail dot (4.2 ms), shared by trail and ghost. */
+    private static final int TRAIL_STRIDE = 2;
+
+    /** 1.25 s of flight at TRAIL_STRIDE: any shot end to end. */
+    private static final int TRAIL_DOTS = 300;
 
     private final GameSession session = new GameSession();
-    // Opens on a gentle no-spin corner-to-corner serve; every hit after that goes through
-    // ShotAssist on both rackets, which keeps the rally playable.
     private Shots currentShot = Shots.byName("Serve");
 
-    // ------------------------------------------------------------------ frame loop
-
-    /** Leftover time not yet consumed by a whole physics step ("Fix Your Timestep!"). */
     private double accumulator = 0;
     private long lastNanos = 0;
-
-    /**
-     * Simulated seconds per real second. Table tennis at 1:1 is a blur on a first play, so the
-     * game opens in slow motion; [ and ] walk it up to 2x. Fewer fixed steps run per second --
-     * every one is identical to a full-speed step.
-     */
+    /** Opens in slow motion: at 1:1 a first rally is a blur. */
     private double timeScale = 0.45;
     private boolean paused = false;
     private int pendingSingleSteps = 0;
 
-    /** Guards against a death spiral after a stall; MAX_FRAME already bounds a normal frame. */
-    private static final int MAX_STEPS_PER_FRAME = 4000;
-
-    // ------------------------------------------------------------------ views
-
-    /**
-     * Trail resolution, in whole PHYSICS STEPS per dot, so the live trail and the ghost sample by
-     * the identical rule. TUNED: 2 steps is 4.2 ms, ~6 cm between dots on a 15 m/s drive.
-     */
-    private static final int TRAIL_STRIDE = 2;
-
-    /** 300 dots at TRAIL_STRIDE is 1.25 s of flight, which covers any shot end to end. */
-    private static final int TRAIL_DOTS = 300;
-
     private final BallView ballView = new BallView();
-    // The live trail warms toward the ball so the direction of travel reads in a still frame;
-    // the no-spin ghost stays colourless so it never competes with the real one.
-    private final Trail trail = new Trail(TRAIL_DOTS, 0.0060,
-            Color.web("#a8401a"), Color.web("#ffe08a"));
-    private final Trail ghost = new Trail(TRAIL_DOTS, 0.0042,
-            Color.web("#454b54"), Color.web("#9aa5b2"));
+    private final Trail trail = new Trail(TRAIL_DOTS, 0.0060, Color.web("#a8401a"), Color.web("#ffe08a"));
+    private final Trail ghost = new Trail(TRAIL_DOTS, 0.0042, Color.web("#454b54"), Color.web("#9aa5b2"));
     private final BounceMarks bounceMarks = new BounceMarks(24);
     private final CameraRig rig = new CameraRig();
     private final Hud hud = new Hud();
     private final ShotDebug shotDebug = new ShotDebug();
-
-    // Red rubber on the -normal side of both rackets: we see the player's red side and the
-    // opponent's black side, so the two never read as the same object.
     private final PaddleView playerView = new PaddleView(false);
     private final PaddleView opponentView = new PaddleView(false);
 
-    /**
-     * The racket poses at the START of the last physics step, so the blades interpolate across a
-     * frame with the same alpha as the ball -- at 480 Hz against 60 Hz the rates never line up,
-     * and a blade snapped to the raw state stutters exactly when it is moving fastest.
-     */
+    /** Poses at the start of the last step, so blades interpolate with the same alpha as the ball. */
     private Paddle.Blade prevPlayerPose = session.playerBlade();
     private Paddle.Blade prevOpponentPose = session.opponentBlade();
 
     private final Deque<Vec3> trailPoints = new ArrayDeque<>();
     private int stepsSinceTrailPoint = 0;
-    /** The bounce serial the drawn marks reflect, so they are only rewritten when one lands. */
     private int marksAtBounceSerial = 0;
 
     private boolean showGhost = true;
     private boolean showTrail = true;
     private boolean showHud = true;
-    private boolean showControlDebug = false;   // D -- see controlReadout()
+    private boolean showControlDebug = false;
 
-    // ------------------------------------------------------------------ input
-
-    /**
-     * Where the cursor last pointed on the hitting plane, or null before the mouse has moved.
-     * Handed to the session, which consumes it once per physics step -- never moved straight
-     * from the handler, which would drive the blade at the frame rate.
-     */
+    /** The mapped cursor, consumed by the session once per physics step, never per frame. */
     private Vec3 pendingAim = null;
-
-    /** The cursor and where its ray landed BEFORE the envelope clamped it, for the D overlay:
-     *  "not where I pointed" and "cannot go where I pointed" look identical on screen. */
     private double cursorX = Double.NaN, cursorY = Double.NaN;
-    private Vec3 rawAim = null;
+    private Vec3 rawAim = null;   // before clamping, so the D overlay can show a held blade
 
-    /**
-     * The brush modifier: while the right button is held, the cursor's Y means blade HEIGHT
-     * instead of depth, and the depth at button-down is frozen. One meaning per axis at a time.
-     */
+    /** While the right button is held the cursor's Y means height and depth is frozen. */
     private boolean brushing = false;
     private double brushHoldZ = PlayerReach.NEUTRAL.z();
 
-    // ------------------------------------------------------------------ capture mode
-
     private String screenshotPath = null;
     private double screenshotAt = 0;
-    /** Capture pins a fixed camera; --rallycam=true opts back into the rally-cam's swing. */
     private boolean rallyCamInCapture = false;
 
     @Override
@@ -145,8 +99,7 @@ public class Table_Tennis_In_3D extends Application {
         bindMouse(viewport);
 
         StackPane layers = new StackPane(viewport, hud.node());
-        Scene scene = new Scene(layers, 1280, 780, Color.web("#17232e"));
-        // Keep the 3D viewport matched to the window instead of letterboxing it.
+        Scene scene = new Scene(layers, WINDOW_WIDTH, WINDOW_HEIGHT, BACKGROUND);
         viewport.widthProperty().bind(scene.widthProperty());
         viewport.heightProperty().bind(scene.heightProperty());
         scene.setOnKeyPressed(e -> onKey(e.getCode()));
@@ -159,8 +112,6 @@ public class Table_Tennis_In_3D extends Application {
         launchShot(currentShot);
         startLoop(scene);
     }
-
-    // ------------------------------------------------------------------ scene
 
     private SubScene buildViewport() {
         Group world3d = new Group(
@@ -175,18 +126,15 @@ public class Table_Tennis_In_3D extends Application {
                 ballView.node(),
                 lighting());
 
-        SubScene viewport = new SubScene(new Group(world3d, rig.gimbal()), 1280, 780, true,
-                                         SceneAntialiasing.BALANCED);
-        viewport.setFill(Color.web("#17232e"));
+        SubScene viewport = new SubScene(new Group(world3d, rig.gimbal()), WINDOW_WIDTH, WINDOW_HEIGHT,
+                                         true, SceneAntialiasing.BALANCED);
+        viewport.setFill(BACKGROUND);
         viewport.setCamera(rig.camera());
         rig.attachControls(viewport);
         return viewport;
     }
 
-    /** TUNED broad overhead lighting for a sports hall: directional sources keep incidence
-     *  uniform along the table as the camera cuts, a warm key and cooler cross-fill model the
-     *  room's ceiling and reflected light, and the coloured ambient lifts the ball's underside
-     *  without washing out its spherical shading. */
+    /** TUNED sports-hall lighting: warm key, cool cross-fill, coloured ambient for the underside. */
     private Group lighting() {
         DirectionalLight key = new DirectionalLight(Color.web("#b9b1a4"));
         key.setDirection(Xform.toScene(new Vec3(0.35, -1, -0.28)).normalize());
@@ -195,21 +143,16 @@ public class Table_Tennis_In_3D extends Application {
         return new Group(key, fill, new AmbientLight(Color.web("#303944")));
     }
 
-    // ------------------------------------------------------------------ frame loop
-
     private void startLoop(Scene scene) {
         new AnimationTimer() {
             @Override public void handle(long now) {
                 if (lastNanos == 0) { lastNanos = now; return; }   // first frame has no dt
-
-                // Clamp before scaling: a stall (a breakpoint, a window drag) must not hand the
-                // accumulator a second of work and send the loop into a catch-up spiral.
+                // Clamped before scaling, so a stall cannot hand the accumulator a second of work.
                 double frame = Math.min((now - lastNanos) / 1e9, MAX_FRAME);
                 lastNanos = now;
 
                 stepFrame(frame);
                 render(frame);
-
                 if (screenshotPath != null && session.time() >= screenshotAt) takeScreenshot(scene);
             }
         }.start();
@@ -217,30 +160,30 @@ public class Table_Tennis_In_3D extends Application {
 
     private void stepFrame(double frameSeconds) {
         if (paused) {
-            // Single steps go through the same fixed step, so a paused frame is identical to
-            // the one that would have been produced live.
-            while (pendingSingleSteps > 0) {
-                advanceOne();
-                pendingSingleSteps--;
-            }
+            runSingleSteps();
             return;
         }
-
         int steps = 0;
         accumulator += frameSeconds * timeScale;
         while (accumulator >= DT) {
             advanceOne();
             accumulator -= DT;
             if (++steps > MAX_STEPS_PER_FRAME) { accumulator = 0; break; }
-
             if (session.replayDue()) {
-                launchShot(currentShot);
-                break;                  // launchShot resets the accumulator; stop stepping
+                launchShot(currentShot);   // resets the accumulator
+                break;
             }
         }
     }
 
-    /** One physics step, and the presentation that follows from it. */
+    /** Through the same fixed step, so a paused frame matches the one produced live. */
+    private void runSingleSteps() {
+        while (pendingSingleSteps > 0) {
+            advanceOne();
+            pendingSingleSteps--;
+        }
+    }
+
     private void advanceOne() {
         prevPlayerPose = session.playerBlade();
         prevOpponentPose = session.opponentBlade();
@@ -248,15 +191,16 @@ public class Table_Tennis_In_3D extends Application {
         GameSession.StepResult result = session.step();
         if (result.contact()) showContact(result.hitBy());
         if (result.pointAwarded()) hud.setScore(session.score());
-
-        if (++stepsSinceTrailPoint >= TRAIL_STRIDE) {
-            stepsSinceTrailPoint = 0;
-            trailPoints.addLast(session.ball().pos());
-            while (trailPoints.size() > TRAIL_DOTS) trailPoints.removeFirst();
-        }
+        sampleTrail();
     }
 
-    /** A racket contact: cut the rally-cam and refresh the shot-assist overlay. */
+    private void sampleTrail() {
+        if (++stepsSinceTrailPoint < TRAIL_STRIDE) return;
+        stepsSinceTrailPoint = 0;
+        trailPoints.addLast(session.ball().pos());
+        while (trailPoints.size() > TRAIL_DOTS) trailPoints.removeFirst();
+    }
+
     private void showContact(Scoreboard.Side hitBy) {
         boolean playerHit = hitBy == Scoreboard.Side.PLAYER;
         rig.onRallyHit(playerHit);
@@ -270,11 +214,8 @@ public class Table_Tennis_In_3D extends Application {
         refreshShotReadout();
     }
 
-    // ------------------------------------------------------------------ rendering
-
+    /** Interpolated between the last two physics states, or 480 Hz against 60 Hz stutters. */
     private void render(double frameSeconds) {
-        // Interpolate between the last two physics states, or the ball stutters whenever the
-        // frame rate is not a multiple of the physics rate -- which at 480 Hz it never is.
         double alpha = paused ? 0 : Math.min(1, accumulator / DT);
         BallState from = session.previousBall(), to = session.ball();
         ballView.update(new BallState(
@@ -283,28 +224,19 @@ public class Table_Tennis_In_3D extends Application {
                 Vec3.lerp(from.spin(), to.spin(), alpha),
                 Quat.slerp(from.orient(), to.orient(), alpha)));
 
-        // Real frame time: the camera is a view, not physics.
         rig.updateRally(frameSeconds, to.pos());
-
-        // The same alpha, so blade and ball never disagree at the instant of contact.
         drawPaddle(playerView, prevPlayerPose, session.playerBlade(), alpha);
         drawPaddle(opponentView, prevOpponentPose, session.opponentBlade(), alpha);
 
         if (showTrail) trail.setPath(trailPoints);
-
         if (marksAtBounceSerial != session.bounceSerial()) {
             marksAtBounceSerial = session.bounceSerial();
             bounceMarks.setMarks(session.bounceMarks());
         }
-
-        // Per frame, not per step: it flies a 3 s prediction, and a human reads it far less often.
         if (showControlDebug) hud.setControl(controlReadout());
     }
 
-    /**
-     * Draw a racket between two poses. The normal is lerped and renormalised, not slerped: a
-     * blade turns well under a degree per step, where the two agree to parts in a million.
-     */
+    /** The normal is lerped, not slerped: under a degree per step, the two agree to 1e-6. */
     private static void drawPaddle(PaddleView view, Paddle.Blade from, Paddle.Blade to, double alpha) {
         view.update(Vec3.lerp(from.centre(), to.centre(), alpha),
                     Vec3.lerp(from.normal(), to.normal(), alpha).normalized());
@@ -319,9 +251,8 @@ public class Table_Tennis_In_3D extends Application {
     }
 
     /**
-     * The control/reachability overlay (D): was it the CONTROL MAPPING failing to put the bat
-     * where the player wanted, or was the ball genuinely unplayable? Read-only and downstream of
-     * everything -- the blade's target is already chosen, so the ball never steers the control.
+     * The D overlay: did the control mapping fail, or was the ball unplayable? Read-only and
+     * downstream of the blade's target, so the ball never steers the control.
      */
     private String controlReadout() {
         BallState b = session.ball();
@@ -331,16 +262,8 @@ public class Table_Tennis_In_3D extends Application {
         double dist = PlayerReach.travelDistance(blade, target);
         double travel = PlayerReach.travelTime(blade, target);
         double arrive = PlayerReach.timeToDepth(b, target.z());
-
-        // Clamped is not unreachable: pointing past the legal region holds the blade at its edge,
-        // and a blade that seems stuck is usually one sitting on a clamp.
         boolean clamped = rawAim != null
                 && (Math.abs(rawAim.x() - target.x()) > 1e-6 || Math.abs(rawAim.z() - target.z()) > 1e-6);
-
-        String verdict;
-        if (Double.isNaN(arrive))          verdict = "n/a  (ball not coming to this depth)";
-        else if (travel <= arrive)         verdict = String.format("YES  (%.0f ms to spare)", (arrive - travel) * 1000);
-        else                               verdict = String.format("NO   (%.0f ms short)", (travel - arrive) * 1000);
 
         return String.format("""
             CONTROL  [D]
@@ -360,46 +283,40 @@ public class Table_Tennis_In_3D extends Application {
             dist, travel * 1000, Stroke.TRACK_SPEED,
             b.pos().x(), b.pos().y(), b.pos().z(),
             Double.isNaN(arrive) ? "  --  " : String.format("%.0f ms", arrive * 1000), target.z(),
-            verdict);
+            reachVerdict(travel, arrive));
     }
 
-    // ------------------------------------------------------------------ input
+    private static String reachVerdict(double travel, double arrive) {
+        if (Double.isNaN(arrive)) return "n/a  (ball not coming to this depth)";
+        if (travel <= arrive) return String.format("YES  (%.0f ms to spare)", (arrive - travel) * 1000);
+        return String.format("NO   (%.0f ms short)", (travel - arrive) * 1000);
+    }
 
     /**
-     * Bare mouse movement aims; the left button belongs to camera orbit ({@link CameraRig}).
-     * addEventHandler, not setOnMouseMoved: that single-slot property would silently unhook the
-     * orbit handler CameraRig already installed on this SubScene.
+     * Bare movement aims; the left button orbits. addEventHandler, because setOnMouseMoved would
+     * unhook CameraRig's orbit handler. MOUSE_MOVED stops while a button is down, so the brush
+     * also listens to DRAGGED.
      */
     private void bindMouse(SubScene viewport) {
         viewport.addEventHandler(MouseEvent.MOUSE_MOVED, e -> aim(viewport, e));
-
-        // MOUSE_MOVED stops firing while any button is down, so the brush needs DRAGGED too.
         viewport.addEventHandler(MouseEvent.MOUSE_DRAGGED, e -> { if (brushing) aim(viewport, e); });
-
         viewport.addEventHandler(MouseEvent.MOUSE_PRESSED, e -> {
-            if (e.isSecondaryButtonDown()) {
-                brushing = true;
-                brushHoldZ = session.playerBlade().centre().z();   // freeze the current depth
-                aim(viewport, e);
-            }
+            if (!e.isSecondaryButtonDown()) return;
+            brushing = true;
+            brushHoldZ = session.playerBlade().centre().z();
+            aim(viewport, e);
         });
         viewport.addEventHandler(MouseEvent.MOUSE_RELEASED, e -> {
-            if (brushing && !e.isSecondaryButtonDown()) {
-                brushing = false;
-                aim(viewport, e);                                    // hand the axis back to depth
-            }
+            if (!brushing || e.isSecondaryButtonDown()) return;
+            brushing = false;
+            aim(viewport, e);
         });
     }
 
-    /**
-     * Map the cursor onto the hitting plane and hand it to the session. sceneToLocal, not
-     * getX/getY: events target the 3D nodes inside the SubScene, and scene coordinates are the
-     * one frame both agree on.
-     */
+    /** sceneToLocal, since events target the 3D nodes inside the SubScene. */
     private void aim(SubScene viewport, MouseEvent e) {
         Point2D p = viewport.sceneToLocal(e.getSceneX(), e.getSceneY());
-        // The fallback is only for a degenerate ray, never an input, or this would be a loop
-        // with gain. PlayerReach then applies the envelope, discarding the ray's height.
+        // Only for a degenerate ray; used as an input it would be a loop with gain.
         Vec3 fallback = pendingAim != null ? pendingAim : session.playerBlade().centre();
 
         cursorX = p.getX();
@@ -412,49 +329,47 @@ public class Table_Tennis_In_3D extends Application {
     }
 
     private void onKey(KeyCode code) {
+        if (isTopRowDigit(code)) {
+            pick((code.getChar().charAt(0) - '0' + 9) % 10);   // 1..9 then 0
+            return;
+        }
         switch (code) {
-            // Written out: nothing promises KeyCode keeps DIGIT0..DIGIT9 contiguous.
-            case DIGIT1 -> pick(0);
-            case DIGIT2 -> pick(1);
-            case DIGIT3 -> pick(2);
-            case DIGIT4 -> pick(3);
-            case DIGIT5 -> pick(4);
-            case DIGIT6 -> pick(5);
-            case DIGIT7 -> pick(6);
-            case DIGIT8 -> pick(7);
-            case DIGIT9 -> pick(8);
-            case DIGIT0 -> pick(9);
-
             case N, RIGHT -> launchShot(nextShot(+1));
             case P, LEFT  -> launchShot(nextShot(-1));
             case R        -> launchShot(currentShot);
-
             case SPACE  -> paused = !paused;
             case PERIOD -> { paused = true; pendingSingleSteps += 1; }
             case OPEN_BRACKET  -> timeScale = Math.max(0.02, timeScale / 1.6);
             case CLOSE_BRACKET -> timeScale = Math.min(2.0, timeScale * 1.6);
-
             case G -> { showGhost = !showGhost; refreshGhost(); }
             case T -> { showTrail = !showTrail; trail.setShown(showTrail); }
             case A -> session.setAutoReplay(!session.autoReplay());
             case B -> ballView.setMagnified(!ballView.isMagnified());
             case F -> rig.toggleRallyCam();
-            case C -> rig.next();          // next() drops the rally-cam for a manual view
+            case C -> rig.next();
             case V -> { shotDebug.setShown(!shotDebug.isShown()); refreshShotReadout(); }
-            case D -> {
-                showControlDebug = !showControlDebug;
-                hud.setControl(showControlDebug ? controlReadout() : null);
-            }
-            case M -> {
-                session.setDemoMode(!session.demoMode());
-                hud.setFeed(session.demoMode() ? currentShot.name() + "   [DEMO -- M to take over]"
-                                               : currentShot.name());
-            }
+            case D -> toggleControlDebug();
+            case M -> toggleDemo();
             case H -> { showHud = !showHud; hud.setShown(showHud); }
             case ESCAPE -> Platform.exit();
-
             default -> { }
         }
+    }
+
+    /** DIGIT0..DIGIT9 only: numpad digits never picked a feed. */
+    private static boolean isTopRowDigit(KeyCode code) {
+        return code.name().startsWith("DIGIT");
+    }
+
+    private void toggleControlDebug() {
+        showControlDebug = !showControlDebug;
+        hud.setControl(showControlDebug ? controlReadout() : null);
+    }
+
+    private void toggleDemo() {
+        session.setDemoMode(!session.demoMode());
+        hud.setFeed(session.demoMode() ? currentShot.name() + "   [DEMO -- M to take over]"
+                                       : currentShot.name());
     }
 
     private void pick(int index) {
@@ -469,18 +384,13 @@ public class Table_Tennis_In_3D extends Application {
         return Shots.byIndex(i + delta);
     }
 
-    // ------------------------------------------------------------------ feeds
-
-    /** Start a rally with this feed, keeping the score, and reset what the views drew for the last. */
+    /** Start a rally with this feed, keeping the score, and clear what the last one drew. */
     private void launchShot(Shots shot) {
         currentShot = shot;
         session.launch(shot);
         hud.setFeed(shot.name());
-        hud.setScore(session.score());      // also puts 0-0 on screen for the opening serve
-
-        // The feed stands in for the player's own shot, so the rally-cam opens zoomed IN; it cuts
-        // OUT when the opponent returns it.
-        rig.onRallyHit(true);
+        hud.setScore(session.score());
+        rig.onRallyHit(true);   // the feed stands in for the player's own shot
 
         accumulator = 0;
         stepsSinceTrailPoint = 0;
@@ -488,52 +398,43 @@ public class Table_Tennis_In_3D extends Application {
         trail.clear();
         bounceMarks.clear();
 
-        // The comparison ghost: identical launch, spin deleted, predicted once up front. Sampled
-        // at the trail's stride for exactly the trail's length, so the two compare dot for dot.
-        List<Vec3> ghostPath = World.predict(shot.withoutSpin(),
-                TRAIL_DOTS * TRAIL_STRIDE * DT, TRAIL_STRIDE);
+        // The no-spin ghost, predicted once at the trail's stride and length so they compare dot for dot.
+        List<Vec3> ghostPath = World.predict(shot.withoutSpin(), TRAIL_DOTS * TRAIL_STRIDE * DT, TRAIL_STRIDE);
         ghost.setPath(ghostPath);
         refreshGhost();
     }
 
-    // ------------------------------------------------------------------ capture mode
-
-    /**
-     * Offline capture, to check the rendering without a human watching:
-     *   --shot="Topspin loop" --at=0.45 --view=SIDE --out=frame.png
-     */
+    /** Offline capture: --shot="Topspin loop" --at=0.45 --view=SIDE --out=frame.png */
     private void parseArgs() {
         for (String arg : getParameters().getRaw()) {
             String[] kv = arg.split("=", 2);
-            if (kv.length != 2) continue;
-            switch (kv[0]) {
-                case "--shot" -> currentShot = Shots.byName(kv[1]);
-                case "--at"   -> screenshotAt = Double.parseDouble(kv[1]);
-                case "--out"  -> screenshotPath = kv[1];
-                case "--view" -> rig.apply(CameraRig.View.valueOf(kv[1]));
-                case "--ball2x" -> ballView.setMagnified(Boolean.parseBoolean(kv[1]));
-                // What D does, from the command line, so a capture proves the overlay renders.
-                case "--controldebug" -> showControlDebug = Boolean.parseBoolean(kv[1]);
-                case "--demo" -> session.setDemoMode(Boolean.parseBoolean(kv[1]));
-                case "--rallycam" -> rallyCamInCapture = Boolean.parseBoolean(kv[1]);
-                default -> { }
-            }
+            if (kv.length == 2) applyArg(kv[0], kv[1]);
         }
-
         if (screenshotPath != null) {
-            // A replay loop would reset the clock before a late --at was ever reached.
-            session.setAutoReplay(false);
-            // A capture wants a fixed, predictable camera unless it asked for the rally-cam.
+            session.setAutoReplay(false);   // a replay would reset the clock before a late --at
             if (!rallyCamInCapture) rig.stopRallyCam();
+        }
+    }
+
+    private void applyArg(String name, String value) {
+        switch (name) {
+            case "--shot" -> currentShot = Shots.byName(value);
+            case "--at"   -> screenshotAt = Double.parseDouble(value);
+            case "--out"  -> screenshotPath = value;
+            case "--view" -> rig.apply(CameraRig.View.fromArg(value));
+            case "--ball2x" -> ballView.setMagnified(Boolean.parseBoolean(value));
+            case "--controldebug" -> showControlDebug = Boolean.parseBoolean(value);
+            case "--demo" -> session.setDemoMode(Boolean.parseBoolean(value));
+            case "--rallycam" -> rallyCamInCapture = Boolean.parseBoolean(value);
+            default -> { }
         }
     }
 
     private void takeScreenshot(Scene scene) {
         String path = screenshotPath;
-        screenshotPath = null;                 // once only
+        screenshotPath = null;
         try {
-            WritableImage img = scene.snapshot(null);
-            ImageIO.write(SwingFXUtils.fromFXImage(img, null), "png", new File(path));
+            ImageIO.write(SwingFXUtils.fromFXImage(scene.snapshot(null), null), "png", new File(path));
             System.out.println("wrote " + path + " at t=" + String.format("%.3f", session.time()));
         } catch (Exception e) {
             System.err.println("screenshot failed: " + e);

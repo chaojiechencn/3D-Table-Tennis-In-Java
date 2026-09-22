@@ -7,34 +7,7 @@ import java.util.List;
 
 import static physics.Constants.*;
 
-/**
- * Headless validation of the opponent, in the same style as physics.SelfTest.
- *
- * It lives here rather than in SelfTest for a structural reason. SelfTest is in `physics`,
- * Opponent is in `play`, and `play` depends on `physics`. Having physics.SelfTest import
- * play.Follower would invert that dependency, and the package rules exist precisely to stop
- * that kind of rot. So the physics has its checks and the game has its own.
- *
- * What it is for: "impossible to beat" is a claim, and a claim about behaviour is worth
- * proving rather than asserting. These checks feed the opponent every preset shot in the menu
- * and require it to reach each one, put it back over the net, and land it on the table.
- *
- * The contacts run through {@link ShotAssist}, because that is what MrPong does with every
- * racket contact on both sides. The one number taken from before the assist is the raw
- * outgoing speed, which is what the "does not cheat" check is actually about -- the impulse
- * solver is still exactly as raw as SelfTest grades it.
- *
- * The second group covers the player's paddle, which has the same problem from the other side:
- * "you cannot cheat by flinging the mouse" is a claim about behaviour that nothing on screen
- * would contradict loudly enough to notice.
- *
- * Anything that plays a whole point drives {@link GameSession} -- the game the application runs --
- * rather than a copy of its loop, so the rally rules are tested where they live. The component
- * probes above (the opponent alone, the envelope, the stroke) stay focused on their component.
- *
- * Run from the project root: bash ./gradlew rallyTest (Windows: .\gradlew.bat rallyTest).
- * Exits 0 if everything passes, 1 otherwise.
- */
+/** Headless validation of the opponent, in the same style as physics.SelfTest. */
 public final class RallyTest {
 
     private static final List<String> failures = new ArrayList<>();
@@ -71,25 +44,10 @@ public final class RallyTest {
         }
     }
 
-    /**
-     * What happened when one shot was fed at the opponent.
-     *
-     * {@code rawSpeed} is the speed straight out of the impulse solver, BEFORE the shot assist
-     * -- that is the number the "does not cheat" check needs, because the assist deliberately
-     * caps the outgoing speed and would make that check pass for the wrong reason.
-     */
+    /** What happened when one shot was fed at the opponent. */
     private record Rally(boolean touched, boolean returned, double maxZ, double rawSpeed) {}
 
-    /**
-     * Feed one shot and let the follower play it.
-     *
-     * The player's end is left empty on purpose: this is testing the opponent alone, so the
-     * ball is fed from the near end and the rally ends once the opponent has answered it.
-     *
-     * The contact goes through {@link ShotAssist}, because that is what MrPong does with every
-     * racket contact on BOTH sides. Grading the raw impulse here would be grading a code path
-     * the game no longer takes.
-     */
+    /** Feed one shot and let the follower play it. */
     private static Rally feed(Shots shot) {
         World world = new World();
         Paddle blade = new Paddle(Follower.READY, Follower.SQUARE);
@@ -156,13 +114,7 @@ public final class RallyTest {
                             failed.length() == 0 ? "" : " -- failed: " + failed));
     }
 
-    /**
-     * Unbeatable is allowed. Cheating is not.
-     *
-     * The returns have to come out of the contact solver like anything else, so the ball can
-     * never leave the blade faster than the blade could have hit it. If this ever fails, the
-     * opponent has stopped playing table tennis and started editing the ball's velocity.
-     */
+    /** Unbeatable is allowed; cheating is not: no return may leave faster than the blade could send it. */
     private static void theOpponentDoesNotCheat() {
         double fastest = 0;
         String worst = "";
@@ -171,8 +123,7 @@ public final class RallyTest {
             Rally r = feed(shot);
             if (r.rawSpeed() > fastest) { fastest = r.rawSpeed(); worst = shot.name(); }
         }
-        // A ball can leave at (1+e) times the blade speed plus its own incoming speed. The
-        // fastest preset arrives at 30 m/s, and the blade tops out at MAX_SPEED.
+        // A ball can leave at (1+e) times the blade speed plus its own incoming speed.
         double ceiling = (1 + RACKET_MAT.restitution()) * 25.0 + 30.0;
         check("no return leaves faster than the impulse could possibly have sent it",
               fastest < ceiling,
@@ -180,19 +131,7 @@ public final class RallyTest {
                             fastest, worst, ceiling));
     }
 
-    /**
-     * A rally has to stay in the room.
-     *
-     * This is the check that was missing while the blade tracked the ball's height through its
-     * own stroke: it stayed glued to the ball it had just hit and struck it again every step,
-     * and a topspin loop came back at 60 degrees and passed 6 m still climbing. Nothing caught
-     * it. SelfTest was right not to -- no contact ever added energy, the blade simply kept
-     * hitting the ball -- and the return checks above stop watching the moment the ball crosses
-     * the net, which it did while still on its way up.
-     *
-     * 3 m is a ceiling nothing legitimate approaches: the highest apex across all nine presets
-     * is 2.06 m, and that is a deliberate lob off a slow ball.
-     */
+    /** A rally has to stay in the room. */
     private static void aRallyStaysInTheRoom() {
         double highest = 0;
         String worst = "";
@@ -206,29 +145,7 @@ public final class RallyTest {
               String.format("highest apex %.2f m (%s) against a 3.0 m ceiling", highest, worst));
     }
 
-    /**
-     * Where every return actually lands -- printed in full, and then asserted.
-     *
-     * This used to be a report and not a check, and the comment explaining why is worth
-     * keeping because it is the measurement that forced the shot assist to exist. With the
-     * follower's RAW impulse return, "it returns every shot" was true and misleading: it
-     * cleared the net every time and put ONE of ten on the table. A sweep of the follower's
-     * face angle, swing speed and lift found a straight trade-off rather than an optimum --
-     * settings that land three of ten cannot get all ten back over the net, and of the 318
-     * settings that DO clear the net every time, the best lands one. The presets arrive
-     * between 3.5 and 18.4 m/s carrying 25 to 125 rev/s, and one fixed stroke cannot be the
-     * right answer to both ends of that.
-     *
-     * What changed is not the tuning and not the threshold: it is that MrPong now runs every
-     * racket contact, the follower's included, through {@link ShotAssist}, which authors the
-     * outgoing trajectory instead of accepting the raw bounce. So the stroke no longer has to
-     * be the right answer to every incoming ball -- the assist is. That makes "the returns
-     * land" a claim the game can actually be held to, and holding it to a weaker one now
-     * would be letting a real regression through unnoticed.
-     *
-     * The October opponent is still owed: this makes the follower LEGAL, not intelligent. It
-     * still tracks the ball rather than reading it, and it is still unbeatable.
-     */
+    /** Where every return actually lands -- printed in full, and then asserted. */
     private static void reportedReturnQuality() {
         System.out.println();
         System.out.println("  where the returns land:");
@@ -268,24 +185,7 @@ public final class RallyTest {
         }
     }
 
-    /**
-     * Feed one shot, let the follower answer it, and watch the answer all the way down.
-     *
-     * Unlike {@link #feed}, this does NOT stop when the ball crosses back over the net -- that
-     * early exit is exactly what hid both the runaway and the long returns.
-     *
-     * Two different flights, for two different questions, and mixing them up gives the wrong
-     * answer to both:
-     *
-     *   apex     comes from the REAL world flight, table and all, because "did this leave the
-     *            hall" is a question about what actually happens.
-     *   landing  comes from a contact-free flight ({@link Aim#landingPoint}), because the
-     *            question is where the shot first meets the plane of the table. Asking the
-     *            world instead is circular: the table bounces the ball out of the way before
-     *            the descent can be detected, so the first crossing reported is the SECOND
-     *            descent, out past the end line. That read a legal return landing at z = +0.9
-     *            as "long, z = +1.94", and made six good returns look like six bad ones.
-     */
+    /** Feed one shot, let the follower answer it, and watch the answer all the way down. */
     private static Return playOut(Shots shot) {
         World world = new World();
         Paddle blade = new Paddle(Follower.READY, Follower.SQUARE);
@@ -323,25 +223,15 @@ public final class RallyTest {
                                : new Return(apex, landing.z(), landing.x(), outSpeed);
     }
 
-    // ---------------------------------------------------------------- the player's paddle
-
-    /**
-     * A flick of the mouse must not out-hit a bat a player actually carries.
-     *
-     * The cursor is sampled once a FRAME and the blade advanced once a STEP, so a fast mouse
-     * hands the blade a whole frame of travel to cover inside a single 1/480 s step. Paddle
-     * measures its velocity by differencing its own pose, so with nothing holding it back a
-     * 30 cm flick reads as 144 m/s and sends the ball out at nearly 300. Stroke.TRACK_SPEED is
-     * the clamp that stops it; this checks the clamp holds and that it sits below a real swing.
-     */
+    /** A flick of the mouse must not out-hit a bat a player actually carries. */
     private static void aFlickOfTheMouseCannotOutrunACarriedBat() {
         // The position is arbitrary -- the claim is about speed, not about where the blade is.
         Vec3 start = new Vec3(0, 0.25, 1.57);
         Paddle blade = new Paddle(start, new Vec3(0, 0, -1));
         Stroke stroke = new Stroke(start);
 
-        // Throw the cursor a metre sideways between two frames, which is about as fast as a
-        // hand moves a mouse, and let the eight steps of one 60 Hz frame consume it.
+        // Throw the cursor a metre sideways between two frames, which is about as fast as a hand
+        // moves a mouse, and let the eight steps of one 60 Hz frame consume it.
         stroke.aimAt(start.plus(new Vec3(1.0, 0, 0)));
 
         double fastest = 0;
@@ -354,26 +244,14 @@ public final class RallyTest {
               String.format("peak blade speed %.2f m/s against the %.1f m/s limit",
                             fastest, Stroke.TRACK_SPEED));
 
-        // The limit is only worth having if it sits below a real swing. An advanced player's
-        // mean racket speed is 17.8 m/s -- the blade must stay under that, so a thrown mouse
-        // cannot generate more pace than a hand does.
+        // The limit is only worth having if it sits below a real swing.
         check("the tracking limit is slower than an advanced player's swing",
               Stroke.TRACK_SPEED < 17.8,
               String.format("%.1f m/s tracking against a measured 17.8 m/s swing",
                             Stroke.TRACK_SPEED));
     }
 
-    // ---------------------------------------------------------------- the control envelope
-
-    /**
-     * The decoupling, stated as something that can fail.
-     *
-     * The bug this replaced was one screen axis meaning two things: the cursor's ray set the
-     * blade's depth AND its height, so "reach in" and "lift the bat" were the same gesture and
-     * neither could be done alone. The fix is structural rather than careful -- PlayerReach
-     * throws the incoming Y away -- so the check is simply that no aim, however extreme, can
-     * move the racket's height off the hitting plane.
-     */
+    /** The decoupling, stated as something that can fail. */
     private static void theCursorCannotRaiseTheBat() {
         double worst = 0;
         for (double y = -3.0; y <= 3.0; y += 0.05) {
@@ -394,15 +272,7 @@ public final class RallyTest {
               String.format("x %+.2f -> %+.2f as the aim crosses the centre line", left.x(), right.x()));
     }
 
-    /**
-     * Depth must run one way only.
-     *
-     * The old mapping was a V: sliding the cursor up-table walked the blade out over the table
-     * to full stretch and then brought it BACK toward the baseline again, because past the
-     * reach limit the code ramped it backwards along a "step back for a high one" scale. One
-     * continuous motion of the hand reversed the blade's direction halfway through, which is
-     * unlearnable. Monotone is the property that forbids it, so monotone is what gets checked.
-     */
+    /** Depth must run one way only. */
     private static void depthRunsOneWayOnly() {
         double prev = Double.NEGATIVE_INFINITY;
         boolean monotone = true;
@@ -426,18 +296,8 @@ public final class RallyTest {
     }
 
     /**
-     * The bug, measured: can the player actually get to the ball?
-     *
-     * This is the check that would have caught it. It flies every feed the opponent returns,
-     * finds the stretch of the ball's path that the racket envelope can physically touch, and
-     * requires (a) that the stretch exists at all and (b) that the blade can cross to its
-     * start, from a neutral stance, in less time than the ball takes to get there.
-     *
-     * Both halves matter. The old envelope stopped 20 cm behind the end line, so for several
-     * feeds the touchable stretch lasted under 100 ms -- the ball was gone before any hand
-     * could arrive, and no amount of blade speed would have fixed it. Note what is NOT being
-     * asserted: nothing here says the racket moves toward the ball. It says the ball passes
-     * through a region the player is able to point at.
+     * The bug, measured: can the player actually get to the ball? This is the check that would
+     * have caught it.
      */
     private static void everyReturnIsActuallyReachable() {
         double worstWindow = Double.MAX_VALUE, worstMargin = Double.MAX_VALUE;
@@ -469,17 +329,17 @@ public final class RallyTest {
               playable == fed,
               String.format("%d of %d returns reachable", playable, fed));
 
-        // 200 ms is the floor a human reaction time argues for: simple visual reaction is
-        // 200-250 ms, and the game runs at 0.45x by default, so 200 ms of simulated time is
-        // about 440 ms on the clock. The old envelope scored 98 ms here.
+        // 200 ms is the floor a human reaction time argues for: simple visual reaction is 200-250
+        // ms, and the game runs at 0.45x by default, so 200 ms of simulated time is about 440 ms on
+        // the clock.
         check("the racket has a human amount of time to meet each one",
               worstWindow > 0.200,
               String.format("worst touchable window %.0f ms (%s); %.0f ms of wall-clock at the 0.45x default",
                             worstWindow * 1000, worstWindowShot, worstWindow * 1000 / 0.45));
 
-        // The point of check 5 in the brief: the blade must be fast enough for the envelope it
-        // has, and this is what says so -- rather than TRACK_SPEED being raised until the
-        // symptom went away.
+        // The point of check 5 in the brief: the blade must be fast enough for the envelope it has,
+        // and this is what says so -- rather than TRACK_SPEED being raised until the symptom went
+        // away.
         check("the blade can cross to every one of them in the time the ball allows",
               worstMargin > 0,
               String.format("tightest case %s: %.0f ms of margin at TRACK_SPEED = %.1f m/s",
@@ -487,20 +347,9 @@ public final class RallyTest {
     }
 
     /**
-     * The whole thing, end to end: can a player who simply points at the ball hit it back?
-     *
-     * The three checks above are geometric -- the ball passes through the legal region, and the
-     * blade could cross to it in time. This one closes the loop by actually playing the point:
-     * a stand-in hand drives the CURSOR at the ball each step, exactly through the public
-     * aimAt/advance pair a mouse uses, and the contact solver decides the rest.
-     *
-     * Read what this does and does not say. The hand is in the TEST; nothing in the shipped
-     * control path gains any knowledge of the ball. Stroke still has no BallState parameter, so
-     * the property that the player moves the racket is enforced by the signature and is not
-     * something this can quietly undo. What the check buys is the one claim the geometric
-     * checks cannot make: that a reachable ball is also a RETURNABLE one, contact, assist and
-     * all. Under the old envelope this failed for most feeds -- the blade was clamped 20 cm
-     * behind the end line and the ball went past behind it.
+     * The whole thing, end to end: can a player who simply points at the ball hit it back? The
+     * three checks above are geometric -- the ball passes through the legal region, and the
+     * blade could cross to it in time.
      */
     private static void aPlayerPointingAtTheBallCanReturnIt() {
         int returned = 0, attempted = 0;
@@ -518,10 +367,7 @@ public final class RallyTest {
                             missed.isEmpty() ? "" : "; missed: " + String.join(", ", missed)));
     }
 
-    /**
-     * Play one point with a stand-in hand on the near racket. True if the player's blade struck
-     * the ball and sent it back over to the opponent's half.
-     */
+    /** Play one point with a stand-in hand on the near racket. */
     private static boolean playThePoint(Shots shot) {
         GameSession game = new GameSession();
         game.launch(shot);
@@ -529,7 +375,7 @@ public final class RallyTest {
 
         for (int i = 0; i < (int) (14.0 / DT); i++) {
             // The stand-in hand: point the CURSOR at the ball, and let the envelope and the
-            // tracking speed decide whether the blade gets there. Both are the real ones.
+            // tracking speed decide whether the blade gets there.
             Vec3 ball = game.ball().pos();
             game.setAim(PlayerReach.clamp(new Vec3(ball.x(), 0, ball.z())));
             if (game.step().hitBy() == Scoreboard.Side.PLAYER) returned = true;
@@ -544,8 +390,7 @@ public final class RallyTest {
     /**
      * One feed, played by the real game until the opponent has returned it and the return has
      * bounced on the player's half; the ball's path from that bounce onward, or null if no such
-     * rally happens. The player stands aside at the far corner of the envelope, so the path is
-     * the ball's own -- a reachability claim about a ball the game never produces is worthless.
+     * rally happens.
      */
     private static List<Vec3> pathAfterThePlayerSideBounce(Shots shot) {
         GameSession game = new GameSession();
@@ -565,18 +410,7 @@ public final class RallyTest {
         return bounced ? path : null;
     }
 
-    // ---------------------------------------------------------------- helpers
-
-    /**
-     * Shots the opponent actually ever sees.
-     *
-     * Decided by flying the shot in a PADDLE-FREE world rather than by guessing from its
-     * launch velocity: it counts if it STARTS on the near side and TRAVELS to the far half.
-     * Both halves of that matter. "Into the net" starts near and never arrives, because dying
-     * at the cord is the whole point of it; the ITTF drop test never leaves the far half
-     * because it is a calibration drop, not a shot. Holding the opponent responsible for
-     * returning either would be a test of nothing.
-     */
+    /** Shots the opponent actually ever sees. */
     private static boolean isFedAtTheOpponent(Shots shot) {
         if (shot.state().pos().z() <= 0) return false;
 
@@ -589,13 +423,7 @@ public final class RallyTest {
         return false;
     }
 
-    /**
-     * The scoreboard, against the ITTF's own rules rather than against itself.
-     *
-     * Every check here is a rule someone could plausibly implement wrongly, and the two that
-     * matter most are the two that a naive scoreboard gets wrong: a game does NOT end at 11 when
-     * the score is 11-10, and the service rotation changes from two points to one at 10-all.
-     */
+    /** The scoreboard, against the ITTF's own rules rather than against itself. */
     private static void theScoreFollowsTheITTFRules() {
         System.out.println("\n-- the score --");
 
@@ -667,15 +495,7 @@ public final class RallyTest {
               + " after the game-winning point");
     }
 
-    /**
-     * The brush modifier, against the invariant it is allowed to bend and the ones it is not.
-     *
-     * The Sep 4 (later) rule -- "no cursor aim, at any height, can move the racket off its
-     * hitting plane" -- is checked elsewhere and still holds, because it is a statement about
-     * {@link PlayerReach#clamp}, which is untouched. The brush is a SEPARATE entry point, and
-     * what has to be true of it is narrower: it may move the blade vertically, it may not move
-     * the blade's REACH, and it must hand the depth axis back unchanged.
-     */
+    /** The brush modifier, against the invariant it is allowed to bend and the ones it is not. */
     private static void theBrushLiftsTheBatWithoutExtendingItsReach() {
         System.out.println("\n-- the brush --");
 
@@ -728,14 +548,11 @@ public final class RallyTest {
               String.format("worst height deviation %.1e m", offPlane));
     }
 
-    // ---------------------------------------------------------------- the game session
-
     /** An opponent that never plays: its blade stands far behind the table, so feeds run out. */
     private static final Opponent STATUE = new Opponent() {
         @Override public void advance(BallState ball, Paddle blade, double dt) {
             blade.placeAt(new Vec3(0, 0.20, -4.0), Follower.SQUARE);
         }
-        @Override public String name() { return "statue"; }
     };
 
     private static Shots feed(String name, Vec3 pos, Vec3 vel) {
@@ -767,7 +584,6 @@ public final class RallyTest {
                 blade.placeAt(Follower.READY, Follower.SQUARE);
             }
         }
-        @Override public String name() { return "digger"; }
     }
 
     private static boolean happened(GameSession game, World.EventType type) {
@@ -782,13 +598,13 @@ public final class RallyTest {
 
     /**
      * The rally rules, played through the same session the application runs -- not a copy of
-     * its loop. Each feed is built so one rule decides it, and the check names that rule.
+     * its loop.
      */
     private static void theSessionAppliesTheRallyRules() {
         System.out.println("\n-- the game session --");
 
-        // First bounce: whichever half a feed lands on first opens that side's racket and no
-        // other; nobody may hit while it is still in the air. One feed for each half.
+        // First bounce: whichever half a feed lands on first opens that side's racket and no other;
+        // nobody may hit while it is still in the air.
         for (Shots shot : new Shots[]{Shots.byName("Serve"), BOUNCER}) {
             GameSession game = new GameSession();
             game.launch(shot);
@@ -822,7 +638,6 @@ public final class RallyTest {
                             openedAfterOne, decided == null ? "nobody" : decided.pointTo(), drop.time()));
 
         // Own half: a shot that comes straight back off a still blade onto the player's own half.
-        // A tuning with no clean core leaves every contact raw, so nothing authors it over the net.
         ShotTuning raw = ShotTuning.builder()
                 .qualityCore(0).qualityCoreMin(0).qualityFalloff(1e-9).assistFloor(0).build();
         GameSession own = new GameSession(STATUE, new ShotAssist(raw));
@@ -886,9 +701,8 @@ public final class RallyTest {
               String.format("point decided=%b; %d contacts after it; blade came within %.3f m of the ball",
                             over, lateContacts, closest));
 
-        // The contact window: a push dug off the surface touches the table on (or right after)
-        // the racket contact. That touch belongs to the contact -- it is not the opponent's own
-        // shot falling back on the opponent's half.
+        // The contact window: a push dug off the surface touches the table on (or right after) the
+        // racket contact.
         GameSession dig = new GameSession(new Digger(), new ShotAssist());
         dig.launch(Shots.byName("ITTF drop test"));
         double contactAt = Double.NaN, bounceGap = Double.NaN;
@@ -1068,8 +882,8 @@ public final class RallyTest {
     }
 
     /**
-     * A feed that touches the net cord and still lands first on the far half, found by search so
-     * it does not hang on hand-tuned numbers: a paddle-free flight is the honest judge.
+     * A feed that touches the net cord and still lands first on the far half, found by search
+     * so it does not hang on hand-tuned numbers: a paddle-free flight is the honest judge.
      */
     private static Shots netCordFeed() {
         for (double vz = 6; vz <= 10; vz += 1) {

@@ -11,119 +11,61 @@ import java.util.List;
 
 import static physics.Constants.*;
 
-/**
- * The simulated world: the ball, the three things it can hit, and the log of what happened.
- *
- * Deliberately free of JavaFX. Nothing in this package imports the renderer, which is what
- * lets {@code physics.SelfTest} run the exact same physics headlessly and check it against published
- * numbers. If the physics could only be observed by looking at it, "checking my simulation
- * against real numbers" would not be possible.
- *
- * World also never sees a frame time. It is stepped by a fixed DT, always.
- */
+/** The ball, everything it can hit, and a log of what happened. Stepped only by a fixed DT. */
 public final class World {
 
-    // ------------------------------------------------------------------ geometry
-
-    /** The playing surface. Top face sits exactly on y = 0, which is the physics origin. */
+    /** Top face on y = 0, the physics origin. */
     public static final Box TABLE = Box.centered(
             0, -TABLE_THICK / 2, 0,
             TABLE_WIDTH, TABLE_THICK, TABLE_LENGTH);
 
-    /** The net, straddling z = 0 and overhanging the table by 15.25 cm each side. */
     public static final Box NET = Box.centered(
             0, NET_HEIGHT / 2, 0,
             NET_WIDTH, NET_HEIGHT, NET_THICK);
 
-    /**
-     * The floor, 76 cm below the playing surface. 120 m across: a rolling ball only slows under
-     * drag and rolling resistance, and covers 17-20+ m before stopping -- a narrower slab let a
-     * missed ball reach the rim and fall off the edge of the world. Bounds convenience, not a
-     * real object; the floor you can SEE is 14 x 16 m ({@code Court.floor}).
-     */
+    /** 120 m across because a missed ball rolls 17-20+ m; the visible floor is 14 x 16 m. */
     public static final Box FLOOR = Box.centered(
             0, -TABLE_HEIGHT - 0.5, 0,
             120, 1.0, 120);
 
-    // ------------------------------------------------------------------ events
+    public enum EventType { TABLE_BOUNCE, NET, FLOOR, OUT_OF_BOUNDS, PADDLE_HIT }
 
-    public enum EventType {
-        /** Landed on the playing surface. */          TABLE_BOUNCE,
-        /** Clipped or was killed by the net. */       NET,
-        /** Hit the floor. */                          FLOOR,
-        /** Passed the plane of the table top outside the playing surface. */ OUT_OF_BOUNDS,
-        /** Struck by a paddle. */                    PADDLE_HIT
-    }
+    /** {@code side} is +1 on the far half (z &lt; 0), -1 on the near half, 0 for none. */
+    public record Event(EventType type, Vec3 at, double speed, double time, int side) {}
 
-    /**
-     * @param side +1 if it happened on the far half (z &lt; 0), -1 on the near half, 0 for
-     *             events with no meaningful side.
-     */
-    public record Event(EventType type, Vec3 at, double speed, double time, int side) {
-        public String label() {
-            return switch (type) {
-                case TABLE_BOUNCE -> (side < 0 ? "near" : "far") + " court bounce";
-                case NET -> "net";
-                case FLOOR -> "floor";
-                case OUT_OF_BOUNDS -> "out";
-                case PADDLE_HIT -> (side < 0 ? "player" : "opponent") + " hit";
-            };
-        }
-    }
+    // Slower contacts are real but not worth logging: a dying ball bounces dozens of times.
+    private static final double LOGGABLE_NET = 0.05;
+    private static final double LOGGABLE_BOUNCE = 0.35;
+    private static final double LOGGABLE_FLOOR = 0.4;
+    private static final double LOGGABLE_PADDLE = 0.3;
 
-    // ------------------------------------------------------------------ state
+    /** Same-type events closer than this are one contact retriggering while the ball settles. */
+    private static final double EVENT_MERGE_WINDOW = 0.12;
+    private static final int MAX_EVENTS = 12;
+    private static final int MAX_MARKS = 24;
+    private static final int MAX_CONTACT_PASSES = 8;
+    private static final BallState START = BallState.at(new Vec3(0, 0.30, 1.20), Vec3.ZERO, Vec3.ZERO);
 
     private BallState state;
     private BallState previous;
-
     private double time;
     private double apex;
-    private int tableBounces;
+    private int tableBounces;       // per stroke: reset by each paddle contact
     private boolean outReported;
+    private int bounceSerial;       // never reset: "has anything landed since I looked?"
+    private int paddleHits;
 
-    /**
-     * Total table bounces since the World was created, never reset.
-     *
-     * {@code tableBounces} is a per-STROKE count -- it resets on every paddle contact so the
-     * in/out rules can be applied to each shot in a rally rather than once per rally. That
-     * makes it useless as a "has anything landed since I last looked?" flag for the renderer,
-     * which is what this is for.
-     */
-    private int bounceSerial;
-
-    /**
-     * The two rackets, or null in a world that has none.
-     *
-     * Null is not laziness -- World.predict builds a private World to fly a trajectory
-     * forward, and a prediction that gets intercepted by a paddle is not a prediction of
-     * anything. A paddle-free world is the honest tool for asking "where would this ball go
-     * if nothing touched it".
-     */
+    /** Null in a paddle-free world, which is what {@link #predict} needs. */
     private Paddle player;
     private Paddle opponent;
 
-    /** Count of paddle contacts, so a caller can tell when a stroke has happened. */
-    private int paddleHits;
-
-    /**
-     * Bounces slower than this are real but not worth reporting. A ball settling on the table
-     * genuinely bounces dozens of times as it dies, and logging all of them buries the one
-     * bounce the viewer cares about under a wall of noise.
-     */
-    private static final double LOGGABLE_BOUNCE = 0.35;
-
-    /** Bounded so a demo left running overnight cannot grow the heap. */
     private final Deque<Event> events = new ArrayDeque<>();
-    private static final int MAX_EVENTS = 12;
-
     private final List<Vec3> bounceMarks = new ArrayList<>();
-    private static final int MAX_MARKS = 24;
 
     public World() {
-        reset(BallState.at(new Vec3(0, 0.30, 1.20), Vec3.ZERO, Vec3.ZERO));
+        reset(START);
     }
 
-    /** Put the ball somewhere and clear the history. */
     public void reset(BallState s) {
         state = s;
         previous = s;
@@ -136,110 +78,58 @@ public final class World {
         bounceMarks.clear();
     }
 
-    // ------------------------------------------------------------------ stepping
+    public void launch(BallState s) {
+        reset(s);
+    }
 
-    /**
-     * Advance one fixed step: flight, then contacts.
-     *
-     * Flight and contact are separated because an impulse is a discontinuity. Feeding a
-     * bounce through RK4 would have the integrator sample the derivative on both sides of
-     * the table at once and average them, which produces a ball that sinks into the surface
-     * and leaves at the wrong angle.
-     */
+    /** Flight, then contacts: an impulse is a discontinuity RK4 must never straddle. */
     public void step() {
         previous = state;
-        BallState flown = Integrator.step(state, DT);
-
-        state = resolveContacts(previous, flown);
+        state = resolveContacts(previous, Integrator.step(state, DT));
         time += DT;
 
         if (state.pos().y() > apex) apex = state.pos().y();
         detectOutOfBounds(previous, state);
 
-        if (!state.isFinite()) {
-            // Should be unreachable. If a bad shot ever does produce a NaN, the demo must
-            // recover rather than freeze with an invisible ball.
-            reset(BallState.at(new Vec3(0, 0.30, 1.20), Vec3.ZERO, Vec3.ZERO));
-        }
+        if (!state.isFinite()) reset(START);   // unreachable, but never freeze on a NaN
     }
 
-    /** One surface the ball can hit, paired with what it is made of. */
     private record Surface(Collider shape, Material material, EventType event) {}
 
-    /**
-     * Every surface in play, in no particular order -- the order stopped mattering when
-     * resolution became time-ordered.
-     */
-    private Surface[] surfaces() {
-        if (player == null && opponent == null) {
-            return new Surface[] {
-                    new Surface(NET,   NET_MAT,   EventType.NET),
-                    new Surface(TABLE, TABLE_MAT, EventType.TABLE_BOUNCE),
-                    new Surface(FLOOR, FLOOR_MAT, EventType.FLOOR),
-            };
-        }
+    private record SurfaceContact(Surface surface, Contacts.Contact contact) {}
+
+    private List<Surface> surfaces() {
         List<Surface> all = new ArrayList<>(5);
         all.add(new Surface(NET,   NET_MAT,   EventType.NET));
         all.add(new Surface(TABLE, TABLE_MAT, EventType.TABLE_BOUNCE));
         all.add(new Surface(FLOOR, FLOOR_MAT, EventType.FLOOR));
         if (player != null)   all.add(new Surface(player.collider(),   RACKET_MAT, EventType.PADDLE_HIT));
         if (opponent != null) all.add(new Surface(opponent.collider(), RACKET_MAT, EventType.PADDLE_HIT));
-        return all.toArray(new Surface[0]);
+        return all;
     }
 
     /**
-     * Resolve contacts, EARLIEST first, repeating until nothing more is touching -- needed for
-     * the net, where a ball that clips the cord can be pushed down into the table in the same
-     * step. Resolving the first surface in a fixed list rather than the earliest contact was
-     * fine with three static surfaces but breaks once a paddle can be over the table: a smash
-     * into the paddle would resolve as a table bounce instead. After a SWEPT contact it flies
-     * the rest of the step rather than parking at the contact point, which at paddle speeds
-     * would leave the ball well short of where it belongs.
+     * Resolve the EARLIEST contact, repeatedly: a ball that clips the cord can be pushed into the
+     * table in the same step. After a swept contact the rest of the step is flown, not skipped.
      */
     private BallState resolveContacts(BallState from, BallState to) {
         BallState before = from, current = to;
         double stepLeft = DT;
+        List<Surface> all = surfaces();   // one snapshot of each blade per step
 
-        // Built ONCE, outside the pass loop. The rackets are kinematic and do not move while
-        // a step is being resolved, so re-asking for them each pass rebuilt the list up to
-        // eight times a step and handed out a fresh Blade snapshot every time -- against the
-        // promise in Blade's own doc that the solver gets consistent answers from one pose.
-        Surface[] all = surfaces();
+        for (int pass = 0; pass < MAX_CONTACT_PASSES; pass++) {
+            SurfaceContact hit = earliestContact(all, before, current);
+            if (hit == null) return current;
+            Contacts.Contact c = hit.contact();
 
-        for (int pass = 0; pass < 8; pass++) {
-            Surface hitSurface = null;
-            Contacts.Contact earliest = null;
+            // Bounce the state AT impact; the end-of-step velocity would add energy.
+            BallState atContact = c.swept() ? Integrator.step(before, stepLeft * c.toi()) : current;
+            Hit result = Contacts.respond(atContact, hit.surface().shape(), c, hit.surface().material());
+            record(hit.surface(), result);
+            current = result.state();
 
-            for (Surface s : all) {
-                Contacts.Contact c = Contacts.detect(before, current, s.shape());
-                if (c != null && (earliest == null || c.toi() < earliest.toi())) {
-                    earliest = c;
-                    hitSurface = s;
-                }
-            }
-            if (earliest == null) return current;
-
-            // Bounce the state the ball is actually IN at the moment of impact, not the
-            // end-of-step state a swept contact carries -- reflecting the later, faster velocity
-            // would hand the ball free energy every bounce (which SelfTest's energy check would
-            // catch).
-            BallState atContact = current;
-            if (earliest.swept()) {
-                atContact = Integrator.step(before, stepLeft * earliest.toi());
-            }
-
-            Hit hit = Contacts.respond(atContact, hitSurface.shape(), earliest, hitSurface.material());
-            record(hitSurface, hit);
-            current = hit.state();
-
-            // An end-of-step overlap has already used the whole step, so there is nothing to
-            // fly. Keep looping against the same segment: a ball that clips the cord can be
-            // pushed down into the table in the same step, and it still has to bounce off it.
-            if (!earliest.swept()) continue;
-
-            // A swept contact happened part way through. Fly the rest of the step from there,
-            // and test the remainder as a fresh segment.
-            double left = stepLeft * (1.0 - earliest.toi());
+            if (!c.swept()) continue;
+            double left = stepLeft * (1.0 - c.toi());
             if (left < 1e-9) continue;
 
             before = current;
@@ -249,38 +139,42 @@ public final class World {
         return current;
     }
 
-    /** Log a contact, at the reporting threshold that surface deserves. */
+    private static SurfaceContact earliestContact(List<Surface> all, BallState before, BallState after) {
+        SurfaceContact earliest = null;
+        for (Surface s : all) {
+            Contacts.Contact c = Contacts.detect(before, after, s.shape());
+            if (c != null && (earliest == null || c.toi() < earliest.contact().toi())) {
+                earliest = new SurfaceContact(s, c);
+            }
+        }
+        return earliest;
+    }
+
     private void record(Surface s, Hit hit) {
+        Vec3 p = hit.point();
+        int half = p.z() < 0 ? 1 : -1;
         switch (s.event()) {
             case NET -> {
-                if (hit.impactSpeed() > 0.05) {
-                    record(EventType.NET, hit.point(), hit.impactSpeed(), 0);
-                }
+                if (hit.impactSpeed() > LOGGABLE_NET) record(EventType.NET, p, hit.impactSpeed(), 0);
             }
             case TABLE_BOUNCE -> {
                 if (!hit.resting() && hit.impactSpeed() > LOGGABLE_BOUNCE) {
                     tableBounces++;
                     bounceSerial++;
-                    Vec3 p = hit.point();
-                    record(EventType.TABLE_BOUNCE, p, hit.impactSpeed(), p.z() < 0 ? 1 : -1);
+                    record(EventType.TABLE_BOUNCE, p, hit.impactSpeed(), half);
                     addMark(p);
                 }
             }
             case FLOOR -> {
-                if (!hit.resting() && hit.impactSpeed() > 0.4) {
-                    record(EventType.FLOOR, hit.point(), hit.impactSpeed(), 0);
+                if (!hit.resting() && hit.impactSpeed() > LOGGABLE_FLOOR) {
+                    record(EventType.FLOOR, p, hit.impactSpeed(), 0);
                 }
             }
             case PADDLE_HIT -> {
-                if (hit.impactSpeed() > 0.3) {
+                if (hit.impactSpeed() > LOGGABLE_PADDLE) {
                     paddleHits++;
-                    Vec3 p = hit.point();
-                    record(EventType.PADDLE_HIT, p, hit.impactSpeed(), p.z() < 0 ? 1 : -1);
-
-                    // A new stroke is a new shot, so the in/out rules start again. Without
-                    // this, out-of-bounds fires at most once per RALLY and gives up entirely
-                    // after the first bounce -- which means "the return sails long" is never
-                    // detected, and in a rally that is most of the calls there are.
+                    record(EventType.PADDLE_HIT, p, hit.impactSpeed(), half);
+                    // A new stroke is a new shot: the in/out rules start again.
                     tableBounces = 0;
                     outReported = false;
                 }
@@ -290,14 +184,8 @@ public final class World {
     }
 
     /**
-     * Fire an OUT event the moment the ball descends past the height of the table top
-     * without being over it. This is the "or goes out of bounds" half of the contract, and
-     * catching it at the plane rather than waiting for the floor puts the marker where the
-     * ball actually missed by, which is the useful information.
-     *
-     * Only meaningful BEFORE the ball has landed. Once a shot has legally bounced it is the
-     * other player's problem, and the ball sailing off the end afterwards is not a miss --
-     * an earlier version reported every good shot as "out" one bounce later.
+     * OUT fires where the ball descends through the table plane off the table -- only before the
+     * shot has landed; after a legal bounce, sailing off the end is the receiver's problem.
      */
     private void detectOutOfBounds(BallState before, BallState after) {
         if (outReported || tableBounces > 0) return;
@@ -316,9 +204,7 @@ public final class World {
 
     private void record(EventType type, Vec3 at, double speed, int side) {
         Event last = events.peekLast();
-        // Contacts can retrigger across consecutive steps while a ball settles; collapse
-        // those so the log reads as one bounce rather than nine.
-        if (last != null && last.type() == type && time - last.time() < 0.12) return;
+        if (last != null && last.type() == type && time - last.time() < EVENT_MERGE_WINDOW) return;
 
         events.addLast(new Event(type, at, speed, time, side));
         while (events.size() > MAX_EVENTS) events.removeFirst();
@@ -329,26 +215,10 @@ public final class World {
         while (bounceMarks.size() > MAX_MARKS) bounceMarks.remove(0);
     }
 
-    // ------------------------------------------------------------------ launching
-
-    /** Launch the ball, clearing the previous rally. */
-    public void launch(BallState s) {
-        reset(s);
-    }
-
-    // ------------------------------------------------------------------ queries
-
     public BallState state()    { return state; }
     public BallState previous() { return previous; }
 
-    /**
-     * Replace the live ball state.
-     *
-     * The one caller is the arcade shot assist (`play.ShotAssist`): right after a paddle
-     * contact it swaps the raw impulse result for a trajectory the game can rally on. Nothing
-     * in `physics/` touches this -- SelfTest and {@link #predict} never call it, so the
-     * validated model is unchanged underneath.
-     */
+    /** Only play.ShotAssist replaces the state; SelfTest and predict never do. */
     public void setState(BallState s) { state = s; }
     public double time()        { return time; }
     public double apex()        { return apex; }
@@ -356,10 +226,8 @@ public final class World {
     public int bounceSerial()   { return bounceSerial; }
     public int paddleHits()     { return paddleHits; }
 
-    public Paddle player()      { return player; }
-    public Paddle opponent()    { return opponent; }
 
-    /** Give this world its rackets. Passing null for both makes it a plain flight simulator. */
+    /** Null for both makes this a plain flight simulator. */
     public void setPaddles(Paddle player, Paddle opponent) {
         this.player = player;
         this.opponent = opponent;
@@ -369,36 +237,23 @@ public final class World {
     public Event lastEvent()       { return events.peekLast(); }
     public List<Vec3> bounceMarks() { return List.copyOf(bounceMarks); }
 
-    /** True while the ball is over the playing surface, at any height. */
     public boolean overTable() {
         Vec3 p = state.pos();
         return Math.abs(p.x()) <= TABLE_WIDTH / 2 && Math.abs(p.z()) <= TABLE_LENGTH / 2;
     }
 
-    // ------------------------------------------------------------------ offline prediction
-
-    /**
-     * Run a shot forward without touching the live world, and return the path.
-     *
-     * Used two ways: the demo draws a zero-spin ghost of the current shot so the Magnus
-     * curve is visible as a difference rather than something you have to take on faith, and
-     * from September the AI will use exactly this to work out where to stand. Building it
-     * now, headless and side-effect free, is what makes that reuse possible.
-     *
-     * @param seconds how far ahead to run
-     * @param stride  keep one point every {@code stride} steps, to keep the returned path small
-     */
+    /** A paddle-free flight of {@code seconds}, keeping one point every {@code stride} steps. */
     public static List<Vec3> predict(BallState start, double seconds, int stride) {
         List<Vec3> path = new ArrayList<>();
-        World w = new World();       // deliberately paddle-free; see the field comment
+        World w = new World();
         w.launch(start);
 
         int steps = (int) Math.round(seconds / DT);
         for (int i = 0; i < steps; i++) {
             if (i % stride == 0) path.add(w.state().pos());
             w.step();
-            // Stop once it is done doing anything interesting.
-            if (w.state().pos().y() < -TABLE_HEIGHT + BALL_R && w.state().speed() < 0.5) break;
+            boolean restingOnFloor = w.state().pos().y() < -TABLE_HEIGHT + BALL_R && w.state().speed() < 0.5;
+            if (restingOnFloor) break;
         }
         return path;
     }

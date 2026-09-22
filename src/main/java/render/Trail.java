@@ -9,45 +9,24 @@ import physics.Vec3;
 import java.util.Collection;
 
 /**
- * A path through the air, drawn as a run of fading dots.
- *
- * This carries most of the visual argument of the checkpoint. A ball is 4 cm across and, at
- * honest scale, spends about half a second on screen -- watching it live, you cannot actually
- * tell a curved flight from a straight one. The trail freezes the shape of the flight so the
- * curve is there to be looked at.
- *
- * Implementation note: JavaFX has no 3D polyline, and a TriangleMesh ribbon has to be rebuilt
- * every frame and twists badly where the path turns sharply. A fixed pool of small spheres
- * costs one setTranslate per dot per frame and cannot degenerate.
- *
- * The pool is indexed by AGE, not by ring-buffer slot: dot 0 is always the oldest point on
- * the path. That is what lets each dot keep one immutable material for the whole run instead
- * of re-tinting every dot every frame.
+ * A flight path as a fixed pool of fading dots, which freezes the curve so it can be seen. Dots
+ * are indexed by age (dot 0 oldest), so each keeps one material for the whole run.
  */
 public final class Trail {
+
+    /** Two-pixel dots: the default 64 divisions would cost more triangles than the scene. */
+    private static final int DOT_DIVISIONS = 6;
 
     private final Group group = new Group();
     private final Sphere[] dots;
 
-    /**
-     * @param capacity   how many points the trail can show
-     * @param radiusM    dot radius in metres
-     * @param oldest     colour of the far end of the trail
-     * @param newest     colour at the ball
-     */
     public Trail(int capacity, double radiusM, Color oldest, Color newest) {
         dots = new Sphere[capacity];
         for (int i = 0; i < capacity; i++) {
             double age = capacity == 1 ? 1 : i / (double) (capacity - 1);
-
-            // 6 divisions, not the default 64. These are two-pixel dots and there are
-            // hundreds of them per trail; at the default tessellation the trails alone cost
-            // more triangles than the entire rest of the scene and the frame rate halves.
-            Sphere s = new Sphere(Xform.length(radiusM), 6);
+            Sphere s = new Sphere(Xform.length(radiusM), DOT_DIVISIONS);
             PhongMaterial m = new PhongMaterial(oldest.interpolate(newest, age));
-            // Trail dots are markers, not objects in the world: a specular highlight on them
-            // reads as a second, smaller ball and is actively confusing.
-            m.setSpecularColor(Color.TRANSPARENT);
+            m.setSpecularColor(Color.TRANSPARENT);   // a highlight reads as a second ball
             s.setMaterial(m);
             s.setVisible(false);
             dots[i] = s;
@@ -57,19 +36,10 @@ public final class Trail {
 
     public Group node() { return group; }
 
-    /**
-     * Show a path, oldest point first. Extra points beyond capacity drop the oldest.
-     *
-     * Takes a Collection and walks it with an iterator rather than taking a List and
-     * indexing it, so the caller can hand over its live deque instead of copying it into a
-     * fresh list on every frame.
-     */
+    /** Oldest first; the newest point always lands on the last dot, so the ramp ends at the ball. */
     public void setPath(Collection<Vec3> path) {
         int n = Math.min(path.size(), dots.length);
-        int skip = path.size() - n;                 // keep the newest points
-
-        // Map the newest point to the LAST dot, so the colour ramp always ends at the ball
-        // even while the trail is still filling up.
+        int skip = path.size() - n;
         int slot = dots.length - n;
         int seen = 0;
         for (Vec3 p : path) {

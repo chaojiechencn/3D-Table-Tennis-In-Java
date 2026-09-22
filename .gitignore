@@ -1,18 +1,11 @@
-# Local IDE state; shared VS Code commands stay in version control.
+# IDE, editor and machine-specific state.
 /.idea/
-/.vscode/*
-!/.vscode/tasks.json
+/.vscode/
+/.claude/
 *.iml
 
-# Generated Java output and Gradle caches, only at the project root.
+# Generated Java output and Gradle caches.
 /out/
 /bin/
 /build/
 /.gradle/
-
-# Python tools regenerate bytecode on import.
-__pycache__/
-*.py[cod]
-
-# The optional IntelliJ bridge installs its dependency into a tool-local environment.
-/tools/intellij-mcp-bridge/.venv/

@@ -5,19 +5,7 @@ import java.util.List;
 
 import static physics.Constants.*;
 
-/**
- * Headless validation of the physics against numbers that did not come from this program.
- *
- * The contract commits to using "research papers on table tennis ball trajectories, so I
- * have real numbers to check my simulation against instead of guessing". This is where that
- * promise is kept. Every check below compares the simulation either to a closed-form
- * solution of the same equations, or to a published/ITTF measurement.
- *
- * A demo that merely looks right is not evidence. This is.
- *
- * Run from the project root: bash ./gradlew selfTest (Windows: .\gradlew.bat selfTest).
- * Exits 0 if everything passes, 1 otherwise.
- */
+/** Headless validation of the physics against numbers that did not come from this program. */
 public final class SelfTest {
 
     private static final List<String> failures = new ArrayList<>();
@@ -62,8 +50,6 @@ public final class SelfTest {
         }
     }
 
-    // ------------------------------------------------------------------ checks
-
     /** Not a test: print the derived constants so they can be eyeballed against sources. */
     private static void reportedConstants() {
         System.out.printf("  ball        r=%.3f m  m=%.4f kg  I=%.3e kg m^2 (hollow shell, 2/3 m r^2)%n",
@@ -76,17 +62,9 @@ public final class SelfTest {
                 Aero.drag(new Vec3(0, 0, -10)).length(), G);
     }
 
-    /**
-     * Terminal velocity. Closed form: v = sqrt(g / (0.5*rho*A*C_d/m)).
-     * Published figures for a 40 mm table tennis ball put this at roughly 9-9.6 m/s, which
-     * is the number that makes the sport possible: it is why a ball hit at 25 m/s slows so
-     * dramatically over the length of the table.
-     */
+    /** Terminal velocity. */
     private static void terminalVelocityMatchesClosedForm() {
-        // Deliberately flown against a CONSTANT drag coefficient. v_t = sqrt(g/(k*C_d)) is
-        // only a closed form when C_d is a constant, so pinning the law here is what keeps
-        // this an exact comparison against analysis rather than a comparison against the
-        // model's own opinion. The measured, Reynolds-dependent law is checked separately.
+        // Deliberately flown against a CONSTANT drag coefficient.
         Aero.DragModel constantCd = Aero.DragModel.constant(C_DRAG);
         double analytic = Math.sqrt(G / (HALF_RHO_A_OVER_M * C_DRAG));
 
@@ -104,16 +82,12 @@ public final class SelfTest {
     }
 
     /**
-     * Free fall WITH drag has a closed-form solution:
-     *     v(t) = -vt * tanh(g t / vt)
-     *     y(t) = y0 - (vt^2/g) * ln(cosh(g t / vt))
-     * Comparing against it tests the integrator and the drag model together, over a regime
-     * where drag is doing most of the work. Nothing here is self-referential.
+     * Free fall with drag has a closed form, v(t) = -vt tanh(g t / vt) and
+     * y(t) = y0 - (vt^2 / g) ln cosh(g t / vt), which tests integrator and drag together.
      */
     private static void verticalDropMatchesAnalyticSolution() {
-        // Constant C_d, for the same reason as above: the tanh / ln cosh solution does not
-        // exist for a varying coefficient. This is the only check in the suite that tests the
-        // INTEGRATOR against exact analysis, so it is worth protecting.
+        // Constant C_d, for the same reason as above: the tanh / ln cosh solution does not exist
+        // for a varying coefficient.
         Aero.DragModel constantCd = Aero.DragModel.constant(C_DRAG);
         double vt = Math.sqrt(G / (HALF_RHO_A_OVER_M * C_DRAG));
         double y0 = 100.0, t = 3.0;
@@ -137,9 +111,6 @@ public final class SelfTest {
     /**
      * The measured drag law, against the values it was built from and against the band every
      * table-tennis-specific study reports.
-     *
-     * The old model used a flat C_d = 0.40, which is below every published figure. That is
-     * checked too, as a negative control: it is the reason the model changed.
      */
     private static void measuredDragMatchesPublishedValues() {
         double[][] published = { {2.5, 0.55}, {7.5, 0.49}, {12.5, 0.47}, {17.5, 0.47} };
@@ -164,8 +135,7 @@ public final class SelfTest {
         check("the old flat C_d = 0.40 was below every published value (why this changed)",
               C_DRAG < lo, String.format("0.40 vs a measured minimum of %.2f", lo));
 
-        // Terminal velocity under the measured law. Still the closed form v = sqrt(g/(k*C_d)),
-        // just solved as a fixed point, because C_d now depends on the speed being solved for.
+        // Terminal velocity under the measured law.
         double vt = 9.0;
         for (int i = 0; i < 200; i++) {
             vt = Math.sqrt(G / (HALF_RHO_A_OVER_M * Aero.measuredDragCoefficient(vt, 0)));
@@ -179,21 +149,14 @@ public final class SelfTest {
               String.format("sim %.3f m/s vs fixed point %.3f m/s", simulated, vt));
 
         // Two published claims genuinely conflict here, and the code should say so rather than
-        // quietly pick one. A terminal velocity of 9.0-9.6 m/s implies C_d ~ 0.40; the measured
-        // C_d of 0.47-0.55 implies 8.3-8.5 m/s. They cannot both be true. The measured
-        // coefficient wins because it is table-tennis-specific and experiment, CFD and a
-        // 277-match fit agree on it -- but the disagreement is recorded, not hidden.
+        // quietly pick one.
         check("the measured law puts terminal velocity just below the often-quoted 9.0-9.6 band",
               simulated > 8.0 && simulated < 9.0,
               String.format("%.2f m/s; the 9.0-9.6 figure implies C_d = 0.40, so the two "
                           + "published claims cannot be reconciled", simulated));
     }
 
-    /**
-     * Lift, converted out of the volume-based published fit into this project's area-based
-     * C_L. The headline result: real C_L is roughly FLAT across the reachable range, where the
-     * old saturating S/(2S+1) climbed steadily toward 0.5.
-     */
+    /** Lift, converted out of the volume-based published fit into this project's area-based C_L. */
     private static void measuredLiftMatchesPublishedValues() {
         // (speed, spin rad/s, expected C_L), from converting the fitted C_M by C_L = (8/3)C_M*S.
         double[][] cases = { {7.5, 100, 0.206}, {13.5, 300, 0.255},
@@ -208,9 +171,7 @@ public final class SelfTest {
         check("C_L matches the measured Magnus fit once converted to the area convention",
               ok, got.toString().trim());
 
-        // The band applies over the MEAT of the spin range. It cannot apply all the way down:
-        // C_L is proportional to S at small S, so lift necessarily vanishes with the spin that
-        // causes it, and any non-zero lower bound near S = 0 would be asserting nonsense.
+        // The band applies over the MEAT of the spin range.
         double lo = 9, hi = 0;
         for (double sp = 0.25; sp <= 1.4; sp += 0.05) {
             double cl = clAt(sp);
@@ -224,9 +185,7 @@ public final class SelfTest {
               clAt(0.0) == 0 && clAt(0.01) < 0.02,
               String.format("C_L = %.4f at S=0, %.4f at S=0.01", clAt(0.0), clAt(0.01)));
 
-        // The point of the whole change, stated as a claim and measured where it actually
-        // bites. The two models happen to agree around S = 1.4, so quoting them there would
-        // make this look like it proves nothing. The gap is worst inside the crisis.
+        // The point of the whole change, stated as a claim and measured where it actually bites.
         double worstS = 0.8;
         double measured = clAt(worstS), old = worstS / (2 * worstS + 1);
         check("the old model overstated lift by nearly 2x through the middle of normal play",
@@ -235,15 +194,7 @@ public final class SelfTest {
                             worstS, measured, old, old / measured));
     }
 
-    /**
-     * The lift crisis: C_L FALLS as spin increases through S ~ 0.5 to 0.8.
-     *
-     * Miyazaki, Sakai, Komatsu, Takahashi and Himeno (Eur. J. Phys. 38:024001, 2017) measured
-     * a deep valley in C_L near S = 0.5, with lift almost vanishing at Re = 9e4. This is the
-     * one behaviour the old model could not produce at ANY parameter value, because a
-     * monotonically increasing function has no valleys -- which is what the negative control
-     * at the end of this check asserts.
-     */
+    /** The lift crisis: C_L FALLS as spin increases through S ~ 0.5 to 0.8. */
     private static void liftHasACrisisTheOldModelCouldNotShow() {
         double peak = clAt(0.50), trough = clAt(0.80), recovery = clAt(1.10);
 
@@ -270,8 +221,7 @@ public final class SelfTest {
 
     /**
      * Spin decay depends on how fast the ball is moving through the air, not only on how fast
-     * it is spinning. The old form was independent of airspeed, which said a ball drifting at
-     * 1 m/s sheds spin as fast as one at 30 m/s.
+     * it is spinning.
      */
     private static void spinDecayScalesWithAirspeed() {
         Vec3 spin = new Vec3(-600, 0, 0);
@@ -283,19 +233,14 @@ public final class SelfTest {
               String.format("%.1f rad/s^2 at 5 m/s vs %.1f at 25 m/s, for 5x the airspeed",
                             slow, fast));
 
-        // The magnitude is unchanged where it was originally tuned, so this is a fix to the
-        // SHAPE of the law, not a silent change to how much spin a rally actually loses.
+        // The magnitude is unchanged where it was originally tuned, so this is a fix to the SHAPE
+        // of the law, not a silent change to how much spin a rally actually loses.
         double atTypical = Aero.spinDecay(spin, new Vec3(0, 0, -12)).length() / spin.length();
         check("at a typical 12 m/s rally speed it still decays at the tuned 5%/s",
               Math.abs(atTypical - 0.05) < 0.002, String.format("%.4f /s", atTypical));
     }
 
-    /**
-     * ITTF bounce test. The Laws require a ball dropped from 30.5 cm to rebound 24-26 cm.
-     * That test uses a steel block rather than a table, but the ball-table restitution
-     * measured in the literature (0.89-0.93) brackets the same result, so a table bounce
-     * landing inside the ITTF band is the right sanity anchor for TABLE_MAT.
-     */
+    /** ITTF bounce test. */
     private static void ittfDropTest() {
         World w = new World();
         w.launch(BallState.at(new Vec3(0, 0.305 + BALL_R, -0.7), Vec3.ZERO, Vec3.ZERO));
@@ -311,8 +256,7 @@ public final class SelfTest {
             }
         }
 
-        // Report the restitution that was ACTUALLY used, not the intercept of the fit. The
-        // drop arrives at sqrt(2*g*0.305) = 2.45 m/s, and e is a function of that speed now.
+        // Report the restitution that was ACTUALLY used, not the intercept of the fit.
         double dropSpeed = Math.sqrt(2 * G * 0.305);
         double eUsed = TABLE_MAT.restitutionAt(dropSpeed);
 
@@ -345,10 +289,7 @@ public final class SelfTest {
         return peak;
     }
 
-    /**
-     * RK4 is fourth order, so quartering the step should cut the error by about 256x.
-     * If someone quietly replaces the integrator with Euler, this is what catches it.
-     */
+    /** RK4 is fourth order, so quartering the step should cut the error by about 256x. */
     private static void rk4IsFourthOrder() {
         BallState start = Shots.byName("Topspin loop").state();   // drag and Magnus both active
         double t = 0.4;
@@ -376,14 +317,9 @@ public final class SelfTest {
         return s.pos();
     }
 
-    /**
-     * The headline claim of the checkpoint: spin curves the ball. Topspin must land the ball
-     * SHORTER than the identical shot with no spin, backspin must carry it LONGER.
-     */
+    /** The headline claim of the checkpoint: spin curves the ball. */
     private static void magnusCurvesTheRightWay() {
-        // Identical launch, three spins. Measured at the plane of the table rather than at a
-        // legal bounce, so a backspin ball that floats past the end still yields a number --
-        // that overshoot IS the effect being measured.
+        // Identical launch, three spins.
         Vec3 pos = new Vec3(0, 0.30, 1.50), vel = new Vec3(0, 0.4, -9.0);
         double heavy = 90 * 2 * Math.PI;
 
@@ -448,8 +384,7 @@ public final class SelfTest {
     /**
      * The spin coupling, stated as a falsifiable claim: a topspin ball must leave the bounce
      * FASTER along its direction of travel than it arrived, and a heavy backspin ball must
-     * leave slower, with its spin knocked down or reversed. This is the whole reason the
-     * bounce uses a friction impulse instead of just flipping v.y.
+     * leave slower, with its spin knocked down or reversed.
      */
     private static void topspinKicksForwardBackspinChecks() {
         double spin = 110 * 2 * Math.PI;
@@ -508,8 +443,7 @@ public final class SelfTest {
 
     /**
      * Every aimed preset must actually be playable: the solver converged, it clears the net,
-     * and it lands inside the lines. Without this the demo menu can rot silently -- change a
-     * drag coefficient and a shot that used to clear the net by a centimetre now clips it.
+     * and it lands inside the lines.
      */
     private static void everyAimedShotIsLegal() {
         for (Shots shot : Shots.ALL) {
@@ -525,8 +459,8 @@ public final class SelfTest {
                   String.format("x=%+.2f z=%+.2f", land.x(), land.z()));
 
             if (shot.isServe()) {
-                // A serve clears the cord on its SECOND flight, so it has to be simulated all
-                // the way through rather than asked of the launch solution.
+                // A serve clears the cord on its SECOND flight, so it has to be simulated all the
+                // way through rather than asked of the launch solution.
                 serveIsLegal(shot);
             } else {
                 check("clears the net: " + shot.name(), sol.netClearance() > 0.01,
@@ -561,9 +495,9 @@ public final class SelfTest {
 
         check("serve bounces on its own half first: " + shot.name(),
               !Double.isNaN(nearZ), String.format("near bounce at z=%+.2f", nearZ));
-        // The detail is printed on pass as well as on fail, so it has to describe what was
-        // actually measured -- a PASS reading "(it clipped the cord)" says the opposite of
-        // the result it is attached to.
+        // The detail is printed on pass as well as on fail, so it has to describe what was actually
+        // measured -- a PASS reading "(it clipped the cord)" says the opposite of the result it is
+        // attached to.
         check("serve clears the net without touching it: " + shot.name(),
               !touchedNet, touchedNet ? "it clipped the cord" : "no net contact");
         check("serve lands on the receiver's half: " + shot.name(),
@@ -587,8 +521,8 @@ public final class SelfTest {
         }
         check("a ball missing the table wide is reported out of bounds", out, "");
 
-        // The negative case matters as much as the positive one: an out detector that fires
-        // on everything would pass the check above.
+        // The negative case matters as much as the positive one: an out detector that fires on
+        // everything would pass the check above.
         for (Shots shot : Shots.ALL) {
             if (shot.solution() == null) continue;
             Vec3 landing = Aim.landingPoint(shot.state());
@@ -607,11 +541,7 @@ public final class SelfTest {
         return w.events().stream().anyMatch(e -> e.type() == World.EventType.OUT_OF_BOUNDS);
     }
 
-    /**
-     * Ten minutes of simulated time with no NaNs, no runaway, no drift. The contract lists
-     * "how to keep the simulation from breaking after running a while" as something to learn,
-     * so it gets an explicit check rather than a hope.
-     */
+    /** Ten minutes of simulated time with no NaNs, no runaway, no drift. */
     private static void longRunStaysStable() {
         World w = new World();
         w.launch(Shots.byName("Topspin loop").state());
@@ -624,13 +554,7 @@ public final class SelfTest {
 
         BallState s = w.state();
         check("10 simulated minutes leave the state finite", s.isFinite(), s.pos().toString());
-        // 40 m, not 25. A missed ball ends up rolling on the floor, and a rolling ball is
-        // slowed only by quadratic drag and rolling resistance -- ln(v0/v)/k with k ~ 0.114/m
-        // puts a 5 m/s roll at about 17 m before walking pace and a bit over 20 m before it
-        // stops. 25 m was inside that, so this check used to pass only because the ball
-        // reached the edge of the old 40 m floor slab and fell off it, which stopped the roll
-        // by deleting the floor rather than by physics. What it is really testing is that the
-        // simulation has not diverged, and 40 m still catches that with room to spare.
+        // 40 m, not 25.
         check("the ball has not escaped the room",
               s.pos().length() < 40, String.format("|pos| = %.2f m", s.pos().length()));
         check("the ball is not moving impossibly fast",
@@ -640,15 +564,7 @@ public final class SelfTest {
               String.format("|q| = %.15f", quatNorm(s.orient())));
     }
 
-    /**
-     * The hardest shot in the game must not fall through the table.
-     *
-     * Fired straight DOWN at the surface, deliberately. An angled smash is the wrong test:
-     * a 45 m/s ball aimed along the table simply flies off the far end before it descends,
-     * so it never bounces and the test would "fail" while the collision code was fine. Firing
-     * vertically isolates the thing actually under test, which is whether a ball that moves
-     * further in one step than the slab is thick still gets caught.
-     */
+    /** The hardest shot in the game must not fall through the table. */
     private static void noTunnellingAtSmashSpeed() {
         int tested = 0, caught = 0;
         for (double speed = 20; speed <= 60; speed += 2.5) {
@@ -664,8 +580,8 @@ public final class SelfTest {
         check("no tunnelling straight down from 20 to 60 m/s (swept collision working)",
               caught == tested, caught + " of " + tested + " speeds bounced");
 
-        // Sanity: at this step size a naive overlap-only test WOULD miss the fast ones, so
-        // the check above is not passing for trivial reasons.
+        // Sanity: at this step size a naive overlap-only test WOULD miss the fast ones, so the
+        // check above is not passing for trivial reasons.
         double perStep = 60 * DT;
         check("the fast cases really do outrun a static overlap test",
               perStep > TABLE_THICK + 2 * BALL_R,
@@ -681,22 +597,9 @@ public final class SelfTest {
     private static double firstLandingZ(BallState s) { return Aim.landingPoint(s).z(); }
     private static double firstLandingX(BallState s) { return Aim.landingPoint(s).x(); }
 
-    // ------------------------------------------------------------------ harness
 
-
-    // ------------------------------------------------------------------ the paddle
-    //
-    // Everything below would have FAILED before the contact solver was moved into the
-    // surface's frame of reference. Written in absolute velocity, a swung blade catching up to
-    // a ball reads as "already separating" and applies no impulse at all, and a blade brushing
-    // tangentially past a ball generates no spin whatsoever. These are the checks that say the
-    // paddle is doing physics rather than running a scripted shot.
-    //
-    // Geometry convention for all of them: the player's blade sits at +Z (the near end) and
-    // its face NORMAL points toward -Z, back down the table at the incoming ball. A ball
-    // travelling toward +Z is coming at the player; a blade swinging toward -Z is hitting it
-    // back. Tilting the normal downward closes the face over the ball, which is what a looping
-    // stroke does.
+    // Everything below would have FAILED before the contact solver was moved into the surface's
+    // frame of reference.
 
     /** A blade with a closed face, as used for a topspin stroke. */
     private static Vec3 closedFace(double tilt) {
@@ -706,8 +609,6 @@ public final class SelfTest {
     /**
      * Strike a ball with a blade that moves through {@code swing} over one physics step,
      * finishing at {@code endPos}.
-     *
-     * @return the ball afterwards, or null if the blade missed
      */
     private static BallState paddleStrike(BallState ball, Vec3 endPos, Vec3 swing,
                                           Vec3 normal, Constants.Material mat) {
@@ -722,10 +623,7 @@ public final class SelfTest {
 
     /**
      * A blade swung into a STATIONARY ball must send it away at (1 + e) times the blade's own
-     * speed. This is the most basic thing a paddle has to do, and the old solver could not do
-     * it at all: the ball is not approaching the blade, the blade is approaching the ball, and
-     * a solver that only looks at the ball's absolute velocity sees a contact that is already
-     * separating and pushes the ball out untouched.
+     * speed.
      */
     private static void paddleImpartsItsOwnVelocity() {
         double swing = 10.0;
@@ -746,19 +644,7 @@ public final class SelfTest {
 
     }
 
-    /**
-     * The pace-versus-spin trade-off, against measured players.
-     *
-     * A racket swing has a fixed speed and the player chooses how to spend it. Swing straight
-     * through the ball and nearly all of it becomes pace; brush upward across it and much of it
-     * becomes spin instead. Both strokes are checked here at the SAME measured swing speed --
-     * 17.8 m/s, the mean for advanced players (12.4 m/s is the intermediate figure) -- so the
-     * claim being tested is that the model spends the swing the way a real player does, not
-     * merely that some stroke somewhere lands in range.
-     *
-     * Targets: a real forehand loop measures about 21 m/s of ball speed carrying 117 +/- 29
-     * rev/s; a drive is faster and carries much less.
-     */
+    /** The pace-versus-spin trade-off, against measured players. */
     private static void swingSpeedSplitsIntoPaceAndSpin() {
         double swing = 17.8;
         BallState arriving = BallState.at(new Vec3(0, 0.30, 0), new Vec3(0, 0, 10), Vec3.ZERO);
@@ -795,13 +681,7 @@ public final class SelfTest {
                             RACKET_MAT);
     }
 
-    /**
-     * Brushing UP the back of the ball must generate topspin, at a rate a real player reaches.
-     *
-     * The blade moves upward as well as forward, so its surface sweeps tangentially across the
-     * ball. That tangential sweep is the entire mechanism -- there is no line anywhere that
-     * says "add topspin", and against a static world this term can only ever remove spin.
-     */
+    /** Brushing UP the back of the ball must generate topspin, at a rate a real player reaches. */
     private static void brushingContactGeneratesTopspin() {
         BallState ball = BallState.at(new Vec3(0, 0.30, 0), new Vec3(0, 0, 4), Vec3.ZERO);
 
@@ -824,20 +704,9 @@ public final class SelfTest {
               after.vel().z() < 0, String.format("%.1f m/s in Z", after.vel().z()));
     }
 
-    /**
-     * Heavy BACKSPIN into a brushing blade must come back as TOPSPIN.
-     *
-     * This is the check that justifies giving Material a tangential restitution at all. A rigid
-     * surface can only bring the contact patch to rest, so the very best it can do is remove
-     * the incoming spin -- it can never turn it around. Rubber stores tangential energy in the
-     * topsheet and springs it back, and that is what lets a player loop a chop.
-     *
-     * The negative control at the end is the important half: the SAME stroke, the same
-     * geometry, against a material whose only difference is that e_t is zero.
-     */
+    /** Heavy BACKSPIN into a brushing blade must come back as TOPSPIN. */
     private static void paddleReversesIncomingBackspin() {
-        // A ball arriving with heavy backspin. It is travelling toward +Z (at the player), and
-        // backspin on such a ball is rotation about -X.
+        // A ball arriving with heavy backspin.
         Vec3 backspin = new Vec3(-90 * 2 * Math.PI, 0, 0);
         BallState chop = BallState.at(new Vec3(0, 0.30, 0), new Vec3(0, 0, 5), backspin);
 
@@ -849,9 +718,8 @@ public final class SelfTest {
         check("the blade reaches the chopped ball", rubber != null, "");
         if (rubber == null) return;
 
-        // Measured about the axis of the OUTGOING ball, which now travels toward -Z: positive
-        // means topspin. The incoming ball was travelling the other way, so its backspin reads
-        // as the opposite sign on the same axis.
+        // Measured about the axis of the OUTGOING ball, which now travels toward -Z: positive means
+        // topspin.
         double inRevs = chop.spin().x() / (2 * Math.PI);
         double outRevs = -rubber.spin().x() / (2 * Math.PI);
         check("heavy backspin comes off an inverted rubber as topspin (spin REVERSAL)",
@@ -872,8 +740,7 @@ public final class SelfTest {
 
     /**
      * A paddle is allowed to add energy -- that is what a swing is for -- but only as much as
-     * the swing could actually have done. Two bounds: a STATIONARY blade must never add any,
-     * and a moving one must never beat the (1+e) limit its own speed sets.
+     * the swing could actually have done.
      */
     private static void paddleContactAddsNoFreeEnergy() {
         Vec3 n = new Vec3(0, 0, -1);
@@ -902,10 +769,7 @@ public final class SelfTest {
 
     /**
      * The paddle equivalent of the table tunnelling check, and a harder problem than the table
-     * was. A 60 m/s ball and a 20 m/s blade close at 80 m/s -- 16.7 cm in one physics step,
-     * against a blade 1.5 cm thick. Only a swept test done in the BLADE's frame catches that;
-     * a swept test in world coordinates does not, because neither body moves 16.7 cm on its
-     * own.
+     * was.
      */
     private static void noTunnellingThroughASwungPaddle() {
         int caught = 0, tried = 0;
@@ -916,8 +780,8 @@ public final class SelfTest {
             BallState ball = BallState.at(new Vec3(0, 0.30, 0), new Vec3(0, 0, speed), Vec3.ZERO);
             BallState flown = Integrator.step(ball, DT);
 
-            // Put the blade half way along the RELATIVE sweep, so the crossing is mid-step at
-            // every speed rather than only at the one the geometry happened to suit.
+            // Put the blade half way along the RELATIVE sweep, so the crossing is mid-step at every
+            // speed rather than only at the one the geometry happened to suit.
             double meet = (speed * DT - blade * DT) / 2;
             Paddle paddle = new Paddle(new Vec3(0, 0.30, meet + blade * DT), new Vec3(0, 0, -1));
             paddle.moveTo(new Vec3(0, 0.30, meet), new Vec3(0, 0, -1), DT);

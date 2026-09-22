@@ -2,6 +2,7 @@ package render;
 
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Node;
 import javafx.scene.control.Label;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
@@ -9,38 +10,14 @@ import javafx.scene.layout.VBox;
 import play.Scoreboard;
 
 /**
- * The key legend, and the one readout the controls cannot work without.
- *
- * This used to be a panel of live physics numbers -- spin ratio, lift coefficient, the Magnus
- * acceleration next to gravity -- which made the simulation falsifiable while you watched it.
- * That was the right thing for a physics demo with no game around it. It is the wrong thing
- * now: the numbers are debug output on what is meant to be a playable screen, and
- * physics.SelfTest checks them far harder than a human reading a panel ever could, against
- * published values rather than against plausibility.
- *
- * What survives is what a PLAYER needs: the legend, because the controls are not guessable, and
- * the feed name, because N and P otherwise change something invisible. (There was a power meter
- * here too, for the charge-and-release stroke. The stroke is gone -- the paddle just follows
- * the mouse now -- and the meter went with it.)
- *
- * The one exception is the shot line, and it is only on while V is: it prints the numbers from
- * the shot-assist overlay that cannot be drawn as an arrow in the 3D scene -- launch speed,
- * spin, how many correction passes the shot needed, and whether it came out legal.
+ * What a player needs on screen: the score, the feed name, the key legend, and the V and D debug
+ * readouts while they are toggled on.
  */
 public final class Hud {
 
     private static final String MONO = "Consolas, 'DejaVu Sans Mono', monospace";
 
-    private final StackPane root = new StackPane();
-    /** Bigger and brighter than the rest: the score is the one number a player looks up for. */
-    private final Label score = panelLabel(20, "#ffffff");
-    private final Label feed = panelLabel(15, "#eaf2ff");
-    private final Label shot = panelLabel(12, "#ff9a3c");
-    private final Label controls = panelLabel(12, "#8d9bab");
-    private final Label control = panelLabel(12, "#7fd4a8");
-
-    public Hud() {
-        controls.setText("""
+    private static final String LEGEND = """
             MOUSE   move to move the paddle -- swing through the ball to hit
                     (how you move through the ball aims the shot; hit it CLEAN or it goes out)
                     RIGHT hold = brush: mouse up/down lifts/cuts the bat for spin
@@ -50,19 +27,24 @@ public final class Hud {
             VIEW    F rally-cam on/off   C preset view
                     V shot debug   D control debug
                     G ghost   T trail   B ball x2   H hud   ESC quit
-            DEMO    M watch it play itself""");
+            DEMO    M watch it play itself""";
 
+    private final StackPane root = new StackPane();
+    private final Label score = panelLabel(20, "#ffffff");   // the one number a player looks up for
+    private final Label feed = panelLabel(15, "#eaf2ff");
+    private final Label shot = panelLabel(12, "#ff9a3c");
+    private final Label legend = panelLabel(12, "#8d9bab");
+    private final Label controlReadout = panelLabel(12, "#7fd4a8");
+
+    public Hud() {
+        legend.setText(LEGEND);
         setShot(null);
         root.getChildren().addAll(corner(Pos.TOP_LEFT, feed, shot),
                                   corner(Pos.TOP_CENTER, score),
-                                  corner(Pos.TOP_RIGHT, control),
-                                  corner(Pos.BOTTOM_LEFT, controls));
-
-        // After the panels are built, not before: setControl hides the whole panel, which it
-        // reaches through the label's parent, and the label has no parent until corner() has
-        // wrapped it.
-        setControl(null);
-        root.setPickOnBounds(false);      // clicks must reach the SubScene to orbit and aim
+                                  corner(Pos.TOP_RIGHT, controlReadout),
+                                  corner(Pos.BOTTOM_LEFT, legend));
+        setControl(null);                  // only once corner() has given the label a parent
+        root.setPickOnBounds(false);       // clicks must reach the SubScene to orbit and aim
         root.setPadding(new Insets(14));
     }
 
@@ -70,18 +52,13 @@ public final class Hud {
 
     public void setShown(boolean shown) { root.setVisible(shown); }
 
-    /** The feed currently selected with the number keys. */
     public void setFeed(String name) { feed.setText("feed: " + name); }
 
-    /**
-     * The match score on one line: games, the running points, and who is serving. The serving
-     * dot sits next to the server's own score, where a player looks for it, and "deuce" is
-     * spelled out because at 10-all the rule has changed and the numbers alone do not say so.
-     */
     public void setScore(Scoreboard.Snapshot s) {
         score.setText(scoreLine(s));
     }
 
+    /** The serving dot sits by the server's score; "deuce" is spelled out because the rule changes. */
     static String scoreLine(Scoreboard.Snapshot s) {
         String games = "games " + s.playerGames() + " - " + s.opponentGames();
         if (s.matchWinner() != null) {
@@ -93,33 +70,25 @@ public final class Hud {
              + (s.deuce() ? "   deuce" : "");
     }
 
-    /** The shot-assist readout, or null to hide the line entirely (V off, or nothing hit yet).
-     *  It has to go unmanaged as well as invisible or it leaves a blank row in the panel. */
+    /** Null hides the line; unmanaged as well as invisible, or it leaves a blank row. */
     public void setShot(String text) {
-        boolean on = text != null && !text.isEmpty();
-        shot.setText(on ? text : "");
-        shot.setVisible(on);
-        shot.setManaged(on);
+        showLabel(shot, text);
     }
 
-    /**
-     * The control/reachability readout, or null to hide it (D off).
-     *
-     * Its own panel rather than another line under the feed, because it is nine lines of
-     * numbers refreshed every frame and it would otherwise shove the feed name around as it
-     * grew and shrank. Same unmanaged-when-hidden trick as the shot line: invisible alone
-     * leaves an empty panel sitting on the table.
-     */
+    /** Null hides the whole D panel, not just its text. */
     public void setControl(String text) {
-        boolean on = text != null && !text.isEmpty();
-        control.setText(on ? text : "");
-        control.setVisible(on);
-        control.setManaged(on);
-        control.getParent().setVisible(on);
-        control.getParent().setManaged(on);
+        boolean on = showLabel(controlReadout, text);
+        controlReadout.getParent().setVisible(on);
+        controlReadout.getParent().setManaged(on);
     }
 
-    // ------------------------------------------------------------------ styling
+    private static boolean showLabel(Label label, String text) {
+        boolean on = text != null && !text.isEmpty();
+        label.setText(on ? text : "");
+        label.setVisible(on);
+        label.setManaged(on);
+        return on;
+    }
 
     private static Label panelLabel(double size, String colour) {
         Label l = new Label();
@@ -128,14 +97,8 @@ public final class Hud {
         return l;
     }
 
-    /**
-     * A panel pinned to one corner.
-     *
-     * The max size has to be pinned to the preferred size. A StackPane child defaults to
-     * filling the whole pane, so without this each translucent panel stretches across the
-     * entire window and ends up dimming the table it is sitting on.
-     */
-    private static VBox corner(Pos where, javafx.scene.Node... children) {
+    /** Max size pinned to preferred, or each translucent panel stretches across the window. */
+    private static VBox corner(Pos where, Node... children) {
         VBox v = new VBox(6, children);
         v.setPadding(new Insets(12, 16, 12, 16));
         v.setStyle("-fx-background-color: rgba(10,14,20,0.74);"

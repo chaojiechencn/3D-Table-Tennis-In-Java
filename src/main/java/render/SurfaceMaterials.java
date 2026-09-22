@@ -87,40 +87,21 @@ final class SurfaceMaterials {
         WritableImage normal = new WritableImage(size, size);
         WritableImage specular = new WritableImage(size, size);
         PixelWriter colour = diffuse.getPixelWriter();
-        double boardWidth = TABLE_WIDTH / 5;
-        double boardLength = TABLE_LENGTH * 0.75;
-        double[] legXs = { -Court.LEG_X, Court.LEG_X };
-        double[] legZs = { -Court.LEG_Z, Court.LEG_Z };
-        double contactSpread = TABLE_HEIGHT * 0.12;
         Color timber = Color.web("#796959");
         for (int v = 0; v < size; v++) {
             double z = (0.5 - v / (double) (size - 1)) * length;
             for (int u = 0; u < size; u++) {
                 double x = (u / (double) (size - 1) - 0.5) * width;
-                int board = (int) Math.floor(x / boardWidth);
-                double across = fract(x / boardWidth);
-                double along = fract(z / boardLength + noise(board, 4));
+                int board = (int) Math.floor(x / BOARD_WIDTH);
+                double across = fract(x / BOARD_WIDTH);
+                double along = fract(z / BOARD_LENGTH + noise(board, 4));
                 double joint = across < 0.025 || along < 0.009 ? 0.82 : 1;
-                double fibre = Math.sin(x / boardWidth * 95 + Math.sin(z * 7) * 0.7);
+                double fibre = Math.sin(x / BOARD_WIDTH * 95 + Math.sin(z * 7) * 0.7);
                 double shade = (0.95 + 0.065 * noise(board, 9) + 0.018 * fibre
                         + 0.018 * noise(u, v)) * joint;
-
-                double dx = Math.max(0, Math.abs(x) - TABLE_WIDTH * 0.46);
-                double dz = Math.max(0, Math.abs(z) - TABLE_LENGTH * 0.46);
-                double softness = TABLE_HEIGHT * 0.52;
-                shade *= 1 - 0.48 * Math.exp(-(dx * dx + dz * dz) / (softness * softness));
-                for (double legX : legXs) {
-                    for (double legZ : legZs) {
-                        double lx = x - legX;
-                        double lz = z - legZ;
-                        shade *= 1 - 0.42 * Math.exp(-(lx * lx + lz * lz)
-                                / (contactSpread * contactSpread));
-                    }
-                }
-                // A soft pool around the court falls off toward the walls. It is room
-                // dressing, not a moving shadow, and stays stable through every camera cut.
-                double pool = Math.exp(-(x * x + z * z) / (TABLE_LENGTH * TABLE_LENGTH * 2));
-                shade *= 0.62 + 0.38 * pool;
+                shade = withTableOcclusion(shade, x, z);
+                shade = withLegContacts(shade, x, z);
+                shade = withRoomPool(shade, x, z);
                 colour.setColor(u, v, tint(timber, shade));
                 normal.getPixelWriter().setColor(u, v, Color.color(0.5 + fibre * 0.012, 0.5, 1));
                 specular.getPixelWriter().setColor(u, v, Color.gray(0.025 * joint));
@@ -133,6 +114,34 @@ final class SurfaceMaterials {
         material.setSpecularColor(Color.WHITE);
         material.setSpecularPower(40);
         return material;
+    }
+
+    private static final double BOARD_WIDTH = TABLE_WIDTH / 5;
+    private static final double BOARD_LENGTH = TABLE_LENGTH * 0.75;
+
+    private static double withTableOcclusion(double shade, double x, double z) {
+        double dx = Math.max(0, Math.abs(x) - TABLE_WIDTH * 0.46);
+        double dz = Math.max(0, Math.abs(z) - TABLE_LENGTH * 0.46);
+        double softness = TABLE_HEIGHT * 0.52;
+        return shade * (1 - 0.48 * Math.exp(-(dx * dx + dz * dz) / (softness * softness)));
+    }
+
+    private static double withLegContacts(double shade, double x, double z) {
+        double spread = TABLE_HEIGHT * 0.12;
+        for (double legX : new double[] { -Court.LEG_X, Court.LEG_X }) {
+            for (double legZ : new double[] { -Court.LEG_Z, Court.LEG_Z }) {
+                double lx = x - legX;
+                double lz = z - legZ;
+                shade *= 1 - 0.42 * Math.exp(-(lx * lx + lz * lz) / (spread * spread));
+            }
+        }
+        return shade;
+    }
+
+    /** Room dressing, not a moving shadow: stable through every camera cut. */
+    private static double withRoomPool(double shade, double x, double z) {
+        double pool = Math.exp(-(x * x + z * z) / (TABLE_LENGTH * TABLE_LENGTH * 2));
+        return shade * (0.62 + 0.38 * pool);
     }
 
     /**

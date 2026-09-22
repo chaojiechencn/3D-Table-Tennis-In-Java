@@ -130,13 +130,13 @@ seconds. `--out` disables auto-replay so a capture past the end of a rally still
 
 - Commit application code, tests, documentation, development tools and wrapper files.
 - Gradle writes generated output to `build/`; manual compilation uses the ignored `out/`.
-- `.gradle/`, `bin/`, IDE state, compiled classes and Python bytecode are generated or local.
+- `.gradle/`, `bin/`, IDE and editor state (`.idea/`, `.vscode/`, `.claude/`) and compiled
+  classes are generated or local, and never committed.
 - Keep the repository root for project entry points. Put longer documentation in `docs/`
   and optional development utilities in `tools/`.
 
-The [IntelliJ MCP bridge](../tools/intellij-mcp-bridge/README.md) is an optional development
-utility, separate from the Java game. It installs its one Python dependency into a tool-local
-virtual environment; Java development never needs Python.
+The [IntelliJ MCP bridge](../tools/intellij-mcp-bridge/README.md) is an optional, dependency-free
+single-file Java program, separate from the game's build. The project is Java only.
 
 ## Continuous integration
 
