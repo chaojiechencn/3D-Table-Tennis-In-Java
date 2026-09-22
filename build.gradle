@@ -22,6 +22,12 @@ application {
     mainClass = 'TableTennisIn3D'
 }
 
+dependencies {
+    testImplementation platform('org.junit:junit-bom:5.14.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
 tasks.register('selfTest', JavaExec) {
     group = 'verification'
     description = 'Runs the headless physics validation suite'
@@ -40,9 +46,22 @@ tasks.register('rallyTest', JavaExec) {
     javaLauncher = javaToolchains.launcherFor(java.toolchain)
 }
 
+tasks.register('writeGoldenTrace', JavaExec) {
+    group = 'verification'
+    description = 'Rewrites the golden trace fixture; only after a deliberate behavior change'
+    dependsOn tasks.named('testClasses')
+    mainClass = 'play.GoldenTrace'
+    classpath = sourceSets.test.runtimeClasspath
+    args file('src/test/resources/play/golden-trace.txt').absolutePath
+    javaLauncher = javaToolchains.launcherFor(java.toolchain)
+}
+
 // These suites are executable mains, so test/check/build must invoke them explicitly.
-// No framework tests are expected: failure comes from either suite's nonzero exit.
 tasks.named('test') {
+    useJUnitPlatform()
     dependsOn tasks.named('selfTest'), tasks.named('rallyTest')
-    failOnNoDiscoveredTests = false
+    testLogging {
+        showStandardStreams = true
+        exceptionFormat = 'full'
+    }
 }

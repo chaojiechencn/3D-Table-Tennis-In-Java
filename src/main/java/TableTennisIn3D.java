@@ -144,8 +144,18 @@ public class TableTennisIn3D extends Application {
     }
 
     private void startLoop(Scene scene) {
+        if (screenshotPath != null) advanceToCaptureTime();
         new AnimationTimer() {
+            /** A few pulses let the scene lay out and upload its textures before the snapshot. */
+            private static final int PulsesBeforeCapture = 3;
+            private int CapturePulses = 0;
+
             @Override public void handle(long now) {
+                if (screenshotPath != null) {
+                    render(0);
+                    if (++CapturePulses >= PulsesBeforeCapture) takeScreenshot(scene);
+                    return;
+                }
                 if (lastNanos == 0) { lastNanos = now; return; }   // first frame has no dt
                 // Clamped before scaling, so a stall cannot hand the accumulator a second of work.
                 double frame = Math.min((now - lastNanos) / 1e9, MAX_FRAME);
@@ -153,9 +163,14 @@ public class TableTennisIn3D extends Application {
 
                 stepFrame(frame);
                 render(frame);
-                if (screenshotPath != null && session.time() >= screenshotAt) takeScreenshot(scene);
             }
         }.start();
+    }
+
+    /** Capture runs whole physics steps, not wall-clock frames, so the same arguments give the same image. */
+    private void advanceToCaptureTime() {
+        long Steps = Math.round(screenshotAt / DT);
+        for (long Step = 0; Step < Steps; Step++) advanceOne();
     }
 
     private void stepFrame(double frameSeconds) {
