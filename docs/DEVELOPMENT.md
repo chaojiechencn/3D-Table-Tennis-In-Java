@@ -128,15 +128,12 @@ seconds. `--out` disables auto-replay so a capture past the end of a rally still
 
 ## Files and generated output
 
-- Commit application code, tests, documentation, development tools and wrapper files.
+- Commit only the game itself: application code, tests, documentation and wrapper files.
+  Personal development utilities do not belong in this repository.
 - Gradle writes generated output to `build/`; manual compilation uses the ignored `out/`.
 - `.gradle/`, `bin/`, IDE and editor state (`.idea/`, `.vscode/`, `.claude/`) and compiled
   classes are generated or local, and never committed.
-- Keep the repository root for project entry points. Put longer documentation in `docs/`
-  and optional development utilities in `tools/`.
-
-The [IntelliJ MCP bridge](../tools/intellij-mcp-bridge/README.md) is an optional, dependency-free
-single-file Java program, separate from the game's build. The project is Java only.
+- Keep the repository root for project entry points. Put longer documentation in `docs/`.
 
 ## Continuous integration
 

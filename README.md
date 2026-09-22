@@ -50,7 +50,6 @@ See [Validation](docs/DEVELOPMENT.md#validation) for individual suites and what 
 | `src/main/java/` | Game entry point and the `physics`, `play`, `render` packages |
 | `src/test/java/` | Headless validation suites, in their corresponding packages |
 | `docs/` | Gameplay, development instructions and design rationale |
-| `tools/` | Optional development utilities |
 | `gradle/`, `gradlew`, `gradlew.bat` | Gradle wrapper |
 | `build/`, `out/` | Generated output; ignored by Git |
 
