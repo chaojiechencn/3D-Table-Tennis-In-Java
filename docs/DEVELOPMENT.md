@@ -1,141 +1,147 @@
 # Development
 
-[Project overview](../README.md) · [Gameplay](GAMEPLAY.md) · [Design rationale](DESIGN.md)
+[Project overview](../README.md) · [Architecture](ARCHITECTURE.md) · [Gameplay](GAMEPLAY.md)
 
 ## Requirements
 
 The standard build uses **JDK 21** and the committed Gradle wrapper. Gradle resolves JavaFX and
-downloads its own distribution on first use, so the first build needs network access. A global
-Gradle installation is unnecessary.
+JUnit and downloads its own distribution on first use, so the first build needs network access. A
+global Gradle installation is unnecessary.
 
-The optional manual build uses **Liberica Full JDK 21**, which bundles JavaFX as system modules.
-An ordinary JDK supports the Gradle build; it cannot compile or launch JavaFX directly without
-additional modules.
+The optional manual build of the game uses **Liberica Full JDK 21**, which bundles JavaFX as system
+modules. The tests need Gradle.
 
-## Build and run
+## Build, run and test
 
-From the project root:
+From the project root (Windows: `.\gradlew.bat`; macOS, Linux and Git Bash: `bash ./gradlew`):
 
-| Action | Windows PowerShell | macOS / Linux / Git Bash |
+| Action | Command |
+| --- | --- |
+| Run the game | `.\gradlew.bat run` |
+| Compile everything | `.\gradlew.bat classes` |
+| Every check in every module | `.\gradlew.bat check` |
+| One module's checks | `.\gradlew.bat :engine:test` (or `:game:test`, `:app:test`) |
+| One test class | `.\gradlew.bat :game:test --tests tabletennis.game.rally.RefereeTest` |
+| One test method | `.\gradlew.bat :game:test --tests tabletennis.game.rally.RefereeTest.ANetTouchAloneDecidesNothing` |
+| Rewrite the golden trace | `.\gradlew.bat :game:writeGoldenTrace` |
+| Build and check | `.\gradlew.bat build` |
+
+The application's main class is `tabletennis.app.TableTennisApp`.
+
+## Validation
+
+The tests are JUnit 5, one class per component, and every check is a falsifiable claim printed
+with its measured number:
+
+```text
+  [PASS] ITTF drop test: 30.5 cm gives a 24-26 cm rebound  (rebound 24.4 cm, e = 0.931 at the 2.45 m/s impact)
+```
+
+`Claims.Check("claim", Holds, "measured detail")` lives in `engine`'s test fixtures, and `game`
+and `app` use it too. The detail prints on a pass as well as a failure, so it must state what was
+actually measured. The build shows test output, so `check` prints every line.
+
+| Module | Checks | Covers |
 | --- | --- | --- |
-| Compile the game | `.\gradlew.bat classes` | `bash ./gradlew classes` |
-| Run the game | `.\gradlew.bat run` | `bash ./gradlew run` |
-| Run both validation suites | `.\gradlew.bat check` | `bash ./gradlew check` |
-| Validate physics | `.\gradlew.bat selfTest` | `bash ./gradlew selfTest` |
-| Validate gameplay | `.\gradlew.bat rallyTest` | `bash ./gradlew rallyTest` |
-| Build and validate | `.\gradlew.bat build` | `bash ./gradlew build` |
+| engine | 54 | Flight, drag and Magnus against published measurements; RK4 order; the ITTF drop test; bounces, net and spin reversal; tunnelling; energy |
+| game | 99 | Every feed's legality; the referee's rules; scoring; the reach envelope and cursor follower; the opponent; shot tuning; whole points through `GameSession`; the golden trace |
+| app | 11 | The fixed-step clock; command-line parsing; key bindings against the legend; score formatting |
 
-The application entry point remains `Table_Tennis_In_3D`.
+**The golden trace.** `GoldenTraceTest` plays 39 scripted scenarios through `GameSession` and
+compares every step's ball and blade bits with `game/src/test/resources/tabletennis/game/golden-trace.txt`.
+A restructuring must reproduce it exactly. When a behavior change is deliberate, rewrite the file
+with `:game:writeGoldenTrace`, review the diff, and say why in the commit.
+
+A failing check is a broken deliverable, not a flaky test. **Never widen a threshold to fit a
+regression.** Re-deriving one because the model became more accurate is legitimate; say so in a
+comment, with the number the new model predicts.
+
+Mouse, brush, camera and overlay behavior cannot be checked headlessly; try them in the game.
+
+## Source layout
+
+```text
+engine/   tabletennis.engine   physics; no dependencies
+  src/main/java, src/test/java, src/testFixtures/java (Claims)
+game/     tabletennis.game     rules, players, shot assist; depends on engine
+  src/main/java, src/test/java, src/test/resources (golden-trace.txt)
+app/      tabletennis.app      JavaFX front end; depends on game
+  src/main/java, src/test/java
+```
+
+[Architecture](ARCHITECTURE.md) describes each package and the rules between them.
 
 ## IDE setup
 
 ### IntelliJ IDEA
 
-1. Open the project root and import `build.gradle` as a Gradle project.
-2. Select a JDK 21 for the project SDK and Gradle JVM.
-3. Reload the Gradle project after source or build configuration changes.
-4. Run the Gradle `run` task to play, or `check`, `selfTest` and `rallyTest` to validate.
+1. Open the project root and import it as a Gradle project.
+2. Select a JDK 21 for the project SDK and the Gradle JVM.
+3. Reload the Gradle project after build changes.
+4. Run the Gradle `run` task to play, or `check` to validate. JUnit classes also run from the
+   gutter.
 
-Gradle marks `src/main/java` as production code and `src/test/java` as test code. IntelliJ's
-generated `.idea/` files and `.iml` modules are local and ignored by Git. Avoid moving or
-hand-editing a generated module to change the source layout; update the Gradle project instead.
+The `.idea/` directory and `.iml` files are generated and ignored. Change source sets in the
+Gradle build, never in a generated module file.
 
 ### VS Code
 
-Open the project root and use the committed tasks for running the game and its validation suites.
-The tasks invoke the wrapper, so they use the same source layout and dependencies as terminal builds.
-
-## Validation
-
-`physics.SelfTest` and `play.RallyTest` are executable Java classes with `main` methods. They do
-not require JUnit. Their package names remain unchanged even though they live under
-`src/test/java`.
-
-- `physics.SelfTest`: **101 checks** against analytic results, published measurements and ITTF
-  rules. It covers flight, spin, energy, collision handling, preset shots and fast-moving paddles.
-- `play.RallyTest`: **44 checks** covering opponent returns, shot assistance and its tuning,
-  paddle reach and speed, cursor control, brushing, match scoring, and the rally rules played
-  through `play.GameSession`.
-
-The Gradle `test`, `check` and `build` tasks all run both suites through the dedicated `selfTest`
-and `rallyTest` tasks. Each suite prints PASS/FAIL and measured details, then exits non-zero if
-a check fails.
-
-Run the physics suite after physics changes, the rally suite after gameplay changes, and both
-after changes to shared code, source layout or build configuration. Rendering changes must at
-least compile. Both suites must stay at 100%; do not widen a threshold to fit a regression.
-
-## Source layout
-
-```text
-src/
-  main/java/
-    Table_Tennis_In_3D.java    JavaFX entry point: frame loop, input, views and capture
-    physics/                  Headless simulation and measured physical constants
-    play/                     Headless game logic: GameSession, shot assistance, scoring
-    render/                   JavaFX views and input geometry
-  test/java/
-    physics/SelfTest.java      Physics validation
-    play/RallyTest.java        Game and control validation
-```
-
-Tests retain their `physics` and `play` packages. Production code stays in the same packages and
-keeps the same public entry points. `play.GameSession` is the one gameplay implementation: the
-application drives it for play and `RallyTest` drives it for validation, and rendering reads its
-immutable snapshots. The game layer depends on physics; physics does not depend
-on gameplay or JavaFX. See [Design rationale](DESIGN.md#architecture) for class responsibilities
-and the boundaries that must remain intact.
+Open the project root with the Java extension pack; it imports the Gradle build. Run the game and
+the checks through the wrapper in a terminal.
 
 ## Manual build with Liberica Full JDK 21
 
-This remains a plain `javac` project underneath Gradle. To compile without downloading dependencies,
-use a **Full** Liberica JDK 21 from [BellSoft](https://bell-sw.com/pages/downloads/), which includes
-JavaFX. Adjust the example path to your installation.
+The game compiles with one `javac` call, because a **Full** Liberica JDK 21
+([BellSoft](https://bell-sw.com/pages/downloads/)) includes JavaFX. Adjust the path to your
+installation.
 
 ```powershell
 $JDK = "$env:USERPROFILE\.jdks\jdk-21.0.12.1-full\bin"
-$javaSources = (Get-ChildItem -Path src/main/java,src/test/java -Recurse -Filter *.java).FullName
-& "$JDK\javac" -d out/production/3D-Table-Tennis-In-Java $javaSources
-& "$JDK\java" -cp out/production/3D-Table-Tennis-In-Java Table_Tennis_In_3D
-& "$JDK\java" -cp out/production/3D-Table-Tennis-In-Java physics.SelfTest
-& "$JDK\java" -cp out/production/3D-Table-Tennis-In-Java play.RallyTest
+$Sources = (Get-ChildItem -Path engine/src/main/java,game/src/main/java,app/src/main/java -Recurse -Filter *.java).FullName
+& "$JDK\javac" -d out/game $Sources
+& "$JDK\java" -cp out/game tabletennis.app.TableTennisApp
 ```
 
 ```bash
 JDK=~/.jdks/jdk-21.0.12.1-full/bin
-"$JDK/javac" -d out/production/3D-Table-Tennis-In-Java $(find src/main/java src/test/java -name '*.java')
-"$JDK/java" -cp out/production/3D-Table-Tennis-In-Java Table_Tennis_In_3D
-"$JDK/java" -cp out/production/3D-Table-Tennis-In-Java physics.SelfTest
-"$JDK/java" -cp out/production/3D-Table-Tennis-In-Java play.RallyTest
+"$JDK/javac" -d out/game $(find engine/src/main/java game/src/main/java app/src/main/java -name '*.java')
+"$JDK/java" -cp out/game tabletennis.app.TableTennisApp
 ```
 
-No `--module-path` or `--add-modules` is needed with the Full distribution. A missing
-`javafx` package during manual compilation means the selected JDK does not include JavaFX.
-Use the Full build, or use the standard Gradle workflow.
+No `--module-path` or `--add-modules` is needed with the Full distribution. A missing `javafx`
+package means the JDK does not include JavaFX: use the Full build or Gradle.
 
 ## Rendering captures
 
-The application has an offline capture mode for examining a fixed shot and camera view.
-After a manual compilation with the Full JDK:
+Capture mode writes one PNG and exits:
 
 ```powershell
-& "$JDK\java" -cp out/production/3D-Table-Tennis-In-Java Table_Tennis_In_3D "--shot=Topspin loop" --at=0.18 --view=SIDE --ball2x=true --out=out/frame.png
+.\gradlew.bat run --args="--shot=Serve --at=0.45 --view=SIDE --out=frame.png"
 ```
 
-`--shot` accepts a name from `Shots.ALL`; quote names containing spaces. `--view` accepts a
-`render.CameraRig.View` value (`BEHIND`, `SIDE`, `HIGH`, `LOW`, `TOP`). `--at` is in simulated
-seconds. `--out` disables auto-replay so a capture past the end of a rally still completes.
+| Flag | Meaning |
+| --- | --- |
+| `--shot` | A feed name from `Feeds.All`; quote names with spaces (`"--shot=Topspin loop"`) |
+| `--at` | Simulated seconds to advance before the capture |
+| `--view` | `BEHIND`, `SIDE`, `HIGH`, `LOW` or `TOP` (case-insensitive) |
+| `--out` | The PNG to write; also turns auto-replay off, so a late capture still completes |
+| `--demo=true` | Let the demo hand play the player's side |
+| `--controldebug=true` | Show the `D` control readout |
+| `--ball2x=true` | Draw the ball at twice its size |
+| `--rallycam=true` | Keep the rally-cam on during a capture |
+
+The capture advances whole physics steps to `--at`, so the same arguments give the same image, up
+to a few pixels of GPU noise. Captures compare well pixel by pixel after a rendering change.
 
 ## Files and generated output
 
-- Commit only the game itself: application code, tests, documentation and wrapper files.
-  Personal development utilities do not belong in this repository.
-- Gradle writes generated output to `build/`; manual compilation uses the ignored `out/`.
-- `.gradle/`, `bin/`, IDE and editor state (`.idea/`, `.vscode/`, `.claude/`) and compiled
-  classes are generated or local, and never committed.
-- Keep the repository root for project entry points. Put longer documentation in `docs/`.
+- Commit only the program itself: code, tests, the golden trace, documentation and the wrapper.
+  Personal utilities, IDE and editor state (`.idea/`, `.vscode/`, `.claude/`) and generated output
+  (`build/`, `.gradle/`, `out/`, `bin/`) never go in the repository.
+- Keep the root for entry points (`README.md`, `AGENTS.md`, `CLAUDE.md`, the build); longer
+  documentation goes in `docs/`.
 
 ## Continuous integration
 
 GitHub Actions runs `check` on Ubuntu and Windows with Java 21 for every push and pull request
-(`.github/workflows/ci.yml`), using the committed wrapper. Both validation suites must pass.
+(`.github/workflows/ci.yml`), using the committed wrapper.

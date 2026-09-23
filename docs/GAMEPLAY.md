@@ -1,6 +1,6 @@
 # Gameplay and controls
 
-[Project overview](../README.md) · [Development](DEVELOPMENT.md) · [Design rationale](DESIGN.md)
+[Project overview](../README.md) · [Development](DEVELOPMENT.md) · [Game design](GAME-DESIGN.md)
 
 ## Gameplay
 
@@ -22,16 +22,16 @@ checked all the way to the bounce before it is played, so it clears the net and 
 than flying off the end. It is assisted, arcade-style, more *Ping Pong Fury* than a physics sim
 (though a full physics simulation runs underneath — see below).
 
-What that buys, measured over 75 different ways of swinging the paddle at the same ball: the raw
-physics puts 11 of them on the table and throws the ball up to 2.4 m wide at 24 m/s; through the
-assist all 75 land, none more than 0.38 m off centre, none faster than 12.4 m/s. Hitting harder
-always does a little more and never a lot more, so a long rally cannot spiral into a rocket.
+What that buys, measured when the assist was built over 75 different ways of swinging the paddle at
+the same ball: the raw physics put 11 of them on the table and threw the ball up to 2.4 m wide at
+24 m/s; through the assist all 75 landed. Hitting harder always does a little more and never a lot
+more, so a long rally cannot spiral into a rocket.
 
 The assist is not a guarantee, though — **you can still miss.** Every contact is graded on where it
 struck the blade, and the further out toward the rim you catch the ball the more of the raw physics
 you get and the less of the aimed shot. A clean, centred contact goes where you aimed it; a shot off
-the edge mostly does what real physics says, which is usually to die. Against a 5 m/s ball you have
-about 0.6 of the blade's radius to play with, and about 0.3 of it against an 18 m/s one.
+the edge mostly does what real physics says, which is usually to die. A fast ball has to be met
+closer to the centre than a slow one.
 
 You can only return the ball **after it has bounced on your side** (real table-tennis rule). A ball
 that bounces twice, comes back on your own half, or sails past the end line ends the point, and the
@@ -93,7 +93,7 @@ Playing the ball:
 There is no hit button — the shot is entirely in the mouse movement. Normally the paddle stays at
 one height; hold the right mouse button to switch the vertical cursor axis to brushing.
 
-Other keys (carried over from the physics demo):
+Other keys:
 
 | Key | Action |
 | --- | --- |
@@ -112,5 +112,6 @@ Other keys (carried over from the physics demo):
 | `B` | Draw the ball at 2× (physics still uses 40 mm) |
 | `A` | Toggle auto-replay |
 | `H` | Toggle the on-screen legend |
+| `M` | Demo mode: the game plays your side itself, until you press `M` again |
 | `Esc` | Quit |
 | Left-drag / scroll | Orbit / zoom the camera (turns the follow-cam off) |

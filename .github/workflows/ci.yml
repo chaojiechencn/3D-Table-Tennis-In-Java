@@ -26,8 +26,7 @@ jobs:
           java-version: '21'
           cache: gradle
 
-      # check runs both plain-Java validation suites (physics.SelfTest, play.RallyTest) through
-      # the selfTest and rallyTest tasks that test, check and build already depend on.
+      # check runs every module's JUnit checks, including the golden trace.
       # gradlew is committed without its execute bit, so it is invoked through bash.
       - name: Validate (Linux)
         if: runner.os != 'Windows'
