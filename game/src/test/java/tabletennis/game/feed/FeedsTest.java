@@ -29,13 +29,13 @@ final class FeedsTest {
     @Test
     void EveryAimedShotIsLegal() {
         for (Feed Shot : Feeds.All) {
-            if (Shot.Solution() == null) continue;
-            LaunchSolver.Solution Solution = Shot.Solution();
+            if (Shot.Aim() == null) continue;
+            LaunchSolver.Solution Solved = Shot.Aim();
 
-            Check("aim solver converged: " + Shot.Name(), Solution.Converged(),
-                  String.format("elevation %+.1f deg", Solution.ElevationDegrees()));
+            Check("aim solver converged: " + Shot.Name(), Solved.Converged(),
+                  String.format("elevation %+.1f deg", Solved.ElevationDegrees()));
 
-            Vec3 Landing = Solution.Landing();
+            Vec3 Landing = Solved.Landing();
             Check("first bounce is inside the lines: " + Shot.Name(),
                   Math.abs(Landing.X()) < TableSpec.Width / 2 && Math.abs(Landing.Z()) < TableSpec.Length / 2,
                   String.format("x=%+.2f z=%+.2f", Landing.X(), Landing.Z()));
@@ -44,8 +44,8 @@ final class FeedsTest {
                 // A serve clears the cord on its SECOND flight, so it is flown all the way through.
                 ServeIsLegal(Shot);
             } else {
-                Check("clears the net: " + Shot.Name(), Solution.NetClearance() > 0.01,
-                      String.format("%+.1f cm over the cord", Solution.NetClearance() * 100));
+                Check("clears the net: " + Shot.Name(), Solved.NetClearance() > 0.01,
+                      String.format("%+.1f cm over the cord", Solved.NetClearance() * 100));
             }
         }
     }
@@ -92,7 +92,7 @@ final class FeedsTest {
 
         // The negative case matters as much: a detector that fires on everything passes the check above.
         for (Feed Shot : Feeds.All) {
-            if (Shot.Solution() == null) continue;
+            if (Shot.Aim() == null) continue;
             Vec3 Landing = TrialFlight.LandingPoint(Shot.Ball());
             Check("aimed shot lands in: " + Shot.Name(), !LandsOut(Shot.Ball()),
                   String.format("landed at x=%+.2f z=%+.2f", Landing.X(), Landing.Z()));

@@ -82,7 +82,7 @@ public final class Feeds {
 
     private static Feed Aimed(String Name, String Detail, Vec3 From, Vec3 Target,
                               double Speed, double TopRevs, double SideRevs) {
-        LaunchSolver.Solution Solution = LaunchSolver.AtTarget(From, Target, Speed, TopRevs, SideRevs);
-        return new Feed(Name, Detail, Solution.State(), Solution);
+        LaunchSolver.Solution Solved = LaunchSolver.AtTarget(From, Target, Speed, TopRevs, SideRevs);
+        return new Feed(Name, Detail, Solved.State(), Solved);
     }
 }

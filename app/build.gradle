@@ -10,8 +10,9 @@ javafx {
 
 dependencies {
     implementation project(':game')
+    testImplementation testFixtures(project(':engine'))
 }
 
 application {
-    mainClass = 'tabletennis.app.TableTennisIn3D'
+    mainClass = 'tabletennis.app.TableTennisApp'
 }

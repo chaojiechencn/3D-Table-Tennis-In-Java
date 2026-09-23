@@ -8,7 +8,7 @@ import tabletennis.engine.math.Vec3;
  * A ball put into play: its menu name, a one-line description, the launch, and the solution that
  * aimed it (null for a raw launch such as the drop test).
  */
-public record Feed(String Name, String Detail, BallState Ball, LaunchSolver.Solution Solution) {
+public record Feed(String Name, String Detail, BallState Ball, LaunchSolver.Solution Aim) {
 
     /** A raw launch, not aimed at anything. */
     public static Feed Raw(String Name, String Detail, BallState Ball) {
@@ -18,5 +18,5 @@ public record Feed(String Name, String Detail, BallState Ball, LaunchSolver.Solu
     public BallState WithoutSpin() { return Ball.WithSpin(Vec3.Zero); }
 
     /** First bounce on the server's own half, so net clearance is asked after that bounce. */
-    public boolean IsServe() { return Solution != null && Solution.Landing().Z() > 0; }
+    public boolean IsServe() { return Aim != null && Aim.Landing().Z() > 0; }
 }

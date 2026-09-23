@@ -81,10 +81,10 @@ public final class PhysicsWorld {
             ContactSolver.Contact Touch = Earliest.Touch();
 
             BallState AtContact = Touch.Swept() ? Integrator.Step(Before, StepLeft * Touch.TimeOfImpact()) : Current;
-            ContactSolver.Response Response = ContactSolver.Respond(
+            ContactSolver.Response Outcome = ContactSolver.Respond(
                     AtContact, Earliest.Struck().Shape(), Touch, Earliest.Struck().Finish(), Simulation.Step);
-            Hits.add(new SurfaceHit(Earliest.Struck(), Response));
-            Current = Response.State();
+            Hits.add(new SurfaceHit(Earliest.Struck(), Outcome));
+            Current = Outcome.State();
 
             if (!Touch.Swept()) continue;
             double Left = StepLeft * (1.0 - Touch.TimeOfImpact());

@@ -70,11 +70,11 @@ final class RefereeTest {
         Judge(Rules, 0.1, RallyEvent.Hit(Side.Player, PlayerHalf));
         BallState Falling = BallState.At(new Vec3(1.2, 0.1, -0.5), new Vec3(0, -2, -5), Vec3.Zero);
         BallState Landed = BallState.At(new Vec3(1.2, 0.01, -0.51), new Vec3(0, -2, -5), Vec3.Zero);
-        Referee.Ruling Ruling = Rules.Judge(List.of(), Falling, Landed, 0.3);
-        boolean Called = Ruling.Events().stream().anyMatch(Event -> Event.Type() == EventType.OutOfBounds);
+        Referee.Ruling Verdict = Rules.Judge(List.of(), Falling, Landed, 0.3);
+        boolean Called = Verdict.Events().stream().anyMatch(Event -> Event.Type() == EventType.OutOfBounds);
         Check("a shot that comes down wide of the table before it bounces is out, against its hitter",
-              Called && Ruling.PointTo() == Side.Opponent,
-              "out called=" + Called + ", point to " + Ruling.PointTo());
+              Called && Verdict.PointTo() == Side.Opponent,
+              "out called=" + Called + ", point to " + Verdict.PointTo());
     }
 
     @Test

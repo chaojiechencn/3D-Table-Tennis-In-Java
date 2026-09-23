@@ -109,10 +109,10 @@ public final class GameSession {
             Physics.ReplaceBall(Assist.Assist(BeforeStep, Physics.Ball(), Struck, HitBy == Side.Player));
         }
 
-        Referee.Ruling Ruling = Rules.Judge(Contacts, Report.Before(), Report.After(), Physics.Time());
-        if (Ruling.PointTo() != null) AwardPoint(Ruling.PointTo());
+        Referee.Ruling Verdict = Rules.Judge(Contacts, Report.Before(), Report.After(), Physics.Time());
+        if (Verdict.PointTo() != null) AwardPoint(Verdict.PointTo());
         ScheduleFallbackReplay();
-        return new StepResult(HitBy, Ruling.PointTo(), Ruling.Events());
+        return new StepResult(HitBy, Verdict.PointTo(), Verdict.Events());
     }
 
     private void MoveRackets() {
