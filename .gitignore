@@ -1,15 +1,11 @@
-# Local IDE state; shared VS Code commands stay in version control.
+# IDE, editor and machine-specific state.
 /.idea/
-/.vscode/*
-!/.vscode/tasks.json
+/.vscode/
+/.claude/
 *.iml
 
-# Generated Java output and Gradle caches, only at the project root.
-/out/
-/bin/
-/build/
-/.gradle/
-
-# Python tools regenerate bytecode on import.
-__pycache__/
-*.py[cod]
+# Generated Java output and Gradle caches, in the root and in every module.
+out/
+bin/
+build/
+.gradle/

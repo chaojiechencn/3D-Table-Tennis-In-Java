@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: check (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      # check runs every module's JUnit checks, including the golden trace.
+      # gradlew is committed without its execute bit, so it is invoked through bash.
+      - name: Validate (Linux)
+        if: runner.os != 'Windows'
+        run: bash ./gradlew check --no-daemon --console=plain
+
+      - name: Validate (Windows)
+        if: runner.os == 'Windows'
+        run: .\gradlew.bat check --no-daemon --console=plain

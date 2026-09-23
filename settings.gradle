@@ -1,1 +1,4 @@
 rootProject.name = '3D-Table-Tennis-In-Java'
+
+// Dependencies run one way: app -> game -> engine. The engine sees no JavaFX and no game code.
+include 'engine', 'game', 'app'

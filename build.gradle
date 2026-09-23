@@ -1,48 +1,27 @@
-plugins {
-    id 'application'
-    id 'org.openjfx.javafxplugin' version '0.1.0'
-}
+subprojects {
+    apply plugin: 'java'
 
-repositories {
-    mavenCentral()
-}
-
-java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
+    repositories {
+        mavenCentral()
     }
-}
 
-javafx {
-    version = '21.0.2'
-    modules = ['javafx.controls', 'javafx.graphics', 'javafx.swing']
-}
+    java {
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(21)
+        }
+    }
 
-application {
-    mainClass = 'Table_Tennis_In_3D'
-}
+    dependencies {
+        testImplementation platform('org.junit:junit-bom:5.14.4')
+        testImplementation 'org.junit.jupiter:junit-jupiter'
+        testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    }
 
-tasks.register('selfTest', JavaExec) {
-    group = 'verification'
-    description = 'Runs the headless physics validation suite'
-    dependsOn tasks.named('testClasses')
-    mainClass = 'physics.SelfTest'
-    classpath = sourceSets.test.runtimeClasspath
-    javaLauncher = javaToolchains.launcherFor(java.toolchain)
-}
-
-tasks.register('rallyTest', JavaExec) {
-    group = 'verification'
-    description = 'Runs the headless gameplay validation suite'
-    dependsOn tasks.named('testClasses')
-    mainClass = 'play.RallyTest'
-    classpath = sourceSets.test.runtimeClasspath
-    javaLauncher = javaToolchains.launcherFor(java.toolchain)
-}
-
-// These suites are executable mains, so test/check/build must invoke them explicitly.
-// No framework tests are expected: failure comes from either suite's nonzero exit.
-tasks.named('test') {
-    dependsOn tasks.named('selfTest'), tasks.named('rallyTest')
-    failOnNoDiscoveredTests = false
+    tasks.named('test') {
+        useJUnitPlatform()
+        testLogging {
+            showStandardStreams = true
+            exceptionFormat = 'full'
+        }
+    }
 }

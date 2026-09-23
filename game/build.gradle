@@ -1,0 +1,18 @@
+plugins {
+    id 'java-library'
+}
+
+dependencies {
+    api project(':engine')
+    testImplementation testFixtures(project(':engine'))
+}
+
+tasks.register('writeGoldenTrace', JavaExec) {
+    group = 'verification'
+    description = 'Rewrites the golden trace fixture; only after a deliberate behavior change'
+    dependsOn tasks.named('testClasses')
+    mainClass = 'tabletennis.game.GoldenTrace'
+    classpath = sourceSets.test.runtimeClasspath
+    args file('src/test/resources/tabletennis/game/golden-trace.txt').absolutePath
+    javaLauncher = javaToolchains.launcherFor(java.toolchain)
+}
