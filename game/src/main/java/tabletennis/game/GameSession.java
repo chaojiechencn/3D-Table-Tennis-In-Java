@@ -7,7 +7,7 @@ import tabletennis.engine.World;
 
 import java.util.List;
 
-import static tabletennis.engine.Constants.DT;
+import static tabletennis.engine.Constants.Dt;
 
 /**
  * One headless game: the world, both rackets, the rally rules and the score. The application and
@@ -20,213 +20,213 @@ import static tabletennis.engine.Constants.DT;
 public final class GameSession {
 
     /** Watching time after a ball dies without a decision. */
-    static final double REPLAY_DELAY = 1.8;
+    static final double ReplayDelay = 1.8;
 
     /** A decided point is cut short rather than left to trickle to a stop. */
-    static final double POINT_END_DELAY = 0.9;
+    static final double PointEndDelay = 0.9;
 
     /** A push dug off the surface touches the table on the contact's own step; that is not a bounce. */
-    static final double CONTACT_BOUNCE_WINDOW = DT * 2;
+    static final double ContactBounceWindow = Dt * 2;
 
-    private static final double TERMINAL_EVENT_WINDOW = DT * 2;
+    private static final double TerminalEventWindow = Dt * 2;
 
     // With no clean event, the rally ends once the ball has dropped this far or all but stopped.
-    private static final double DROPPED_BELOW_Y = -0.60;
-    private static final double STOPPED_SPEED = 0.25;
-    private static final double STOPPED_AFTER = 1.5;
+    private static final double DroppedBelowY = -0.60;
+    private static final double StoppedSpeed = 0.25;
+    private static final double StoppedAfter = 1.5;
 
     /** What one step produced; either side may be null. */
-    public record StepResult(Scoreboard.Side hitBy, Scoreboard.Side pointTo) {
-        static final StepResult NONE = new StepResult(null, null);
-        public boolean contact()      { return hitBy != null; }
-        public boolean pointAwarded() { return pointTo != null; }
+    public record StepResult(Scoreboard.Side HitBy, Scoreboard.Side PointTo) {
+        static final StepResult None = new StepResult(null, null);
+        public boolean Contact()      { return HitBy != null; }
+        public boolean PointAwarded() { return PointTo != null; }
     }
 
-    private final World world = new World();
-    private final Paddle playerPaddle = new Paddle(PlayerReach.NEUTRAL, Stroke.SQUARE);
-    private final Paddle opponentPaddle = new Paddle(Follower.READY, Follower.SQUARE);
-    private final Stroke stroke = new Stroke(PlayerReach.NEUTRAL);
-    private final DemoPlayer demo = new DemoPlayer();
-    private final Opponent opponent;
-    private final ShotAssist shotAssist;
-    private final Scoreboard score = new Scoreboard();
+    private final World Physics = new World();
+    private final Paddle PlayerPaddle = new Paddle(PlayerReach.Neutral, Stroke.Square);
+    private final Paddle OpponentPaddle = new Paddle(Follower.Ready, Follower.Square);
+    private final Stroke PlayerStroke = new Stroke(PlayerReach.Neutral);
+    private final DemoPlayer Demo = new DemoPlayer();
+    private final Opponent OpponentPlayer;
+    private final ShotAssist Assist;
+    private final Scoreboard Score = new Scoreboard();
 
-    private Vec3 aim;                     // null until the mouse has moved
-    private boolean demoMode;
-    private boolean autoReplay = true;
-    private double replayAt = Double.NaN; // NaN while the rally is live
+    private Vec3 Aim;                     // null until the mouse has moved
+    private boolean DemoMode;
+    private boolean AutoReplay = true;
+    private double ReplayAt = Double.NaN; // NaN while the rally is live
 
-    private int lastPaddleHits;
-    private int lastBounceSerial;
-    private double lastHitTime;
-    private Scoreboard.Side lastHitter;   // null while the feed is the last thing that hit it
-    private boolean playerMayHit;
-    private boolean opponentMayHit;
-    private boolean pointOver;
-    private Scoreboard.Side awardedThisStep;
+    private int LastPaddleHits;
+    private int LastBounceSerial;
+    private double LastHitTime;
+    private Scoreboard.Side LastHitter;   // null while the feed is the last thing that hit it
+    private boolean PlayerMayHit;
+    private boolean OpponentMayHit;
+    private boolean PointOver;
+    private Scoreboard.Side AwardedThisStep;
 
     public GameSession() { this(new Follower(), new ShotAssist()); }
 
-    GameSession(Opponent opponent, ShotAssist shotAssist) {
-        this.opponent = opponent;
-        this.shotAssist = shotAssist;
-        world.setPaddles(playerPaddle, opponentPaddle);
+    GameSession(Opponent OpponentPlayer, ShotAssist Assist) {
+        this.OpponentPlayer = OpponentPlayer;
+        this.Assist = Assist;
+        Physics.SetPaddles(PlayerPaddle, OpponentPaddle);
     }
 
     /** Put a feed in play, keeping the match score. */
-    public void launch(Shots shot) {
-        world.launch(shot.state());
-        lastPaddleHits = 0;
-        lastBounceSerial = world.bounceSerial();
-        lastHitTime = -1;
-        lastHitter = null;
-        playerMayHit = false;
-        opponentMayHit = false;
-        pointOver = false;
-        replayAt = Double.NaN;
+    public void Launch(Shots Shot) {
+        Physics.Launch(Shot.State());
+        LastPaddleHits = 0;
+        LastBounceSerial = Physics.BounceSerial();
+        LastHitTime = -1;
+        LastHitter = null;
+        PlayerMayHit = false;
+        OpponentMayHit = false;
+        PointOver = false;
+        ReplayAt = Double.NaN;
     }
 
     /** Already mapped and clamped by the caller. */
-    public void setAim(Vec3 target) { aim = target; }
+    public void SetAim(Vec3 Target) { Aim = Target; }
 
     /** The demo hand replaces the mouse; never both. */
-    public void setDemoMode(boolean on) { demoMode = on; }
+    public void SetDemoMode(boolean On) { DemoMode = On; }
 
     /** Toggling either way drops any replay already scheduled. */
-    public void setAutoReplay(boolean on) {
-        autoReplay = on;
-        replayAt = Double.NaN;
+    public void SetAutoReplay(boolean On) {
+        AutoReplay = On;
+        ReplayAt = Double.NaN;
     }
 
-    public boolean replayDue() { return !Double.isNaN(replayAt) && world.time() >= replayAt; }
+    public boolean ReplayDue() { return !Double.isNaN(ReplayAt) && Physics.Time() >= ReplayAt; }
 
     /** Advance exactly one DT. Both blades are posed first, so contact uses this step's swing. */
-    public StepResult step() {
-        awardedThisStep = null;
-        moveRackets();
-        world.setPaddles(playerMayHit && !pointOver ? playerPaddle : null,
-                         opponentMayHit && !pointOver ? opponentPaddle : null);
+    public StepResult Step() {
+        AwardedThisStep = null;
+        MoveRackets();
+        Physics.SetPaddles(PlayerMayHit && !PointOver ? PlayerPaddle : null,
+                         OpponentMayHit && !PointOver ? OpponentPaddle : null);
 
-        BallState beforeStep = world.state();
-        world.step();
+        BallState BeforeStep = Physics.State();
+        Physics.Step();
 
-        Scoreboard.Side hitBy = handleContact(beforeStep);
-        handleBounce();
-        handleOutOrFloor();
-        scheduleFallbackReplay();
+        Scoreboard.Side HitBy = HandleContact(BeforeStep);
+        HandleBounce();
+        HandleOutOrFloor();
+        ScheduleFallbackReplay();
 
-        return hitBy == null && awardedThisStep == null
-                ? StepResult.NONE : new StepResult(hitBy, awardedThisStep);
+        return HitBy == null && AwardedThisStep == null
+                ? StepResult.None : new StepResult(HitBy, AwardedThisStep);
     }
 
-    private void moveRackets() {
-        if (demoMode) stroke.aimAt(demo.cursorFor(world.state(), playerMayHit && !pointOver, DT));
-        else if (aim != null) stroke.aimAt(aim);
-        stroke.advance(playerPaddle, DT);
-        opponent.advance(world.state(), opponentPaddle, DT);
+    private void MoveRackets() {
+        if (DemoMode) PlayerStroke.AimAt(Demo.CursorFor(Physics.State(), PlayerMayHit && !PointOver, Dt));
+        else if (Aim != null) PlayerStroke.AimAt(Aim);
+        PlayerStroke.Advance(PlayerPaddle, Dt);
+        OpponentPlayer.Advance(Physics.State(), OpponentPaddle, Dt);
     }
 
-    private Scoreboard.Side handleContact(BallState beforeStep) {
-        if (world.paddleHits() <= lastPaddleHits) return null;
-        lastPaddleHits = world.paddleHits();
+    private Scoreboard.Side HandleContact(BallState BeforeStep) {
+        if (Physics.PaddleHits() <= LastPaddleHits) return null;
+        LastPaddleHits = Physics.PaddleHits();
 
-        boolean playerHit = lastHitByPlayer();
-        Paddle racket = playerHit ? playerPaddle : opponentPaddle;
-        world.setState(shotAssist.assist(beforeStep, world.state(), racket, playerHit));
+        boolean PlayerHit = LastHitByPlayer();
+        Paddle Racket = PlayerHit ? PlayerPaddle : OpponentPaddle;
+        Physics.SetState(Assist.Assist(BeforeStep, Physics.State(), Racket, PlayerHit));
 
-        lastHitter = playerHit ? Scoreboard.Side.PLAYER : Scoreboard.Side.OPPONENT;
-        lastHitTime = world.time();
-        playerMayHit = false;
-        opponentMayHit = false;
-        return lastHitter;
+        LastHitter = PlayerHit ? Scoreboard.Side.Player : Scoreboard.Side.Opponent;
+        LastHitTime = Physics.Time();
+        PlayerMayHit = false;
+        OpponentMayHit = false;
+        return LastHitter;
     }
 
     /**
      * A first bounce opens the receiver's racket; a second, or the hitter's own half, decides the
      * point. The serial always advances, or the next bounce is compared with a stale one.
      */
-    private void handleBounce() {
-        boolean newBounce = world.bounceSerial() > lastBounceSerial;
-        if (newBounce && world.time() - lastHitTime > CONTACT_BOUNCE_WINDOW) {
-            Scoreboard.Side half = lastBounceHalf();
-            if (lastHitter == half) {
-                endPoint(half.other());                        // never crossed the net
-            } else if (half == Scoreboard.Side.PLAYER) {
-                if (playerMayHit) endPoint(Scoreboard.Side.OPPONENT); else playerMayHit = true;
+    private void HandleBounce() {
+        boolean NewBounce = Physics.BounceSerial() > LastBounceSerial;
+        if (NewBounce && Physics.Time() - LastHitTime > ContactBounceWindow) {
+            Scoreboard.Side Half = LastBounceHalf();
+            if (LastHitter == Half) {
+                EndPoint(Half.Other());                        // never crossed the net
+            } else if (Half == Scoreboard.Side.Player) {
+                if (PlayerMayHit) EndPoint(Scoreboard.Side.Opponent); else PlayerMayHit = true;
             } else {
-                if (opponentMayHit) endPoint(Scoreboard.Side.PLAYER); else opponentMayHit = true;
+                if (OpponentMayHit) EndPoint(Scoreboard.Side.Player); else OpponentMayHit = true;
             }
         }
-        lastBounceSerial = world.bounceSerial();
+        LastBounceSerial = Physics.BounceSerial();
     }
 
     /**
      * Out or floor decides against the last hitter; the feed counts as the player's. A net cord is
      * not here: a ball that clips the cord and lands legally is a good shot.
      */
-    private void handleOutOrFloor() {
-        World.Event last = world.lastEvent();
-        boolean terminal = last != null && world.time() - last.time() < TERMINAL_EVENT_WINDOW
-                && (last.type() == World.EventType.OUT_OF_BOUNDS || last.type() == World.EventType.FLOOR);
-        if (terminal) {
-            endPoint(lastHitter == Scoreboard.Side.OPPONENT
-                     ? Scoreboard.Side.PLAYER : Scoreboard.Side.OPPONENT);
+    private void HandleOutOrFloor() {
+        World.Event Last = Physics.LastEvent();
+        boolean Terminal = Last != null && Physics.Time() - Last.Time() < TerminalEventWindow
+                && (Last.Type() == World.EventType.OutOfBounds || Last.Type() == World.EventType.Floor);
+        if (Terminal) {
+            EndPoint(LastHitter == Scoreboard.Side.Opponent
+                     ? Scoreboard.Side.Player : Scoreboard.Side.Opponent);
         }
     }
 
-    private void scheduleFallbackReplay() {
-        BallState b = world.state();
-        boolean gone = b.pos().y() < DROPPED_BELOW_Y;
-        boolean stopped = world.time() > STOPPED_AFTER && b.speed() < STOPPED_SPEED;
-        if (autoReplay && Double.isNaN(replayAt) && (gone || stopped)) {
-            replayAt = world.time() + REPLAY_DELAY;
+    private void ScheduleFallbackReplay() {
+        BallState B = Physics.State();
+        boolean Gone = B.Pos().Y() < DroppedBelowY;
+        boolean Stopped = Physics.Time() > StoppedAfter && B.Speed() < StoppedSpeed;
+        if (AutoReplay && Double.isNaN(ReplayAt) && (Gone || Stopped)) {
+            ReplayAt = Physics.Time() + ReplayDelay;
         }
     }
 
     /** Awards once however many rules fire, and counts even with replay off. */
-    private void endPoint(Scoreboard.Side winner) {
-        if (pointOver) return;
-        pointOver = true;
-        awardedThisStep = winner;
-        score.pointTo(winner);
-        if (autoReplay && Double.isNaN(replayAt)) replayAt = world.time() + POINT_END_DELAY;
+    private void EndPoint(Scoreboard.Side Winner) {
+        if (PointOver) return;
+        PointOver = true;
+        AwardedThisStep = Winner;
+        Score.PointTo(Winner);
+        if (AutoReplay && Double.isNaN(ReplayAt)) ReplayAt = Physics.Time() + PointEndDelay;
     }
 
-    private boolean lastHitByPlayer() {
-        World.Event hit = latest(World.EventType.PADDLE_HIT);
-        return hit == null || hit.side() < 0;
+    private boolean LastHitByPlayer() {
+        World.Event Hit = Latest(World.EventType.PaddleHit);
+        return Hit == null || Hit.Side() < 0;
     }
 
-    private Scoreboard.Side lastBounceHalf() {
-        World.Event bounce = latest(World.EventType.TABLE_BOUNCE);
-        return bounce != null && bounce.side() < 0 ? Scoreboard.Side.PLAYER : Scoreboard.Side.OPPONENT;
+    private Scoreboard.Side LastBounceHalf() {
+        World.Event Bounce = Latest(World.EventType.TableBounce);
+        return Bounce != null && Bounce.Side() < 0 ? Scoreboard.Side.Player : Scoreboard.Side.Opponent;
     }
 
-    private World.Event latest(World.EventType type) {
-        List<World.Event> events = world.events();
-        for (int i = events.size() - 1; i >= 0; i--) {
-            if (events.get(i).type() == type) return events.get(i);
+    private World.Event Latest(World.EventType Type) {
+        List<World.Event> Events = Physics.Events();
+        for (int I = Events.size() - 1; I >= 0; I--) {
+            if (Events.get(I).Type() == Type) return Events.get(I);
         }
         return null;
     }
 
-    public BallState ball()              { return world.state(); }
-    public BallState previousBall()      { return world.previous(); }
-    public double time()                 { return world.time(); }
-    public Paddle.Blade playerBlade()    { return playerPaddle.collider(); }
-    public Paddle.Blade opponentBlade()  { return opponentPaddle.collider(); }
-    public int bounceSerial()            { return world.bounceSerial(); }
-    public List<Vec3> bounceMarks()      { return world.bounceMarks(); }
-    public List<World.Event> events()    { return world.events(); }
-    public Scoreboard.Snapshot score()   { return score.snapshot(); }
-    public boolean demoMode()            { return demoMode; }
-    public boolean autoReplay()          { return autoReplay; }
-    public boolean playerMayHit()        { return playerMayHit && !pointOver; }
-    public boolean opponentMayHit()      { return opponentMayHit && !pointOver; }
-    public boolean pointOver()           { return pointOver; }
+    public BallState Ball()              { return Physics.State(); }
+    public BallState PreviousBall()      { return Physics.Previous(); }
+    public double Time()                 { return Physics.Time(); }
+    public Paddle.Blade PlayerBlade()    { return PlayerPaddle.Collider(); }
+    public Paddle.Blade OpponentBlade()  { return OpponentPaddle.Collider(); }
+    public int BounceSerial()            { return Physics.BounceSerial(); }
+    public List<Vec3> BounceMarks()      { return Physics.BounceMarks(); }
+    public List<World.Event> Events()    { return Physics.Events(); }
+    public Scoreboard.Snapshot Score()   { return Score.Snapshot(); }
+    public boolean DemoMode()            { return DemoMode; }
+    public boolean AutoReplay()          { return AutoReplay; }
+    public boolean PlayerMayHit()        { return PlayerMayHit && !PointOver; }
+    public boolean OpponentMayHit()      { return OpponentMayHit && !PointOver; }
+    public boolean PointOver()           { return PointOver; }
 
-    public ShotAssist.Debug lastShot()   { return shotAssist.debug(); }
-    public double targetHalfWidth()      { return shotAssist.targetHalfWidth(); }
-    public double targetNearDepth()      { return shotAssist.targetNearDepth(); }
-    public double targetFarDepth()       { return shotAssist.targetFarDepth(); }
+    public ShotAssist.Debug LastShot()   { return Assist.Debug(); }
+    public double TargetHalfWidth()      { return Assist.TargetHalfWidth(); }
+    public double TargetNearDepth()      { return Assist.TargetNearDepth(); }
+    public double TargetFarDepth()       { return Assist.TargetFarDepth(); }
 }

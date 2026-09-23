@@ -11,97 +11,97 @@ public final class Aim {
     private Aim() {}
 
     /** netClearance is negative into the net and NaN if the shot never reaches it. */
-    public record Solution(BallState state, Vec3 landing, double netClearance,
-                           double elevationDeg, boolean converged) {}
+    public record Solution(BallState State, Vec3 Landing, double NetClearance,
+                           double ElevationDeg, boolean Converged) {}
 
-    private static final double MIN_ELEV = Math.toRadians(-35);
-    private static final double MAX_ELEV = Math.toRadians(45);
+    private static final double MinElev = Math.toRadians(-35);
+    private static final double MaxElev = Math.toRadians(45);
 
     /** 28 halvings of the 80 degree bracket is 14 nm of landing error; each contact solves many. */
-    private static final int ITERATIONS = 28;
+    private static final int Iterations = 28;
 
-    private static final int MAX_FLIGHT_STEPS = 480 * 6;
+    private static final int MaxFlightSteps = 480 * 6;
 
     /** Spin as a player describes it, in rev/s relative to the heading; negative top is backspin. */
-    public static Vec3 spin(Vec3 headingHoriz, double topRevs, double sideRevs) {
-        Vec3 f = new Vec3(headingHoriz.x(), 0, headingHoriz.z()).normalized();
-        if (f.lengthSquared() == 0) return Vec3.ZERO;
+    public static Vec3 Spin(Vec3 HeadingHoriz, double TopRevs, double SideRevs) {
+        Vec3 F = new Vec3(HeadingHoriz.X(), 0, HeadingHoriz.Z()).Normalized();
+        if (F.LengthSquared() == 0) return Vec3.Zero;
 
-        Vec3 topAxis = Vec3.UP.cross(f);
-        return topAxis.scale(topRevs * 2 * Math.PI)
-                      .plus(Vec3.UP.scale(sideRevs * 2 * Math.PI));
+        Vec3 TopAxis = Vec3.Up.Cross(F);
+        return TopAxis.Scale(TopRevs * 2 * Math.PI)
+                      .Plus(Vec3.Up.Scale(SideRevs * 2 * Math.PI));
     }
 
-    public static Solution atTarget(Vec3 from, Vec3 target, double speed,
-                                    double topRevs, double sideRevs) {
-        Vec3 flat = new Vec3(target.x() - from.x(), 0, target.z() - from.z());
-        double range = flat.length();
-        if (range < 1e-6) {
-            return new Solution(BallState.at(from, Vec3.ZERO, Vec3.ZERO), from, Double.NaN, 0, false);
+    public static Solution AtTarget(Vec3 From, Vec3 Target, double Speed,
+                                    double TopRevs, double SideRevs) {
+        Vec3 Flat = new Vec3(Target.X() - From.X(), 0, Target.Z() - From.Z());
+        double Range = Flat.Length();
+        if (Range < 1e-6) {
+            return new Solution(BallState.At(From, Vec3.Zero, Vec3.Zero), From, Double.NaN, 0, false);
         }
-        Vec3 heading = flat.scale(1.0 / range);
-        Vec3 spinVec = spin(heading, topRevs, sideRevs);
+        Vec3 Heading = Flat.Scale(1.0 / Range);
+        Vec3 SpinVec = Spin(Heading, TopRevs, SideRevs);
 
-        double lo = MIN_ELEV, hi = MAX_ELEV;
-        boolean tooFast = rangeAt(from, heading, speed, spinVec, lo) > range;
-        if (tooFast) return finish(from, heading, speed, spinVec, lo, false);
-        boolean tooSlow = rangeAt(from, heading, speed, spinVec, hi) < range;
-        if (tooSlow) return finish(from, heading, speed, spinVec, hi, false);
+        double Lo = MinElev, Hi = MaxElev;
+        boolean TooFast = RangeAt(From, Heading, Speed, SpinVec, Lo) > Range;
+        if (TooFast) return Finish(From, Heading, Speed, SpinVec, Lo, false);
+        boolean TooSlow = RangeAt(From, Heading, Speed, SpinVec, Hi) < Range;
+        if (TooSlow) return Finish(From, Heading, Speed, SpinVec, Hi, false);
 
-        for (int i = 0; i < ITERATIONS; i++) {
-            double mid = 0.5 * (lo + hi);
-            if (rangeAt(from, heading, speed, spinVec, mid) < range) lo = mid; else hi = mid;
+        for (int I = 0; I < Iterations; I++) {
+            double Mid = 0.5 * (Lo + Hi);
+            if (RangeAt(From, Heading, Speed, SpinVec, Mid) < Range) Lo = Mid; else Hi = Mid;
         }
-        return finish(from, heading, speed, spinVec, 0.5 * (lo + hi), true);
+        return Finish(From, Heading, Speed, SpinVec, 0.5 * (Lo + Hi), true);
     }
 
-    private static Solution finish(Vec3 from, Vec3 heading, double speed, Vec3 spinVec,
-                                   double elev, boolean converged) {
-        BallState launch = BallState.at(from, velocity(heading, speed, elev), spinVec);
-        Flight f = fly(launch);
-        return new Solution(launch, f.landing, f.netClearance, Math.toDegrees(elev), converged);
+    private static Solution Finish(Vec3 From, Vec3 Heading, double Speed, Vec3 SpinVec,
+                                   double Elev, boolean Converged) {
+        BallState Launch = BallState.At(From, Velocity(Heading, Speed, Elev), SpinVec);
+        Flight F = Fly(Launch);
+        return new Solution(Launch, F.Landing, F.NetClearance, Math.toDegrees(Elev), Converged);
     }
 
-    private static Vec3 velocity(Vec3 heading, double speed, double elevation) {
-        return heading.scale(speed * Math.cos(elevation))
-                      .plus(Vec3.UP.scale(speed * Math.sin(elevation)));
+    private static Vec3 Velocity(Vec3 Heading, double Speed, double Elevation) {
+        return Heading.Scale(Speed * Math.cos(Elevation))
+                      .Plus(Vec3.Up.Scale(Speed * Math.sin(Elevation)));
     }
 
-    private static double rangeAt(Vec3 from, Vec3 heading, double speed, Vec3 spinVec, double elev) {
-        Flight f = fly(BallState.at(from, velocity(heading, speed, elev), spinVec));
-        Vec3 d = f.landing.minus(from);
-        return Math.sqrt(d.x() * d.x() + d.z() * d.z());
+    private static double RangeAt(Vec3 From, Vec3 Heading, double Speed, Vec3 SpinVec, double Elev) {
+        Flight F = Fly(BallState.At(From, Velocity(Heading, Speed, Elev), SpinVec));
+        Vec3 D = F.Landing.Minus(From);
+        return Math.sqrt(D.X() * D.X() + D.Z() * D.Z());
     }
 
     /** Where a shot first meets the table plane, on the table or not. Never ask a World this. */
-    public static Vec3 landingPoint(BallState launch) {
-        return fly(launch).landing();
+    public static Vec3 LandingPoint(BallState Launch) {
+        return Fly(Launch).Landing();
     }
 
-    private record Flight(Vec3 landing, double netClearance) {}
+    private record Flight(Vec3 Landing, double NetClearance) {}
 
     /** Contact-free flight down to the descending crossing of the table plane. */
-    private static Flight fly(BallState s) {
-        double netClearance = Double.NaN;
-        double prevZ = s.pos().z();
+    private static Flight Fly(BallState S) {
+        double NetClearance = Double.NaN;
+        double PrevZ = S.Pos().Z();
 
-        for (int i = 0; i < MAX_FLIGHT_STEPS; i++) {
-            BallState next = Integrator.step(s, DT);
+        for (int I = 0; I < MaxFlightSteps; I++) {
+            BallState Next = Integrator.Step(S, Dt);
 
-            if (Double.isNaN(netClearance) && prevZ > 0 && next.pos().z() <= 0) {
-                double t = prevZ / (prevZ - next.pos().z());
-                double y = s.pos().y() + (next.pos().y() - s.pos().y()) * t;
-                netClearance = y - BALL_R - NET_HEIGHT;
+            if (Double.isNaN(NetClearance) && PrevZ > 0 && Next.Pos().Z() <= 0) {
+                double T = PrevZ / (PrevZ - Next.Pos().Z());
+                double Y = S.Pos().Y() + (Next.Pos().Y() - S.Pos().Y()) * T;
+                NetClearance = Y - BallR - NetHeight;
             }
-            prevZ = next.pos().z();
+            PrevZ = Next.Pos().Z();
 
-            if (next.pos().y() <= BALL_R && next.vel().y() < 0) {
-                double t = (s.pos().y() - BALL_R) / (s.pos().y() - next.pos().y());
-                return new Flight(Vec3.lerp(s.pos(), next.pos(), Math.max(0, Math.min(1, t))),
-                                  netClearance);
+            if (Next.Pos().Y() <= BallR && Next.Vel().Y() < 0) {
+                double T = (S.Pos().Y() - BallR) / (S.Pos().Y() - Next.Pos().Y());
+                return new Flight(Vec3.Lerp(S.Pos(), Next.Pos(), Math.max(0, Math.min(1, T))),
+                                  NetClearance);
             }
-            s = next;
+            S = Next;
         }
-        return new Flight(s.pos(), netClearance);
+        return new Flight(S.Pos(), NetClearance);
     }
 }

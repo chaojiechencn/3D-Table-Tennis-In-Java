@@ -10,43 +10,43 @@ public final class Integrator {
 
     private Integrator() {}
 
-    public static BallState step(BallState s, double dt) {
-        return step(s, dt, Aero.DEFAULT_DRAG);
+    public static BallState Step(BallState S, double Dt) {
+        return Step(S, Dt, Aero.DefaultDrag);
     }
 
     /** Under a named drag law; SelfTest uses a constant coefficient to compare with the closed form. */
-    public static BallState step(BallState s, double dt, Aero.DragModel drag) {
-        Vec3 p = s.pos(), v = s.vel(), w = s.spin();
+    public static BallState Step(BallState S, double Dt, Aero.DragModel Drag) {
+        Vec3 P = S.Pos(), V = S.Vel(), W = S.Spin();
 
-        Derivative a = Aero.derivative(p, v, w, drag);
-        Derivative b = sample(p, v, w, a, dt * 0.5, drag);
-        Derivative c = sample(p, v, w, b, dt * 0.5, drag);
-        Derivative d = sample(p, v, w, c, dt, drag);
+        Derivative A = Aero.Derivative(P, V, W, Drag);
+        Derivative B = Sample(P, V, W, A, Dt * 0.5, Drag);
+        Derivative C = Sample(P, V, W, B, Dt * 0.5, Drag);
+        Derivative D = Sample(P, V, W, C, Dt, Drag);
 
-        Vec3 newPos  = p.plusScaled(weighted(a.dPos(),  b.dPos(),  c.dPos(),  d.dPos()),  dt);
-        Vec3 newVel  = v.plusScaled(weighted(a.dVel(),  b.dVel(),  c.dVel(),  d.dVel()),  dt);
-        Vec3 newSpin = w.plusScaled(weighted(a.dSpin(), b.dSpin(), c.dSpin(), d.dSpin()), dt);
+        Vec3 NewPos  = P.PlusScaled(Weighted(A.DPos(),  B.DPos(),  C.DPos(),  D.DPos()),  Dt);
+        Vec3 NewVel  = V.PlusScaled(Weighted(A.DVel(),  B.DVel(),  C.DVel(),  D.DVel()),  Dt);
+        Vec3 NewSpin = W.PlusScaled(Weighted(A.DSpin(), B.DSpin(), C.DSpin(), D.DSpin()), Dt);
 
-        return new BallState(newPos, newVel, newSpin, spinOrientation(s.orient(), w, newSpin, dt));
+        return new BallState(NewPos, NewVel, NewSpin, SpinOrientation(S.Orient(), W, NewSpin, Dt));
     }
 
-    private static Derivative sample(Vec3 p, Vec3 v, Vec3 w, Derivative d, double dt,
-                                     Aero.DragModel drag) {
-        return Aero.derivative(p.plusScaled(d.dPos(), dt),
-                               v.plusScaled(d.dVel(), dt),
-                               w.plusScaled(d.dSpin(), dt),
-                               drag);
+    private static Derivative Sample(Vec3 P, Vec3 V, Vec3 W, Derivative D, double Dt,
+                                     Aero.DragModel Drag) {
+        return Aero.Derivative(P.PlusScaled(D.DPos(), Dt),
+                               V.PlusScaled(D.DVel(), Dt),
+                               W.PlusScaled(D.DSpin(), Dt),
+                               Drag);
     }
 
-    private static Vec3 weighted(Vec3 a, Vec3 b, Vec3 c, Vec3 d) {
-        return a.plus(b.scale(2)).plus(c.scale(2)).plus(d).scale(1.0 / 6.0);
+    private static Vec3 Weighted(Vec3 A, Vec3 B, Vec3 C, Vec3 D) {
+        return A.Plus(B.Scale(2)).Plus(C.Scale(2)).Plus(D).Scale(1.0 / 6.0);
     }
 
     /** Rotates by |omega|*dt about the mean spin axis: exact while the axis is steady. */
-    private static Quat spinOrientation(Quat orient, Vec3 spinBefore, Vec3 spinAfter, double dt) {
-        Vec3 mean = spinBefore.plus(spinAfter).scale(0.5);
-        double rate = mean.length();
-        if (rate < 1e-9) return orient;
-        return Quat.fromAxisAngle(mean, rate * dt).times(orient).normalized();
+    private static Quat SpinOrientation(Quat Orient, Vec3 SpinBefore, Vec3 SpinAfter, double Dt) {
+        Vec3 Mean = SpinBefore.Plus(SpinAfter).Scale(0.5);
+        double Rate = Mean.Length();
+        if (Rate < 1e-9) return Orient;
+        return Quat.FromAxisAngle(Mean, Rate * Dt).Times(Orient).Normalized();
     }
 }

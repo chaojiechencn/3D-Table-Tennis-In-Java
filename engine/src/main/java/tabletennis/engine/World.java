@@ -15,168 +15,168 @@ import static tabletennis.engine.Constants.*;
 public final class World {
 
     /** Top face on y = 0, the physics origin. */
-    public static final Box TABLE = Box.centered(
-            0, -TABLE_THICK / 2, 0,
-            TABLE_WIDTH, TABLE_THICK, TABLE_LENGTH);
+    public static final Box Table = Box.Centered(
+            0, -TableThick / 2, 0,
+            TableWidth, TableThick, TableLength);
 
-    public static final Box NET = Box.centered(
-            0, NET_HEIGHT / 2, 0,
-            NET_WIDTH, NET_HEIGHT, NET_THICK);
+    public static final Box Net = Box.Centered(
+            0, NetHeight / 2, 0,
+            NetWidth, NetHeight, NetThick);
 
     /** 120 m across because a missed ball rolls 17-20+ m; the visible floor is 14 x 16 m. */
-    public static final Box FLOOR = Box.centered(
-            0, -TABLE_HEIGHT - 0.5, 0,
+    public static final Box Floor = Box.Centered(
+            0, -TableHeight - 0.5, 0,
             120, 1.0, 120);
 
-    public enum EventType { TABLE_BOUNCE, NET, FLOOR, OUT_OF_BOUNDS, PADDLE_HIT }
+    public enum EventType { TableBounce, Net, Floor, OutOfBounds, PaddleHit }
 
     /** {@code side} is +1 on the far half (z &lt; 0), -1 on the near half, 0 for none. */
-    public record Event(EventType type, Vec3 at, double speed, double time, int side) {}
+    public record Event(EventType Type, Vec3 At, double Speed, double Time, int Side) {}
 
     // Slower contacts are real but not worth logging: a dying ball bounces dozens of times.
-    private static final double LOGGABLE_NET = 0.05;
-    private static final double LOGGABLE_BOUNCE = 0.35;
-    private static final double LOGGABLE_FLOOR = 0.4;
-    private static final double LOGGABLE_PADDLE = 0.3;
+    private static final double LoggableNet = 0.05;
+    private static final double LoggableBounce = 0.35;
+    private static final double LoggableFloor = 0.4;
+    private static final double LoggablePaddle = 0.3;
 
     /** Same-type events closer than this are one contact retriggering while the ball settles. */
-    private static final double EVENT_MERGE_WINDOW = 0.12;
-    private static final int MAX_EVENTS = 12;
-    private static final int MAX_MARKS = 24;
-    private static final int MAX_CONTACT_PASSES = 8;
-    private static final BallState START = BallState.at(new Vec3(0, 0.30, 1.20), Vec3.ZERO, Vec3.ZERO);
+    private static final double EventMergeWindow = 0.12;
+    private static final int MaxEvents = 12;
+    private static final int MaxMarks = 24;
+    private static final int MaxContactPasses = 8;
+    private static final BallState ParkedBall = BallState.At(new Vec3(0, 0.30, 1.20), Vec3.Zero, Vec3.Zero);
 
-    private BallState state;
-    private BallState previous;
-    private double time;
-    private double apex;
-    private int tableBounces;       // per stroke: reset by each paddle contact
-    private boolean outReported;
-    private int bounceSerial;       // never reset: "has anything landed since I looked?"
-    private int paddleHits;
+    private BallState State;
+    private BallState Previous;
+    private double Time;
+    private double Apex;
+    private int TableBounces;       // per stroke: reset by each paddle contact
+    private boolean OutReported;
+    private int BounceSerial;       // never reset: "has anything landed since I looked?"
+    private int PaddleHits;
 
-    /** Null in a paddle-free world, which is what {@link #predict} needs. */
-    private Paddle player;
-    private Paddle opponent;
+    /** Null in a paddle-free world, which is what {@link #Predict} needs. */
+    private Paddle Player;
+    private Paddle Opponent;
 
-    private final Deque<Event> events = new ArrayDeque<>();
-    private final List<Vec3> bounceMarks = new ArrayList<>();
+    private final Deque<Event> Events = new ArrayDeque<>();
+    private final List<Vec3> BounceMarks = new ArrayList<>();
 
     public World() {
-        reset(START);
+        Reset(ParkedBall);
     }
 
-    public void reset(BallState s) {
-        state = s;
-        previous = s;
-        time = 0;
-        apex = s.pos().y();
-        tableBounces = 0;
-        outReported = false;
-        paddleHits = 0;
-        events.clear();
-        bounceMarks.clear();
+    public void Reset(BallState S) {
+        State = S;
+        Previous = S;
+        Time = 0;
+        Apex = S.Pos().Y();
+        TableBounces = 0;
+        OutReported = false;
+        PaddleHits = 0;
+        Events.clear();
+        BounceMarks.clear();
     }
 
-    public void launch(BallState s) {
-        reset(s);
+    public void Launch(BallState S) {
+        Reset(S);
     }
 
     /** Flight, then contacts: an impulse is a discontinuity RK4 must never straddle. */
-    public void step() {
-        previous = state;
-        state = resolveContacts(previous, Integrator.step(state, DT));
-        time += DT;
+    public void Step() {
+        Previous = State;
+        State = ResolveContacts(Previous, Integrator.Step(State, Dt));
+        Time += Dt;
 
-        if (state.pos().y() > apex) apex = state.pos().y();
-        detectOutOfBounds(previous, state);
+        if (State.Pos().Y() > Apex) Apex = State.Pos().Y();
+        DetectOutOfBounds(Previous, State);
 
-        if (!state.isFinite()) reset(START);   // unreachable, but never freeze on a NaN
+        if (!State.IsFinite()) Reset(ParkedBall);   // unreachable, but never freeze on a NaN
     }
 
-    private record Surface(Collider shape, Material material, EventType event) {}
+    private record Surface(Collider Shape, Material SurfaceMaterial, EventType Kind) {}
 
-    private record SurfaceContact(Surface surface, Contacts.Contact contact) {}
+    private record SurfaceContact(Surface Struck, Contacts.Contact Touch) {}
 
-    private List<Surface> surfaces() {
-        List<Surface> all = new ArrayList<>(5);
-        all.add(new Surface(NET,   NET_MAT,   EventType.NET));
-        all.add(new Surface(TABLE, TABLE_MAT, EventType.TABLE_BOUNCE));
-        all.add(new Surface(FLOOR, FLOOR_MAT, EventType.FLOOR));
-        if (player != null)   all.add(new Surface(player.collider(),   RACKET_MAT, EventType.PADDLE_HIT));
-        if (opponent != null) all.add(new Surface(opponent.collider(), RACKET_MAT, EventType.PADDLE_HIT));
-        return all;
+    private List<Surface> Surfaces() {
+        List<Surface> All = new ArrayList<>(5);
+        All.add(new Surface(Net,   NetMat,   EventType.Net));
+        All.add(new Surface(Table, TableMat, EventType.TableBounce));
+        All.add(new Surface(Floor, FloorMat, EventType.Floor));
+        if (Player != null)   All.add(new Surface(Player.Collider(),   RacketMat, EventType.PaddleHit));
+        if (Opponent != null) All.add(new Surface(Opponent.Collider(), RacketMat, EventType.PaddleHit));
+        return All;
     }
 
     /**
      * Resolve the EARLIEST contact, repeatedly: a ball that clips the cord can be pushed into the
      * table in the same step. After a swept contact the rest of the step is flown, not skipped.
      */
-    private BallState resolveContacts(BallState from, BallState to) {
-        BallState before = from, current = to;
-        double stepLeft = DT;
-        List<Surface> all = surfaces();   // one snapshot of each blade per step
+    private BallState ResolveContacts(BallState From, BallState To) {
+        BallState Before = From, Current = To;
+        double StepLeft = Dt;
+        List<Surface> All = Surfaces();   // one snapshot of each blade per step
 
-        for (int pass = 0; pass < MAX_CONTACT_PASSES; pass++) {
-            SurfaceContact hit = earliestContact(all, before, current);
-            if (hit == null) return current;
-            Contacts.Contact c = hit.contact();
+        for (int Pass = 0; Pass < MaxContactPasses; Pass++) {
+            SurfaceContact Outcome = EarliestContact(All, Before, Current);
+            if (Outcome == null) return Current;
+            Contacts.Contact C = Outcome.Touch();
 
             // Bounce the state AT impact; the end-of-step velocity would add energy.
-            BallState atContact = c.swept() ? Integrator.step(before, stepLeft * c.toi()) : current;
-            Hit result = Contacts.respond(atContact, hit.surface().shape(), c, hit.surface().material());
-            record(hit.surface(), result);
-            current = result.state();
+            BallState AtContact = C.Swept() ? Integrator.Step(Before, StepLeft * C.Toi()) : Current;
+            Hit Result = Contacts.Respond(AtContact, Outcome.Struck().Shape(), C, Outcome.Struck().SurfaceMaterial());
+            Record(Outcome.Struck(), Result);
+            Current = Result.State();
 
-            if (!c.swept()) continue;
-            double left = stepLeft * (1.0 - c.toi());
-            if (left < 1e-9) continue;
+            if (!C.Swept()) continue;
+            double Left = StepLeft * (1.0 - C.Toi());
+            if (Left < 1e-9) continue;
 
-            before = current;
-            current = Integrator.step(current, left);
-            stepLeft = left;
+            Before = Current;
+            Current = Integrator.Step(Current, Left);
+            StepLeft = Left;
         }
-        return current;
+        return Current;
     }
 
-    private static SurfaceContact earliestContact(List<Surface> all, BallState before, BallState after) {
-        SurfaceContact earliest = null;
-        for (Surface s : all) {
-            Contacts.Contact c = Contacts.detect(before, after, s.shape());
-            if (c != null && (earliest == null || c.toi() < earliest.contact().toi())) {
-                earliest = new SurfaceContact(s, c);
+    private static SurfaceContact EarliestContact(List<Surface> All, BallState Before, BallState After) {
+        SurfaceContact Earliest = null;
+        for (Surface S : All) {
+            Contacts.Contact C = Contacts.Detect(Before, After, S.Shape());
+            if (C != null && (Earliest == null || C.Toi() < Earliest.Touch().Toi())) {
+                Earliest = new SurfaceContact(S, C);
             }
         }
-        return earliest;
+        return Earliest;
     }
 
-    private void record(Surface s, Hit hit) {
-        Vec3 p = hit.point();
-        int half = p.z() < 0 ? 1 : -1;
-        switch (s.event()) {
-            case NET -> {
-                if (hit.impactSpeed() > LOGGABLE_NET) record(EventType.NET, p, hit.impactSpeed(), 0);
+    private void Record(Surface S, Hit Outcome) {
+        Vec3 P = Outcome.Point();
+        int Half = P.Z() < 0 ? 1 : -1;
+        switch (S.Kind()) {
+            case Net -> {
+                if (Outcome.ImpactSpeed() > LoggableNet) Record(EventType.Net, P, Outcome.ImpactSpeed(), 0);
             }
-            case TABLE_BOUNCE -> {
-                if (!hit.resting() && hit.impactSpeed() > LOGGABLE_BOUNCE) {
-                    tableBounces++;
-                    bounceSerial++;
-                    record(EventType.TABLE_BOUNCE, p, hit.impactSpeed(), half);
-                    addMark(p);
+            case TableBounce -> {
+                if (!Outcome.Resting() && Outcome.ImpactSpeed() > LoggableBounce) {
+                    TableBounces++;
+                    BounceSerial++;
+                    Record(EventType.TableBounce, P, Outcome.ImpactSpeed(), Half);
+                    AddMark(P);
                 }
             }
-            case FLOOR -> {
-                if (!hit.resting() && hit.impactSpeed() > LOGGABLE_FLOOR) {
-                    record(EventType.FLOOR, p, hit.impactSpeed(), 0);
+            case Floor -> {
+                if (!Outcome.Resting() && Outcome.ImpactSpeed() > LoggableFloor) {
+                    Record(EventType.Floor, P, Outcome.ImpactSpeed(), 0);
                 }
             }
-            case PADDLE_HIT -> {
-                if (hit.impactSpeed() > LOGGABLE_PADDLE) {
-                    paddleHits++;
-                    record(EventType.PADDLE_HIT, p, hit.impactSpeed(), half);
+            case PaddleHit -> {
+                if (Outcome.ImpactSpeed() > LoggablePaddle) {
+                    PaddleHits++;
+                    Record(EventType.PaddleHit, P, Outcome.ImpactSpeed(), Half);
                     // A new stroke is a new shot: the in/out rules start again.
-                    tableBounces = 0;
-                    outReported = false;
+                    TableBounces = 0;
+                    OutReported = false;
                 }
             }
             default -> { }
@@ -187,74 +187,74 @@ public final class World {
      * OUT fires where the ball descends through the table plane off the table -- only before the
      * shot has landed; after a legal bounce, sailing off the end is the receiver's problem.
      */
-    private void detectOutOfBounds(BallState before, BallState after) {
-        if (outReported || tableBounces > 0) return;
+    private void DetectOutOfBounds(BallState Before, BallState After) {
+        if (OutReported || TableBounces > 0) return;
 
-        boolean crossedDown = before.pos().y() > BALL_R && after.pos().y() <= BALL_R;
-        if (!crossedDown || after.vel().y() >= 0) return;
+        boolean CrossedDown = Before.Pos().Y() > BallR && After.Pos().Y() <= BallR;
+        if (!CrossedDown || After.Vel().Y() >= 0) return;
 
-        Vec3 p = after.pos();
-        boolean overTable = Math.abs(p.x()) <= TABLE_WIDTH / 2 + BALL_R
-                         && Math.abs(p.z()) <= TABLE_LENGTH / 2 + BALL_R;
-        if (!overTable) {
-            record(EventType.OUT_OF_BOUNDS, p, after.speed(), 0);
-            outReported = true;
+        Vec3 P = After.Pos();
+        boolean OverTable = Math.abs(P.X()) <= TableWidth / 2 + BallR
+                         && Math.abs(P.Z()) <= TableLength / 2 + BallR;
+        if (!OverTable) {
+            Record(EventType.OutOfBounds, P, After.Speed(), 0);
+            OutReported = true;
         }
     }
 
-    private void record(EventType type, Vec3 at, double speed, int side) {
-        Event last = events.peekLast();
-        if (last != null && last.type() == type && time - last.time() < EVENT_MERGE_WINDOW) return;
+    private void Record(EventType Type, Vec3 At, double Speed, int Side) {
+        Event Last = Events.peekLast();
+        if (Last != null && Last.Type() == Type && Time - Last.Time() < EventMergeWindow) return;
 
-        events.addLast(new Event(type, at, speed, time, side));
-        while (events.size() > MAX_EVENTS) events.removeFirst();
+        Events.addLast(new Event(Type, At, Speed, Time, Side));
+        while (Events.size() > MaxEvents) Events.removeFirst();
     }
 
-    private void addMark(Vec3 p) {
-        bounceMarks.add(new Vec3(p.x(), 0.001, p.z()));
-        while (bounceMarks.size() > MAX_MARKS) bounceMarks.remove(0);
+    private void AddMark(Vec3 P) {
+        BounceMarks.add(new Vec3(P.X(), 0.001, P.Z()));
+        while (BounceMarks.size() > MaxMarks) BounceMarks.remove(0);
     }
 
-    public BallState state()    { return state; }
-    public BallState previous() { return previous; }
+    public BallState State()    { return State; }
+    public BallState Previous() { return Previous; }
 
     /** Only play.ShotAssist replaces the state; SelfTest and predict never do. */
-    public void setState(BallState s) { state = s; }
-    public double time()        { return time; }
-    public double apex()        { return apex; }
-    public int tableBounces()   { return tableBounces; }
-    public int bounceSerial()   { return bounceSerial; }
-    public int paddleHits()     { return paddleHits; }
+    public void SetState(BallState S) { State = S; }
+    public double Time()        { return Time; }
+    public double Apex()        { return Apex; }
+    public int TableBounces()   { return TableBounces; }
+    public int BounceSerial()   { return BounceSerial; }
+    public int PaddleHits()     { return PaddleHits; }
 
 
     /** Null for both makes this a plain flight simulator. */
-    public void setPaddles(Paddle player, Paddle opponent) {
-        this.player = player;
-        this.opponent = opponent;
+    public void SetPaddles(Paddle Player, Paddle Opponent) {
+        this.Player = Player;
+        this.Opponent = Opponent;
     }
 
-    public List<Event> events()    { return List.copyOf(events); }
-    public Event lastEvent()       { return events.peekLast(); }
-    public List<Vec3> bounceMarks() { return List.copyOf(bounceMarks); }
+    public List<Event> Events()    { return List.copyOf(Events); }
+    public Event LastEvent()       { return Events.peekLast(); }
+    public List<Vec3> BounceMarks() { return List.copyOf(BounceMarks); }
 
-    public boolean overTable() {
-        Vec3 p = state.pos();
-        return Math.abs(p.x()) <= TABLE_WIDTH / 2 && Math.abs(p.z()) <= TABLE_LENGTH / 2;
+    public boolean OverTable() {
+        Vec3 P = State.Pos();
+        return Math.abs(P.X()) <= TableWidth / 2 && Math.abs(P.Z()) <= TableLength / 2;
     }
 
     /** A paddle-free flight of {@code seconds}, keeping one point every {@code stride} steps. */
-    public static List<Vec3> predict(BallState start, double seconds, int stride) {
-        List<Vec3> path = new ArrayList<>();
-        World w = new World();
-        w.launch(start);
+    public static List<Vec3> Predict(BallState Start, double Seconds, int Stride) {
+        List<Vec3> Path = new ArrayList<>();
+        World W = new World();
+        W.Launch(Start);
 
-        int steps = (int) Math.round(seconds / DT);
-        for (int i = 0; i < steps; i++) {
-            if (i % stride == 0) path.add(w.state().pos());
-            w.step();
-            boolean restingOnFloor = w.state().pos().y() < -TABLE_HEIGHT + BALL_R && w.state().speed() < 0.5;
-            if (restingOnFloor) break;
+        int Steps = (int) Math.round(Seconds / Dt);
+        for (int I = 0; I < Steps; I++) {
+            if (I % Stride == 0) Path.add(W.State().Pos());
+            W.Step();
+            boolean RestingOnFloor = W.State().Pos().Y() < -TableHeight + BallR && W.State().Speed() < 0.5;
+            if (RestingOnFloor) break;
         }
-        return path;
+        return Path;
     }
 }

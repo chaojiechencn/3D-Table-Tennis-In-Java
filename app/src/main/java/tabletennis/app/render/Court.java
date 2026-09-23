@@ -21,42 +21,42 @@ import static tabletennis.engine.Constants.*;
 public final class Court {
 
     /** ITTF Laws 2.1.4 and 2.1.6: side/end lines equal a ball radius; doubles line is 15% of it. */
-    private static final double LINE_W = BALL_R;
-    private static final double CENTRE_LINE_W = BALL_R * 0.15;
+    private static final double LineW = BallR;
+    private static final double CentreLineW = BallR * 0.15;
 
     /** TUNED: enough separation to beat depth fighting without a visibly floating marking. */
-    private static final double LINE_LIFT = TABLE_THICK * 0.048;
+    private static final double LineLift = TableThick * 0.048;
 
     /** Shared with the floor's baked contact shadows, so feet and shadows cannot drift apart. */
-    static final double LEG_X = TABLE_WIDTH * 0.42;
-    static final double LEG_Z = TABLE_LENGTH * 0.40;
+    static final double LegX = TableWidth * 0.42;
+    static final double LegZ = TableLength * 0.40;
 
     private Court() {}
 
     /** Static maps and shared materials are constructed once, not at frame rate. */
-    public static Group build() {
-        return new Group(room(), tableTop(), markings(), frame(), net());
+    public static Group Build() {
+        return new Group(Room(), TableTop(), Markings(), Frame(), Net());
     }
 
-    private static Box tableTop() {
+    private static Box TableTop() {
         // The TOP stays exactly at y=0, matching World.TABLE, including the slab thickness.
-        return box(TABLE_WIDTH, TABLE_THICK, TABLE_LENGTH,
-                0, -TABLE_THICK / 2, 0, SurfaceMaterials.table());
+        return Box(TableWidth, TableThick, TableLength,
+                0, -TableThick / 2, 0, SurfaceMaterials.Table());
     }
 
-    private static Group markings() {
-        Group g = new Group();
-        PhongMaterial white = SurfaceMaterials.solid("#e2e9e8", 0.025, 16);
-        double halfW = TABLE_WIDTH / 2, halfL = TABLE_LENGTH / 2;
-        for (int side : new int[] { -1, 1 }) {
-            g.getChildren().add(box(LINE_W, TABLE_THICK * 0.04, TABLE_LENGTH,
-                    side * (halfW - LINE_W / 2), LINE_LIFT, 0, white));
-            g.getChildren().add(box(TABLE_WIDTH, TABLE_THICK * 0.04, LINE_W,
-                    0, LINE_LIFT, side * (halfL - LINE_W / 2), white));
+    private static Group Markings() {
+        Group G = new Group();
+        PhongMaterial White = SurfaceMaterials.Solid("#e2e9e8", 0.025, 16);
+        double HalfW = TableWidth / 2, HalfL = TableLength / 2;
+        for (int Side : new int[] { -1, 1 }) {
+            G.getChildren().add(Box(LineW, TableThick * 0.04, TableLength,
+                    Side * (HalfW - LineW / 2), LineLift, 0, White));
+            G.getChildren().add(Box(TableWidth, TableThick * 0.04, LineW,
+                    0, LineLift, Side * (HalfL - LineW / 2), White));
         }
-        g.getChildren().add(box(CENTRE_LINE_W, TABLE_THICK * 0.04, TABLE_LENGTH,
-                0, LINE_LIFT, 0, white));
-        return g;
+        G.getChildren().add(Box(CentreLineW, TableThick * 0.04, TableLength,
+                0, LineLift, 0, White));
+        return G;
     }
 
     /**
@@ -64,82 +64,82 @@ public final class Court {
      * Crossbars and feet give the table weight. They end at the physical floor rather than
      * running through it; all of this is decoration and never added to the collision world.
      */
-    private static Group frame() {
-        Group g = new Group();
-        PhongMaterial metal = SurfaceMaterials.solid("#242f3b", 0.25, 64);
-        PhongMaterial rim = SurfaceMaterials.solid("#7f9ba5", 0.35, 72);
-        PhongMaterial rubber = SurfaceMaterials.solid("#111820", 0.02, 12);
-        double apron = TABLE_THICK * 3;
-        double inset = TABLE_THICK * 0.4;
-        double footHeight = TABLE_THICK * 0.65;
-        double legHeight = TABLE_HEIGHT - TABLE_THICK - footHeight;
-        for (int side : new int[] { -1, 1 }) {
-            g.getChildren().add(box(TABLE_THICK, apron, TABLE_LENGTH - inset * 2,
-                    side * (TABLE_WIDTH / 2 - inset), -TABLE_THICK - apron / 2, 0, metal));
-            g.getChildren().add(box(TABLE_WIDTH - inset * 2, apron, TABLE_THICK,
-                    0, -TABLE_THICK - apron / 2, side * (TABLE_LENGTH / 2 - inset), metal));
-            g.getChildren().add(box(TABLE_THICK * 0.25, TABLE_THICK * 0.18, TABLE_LENGTH,
-                    side * TABLE_WIDTH / 2, -TABLE_THICK * 0.75, 0, rim));
-            g.getChildren().add(box(TABLE_WIDTH, TABLE_THICK * 0.18, TABLE_THICK * 0.25,
-                    0, -TABLE_THICK * 0.75, side * TABLE_LENGTH / 2, rim));
-            g.getChildren().add(box(LEG_X * 2, TABLE_THICK * 1.4, TABLE_THICK * 1.4,
-                    0, -TABLE_HEIGHT * 0.68, side * LEG_Z, metal));
-            for (int end : new int[] { -1, 1 }) {
-                g.getChildren().add(box(TABLE_THICK * 2, legHeight, TABLE_THICK * 2,
-                        side * LEG_X, -TABLE_THICK - legHeight / 2, end * LEG_Z, metal));
-                g.getChildren().add(box(TABLE_THICK * 3.2, footHeight, TABLE_THICK * 3.2,
-                        side * LEG_X, -TABLE_HEIGHT + footHeight / 2, end * LEG_Z, rubber));
+    private static Group Frame() {
+        Group G = new Group();
+        PhongMaterial Metal = SurfaceMaterials.Solid("#242f3b", 0.25, 64);
+        PhongMaterial Rim = SurfaceMaterials.Solid("#7f9ba5", 0.35, 72);
+        PhongMaterial Rubber = SurfaceMaterials.Solid("#111820", 0.02, 12);
+        double Apron = TableThick * 3;
+        double Inset = TableThick * 0.4;
+        double FootHeight = TableThick * 0.65;
+        double LegHeight = TableHeight - TableThick - FootHeight;
+        for (int Side : new int[] { -1, 1 }) {
+            G.getChildren().add(Box(TableThick, Apron, TableLength - Inset * 2,
+                    Side * (TableWidth / 2 - Inset), -TableThick - Apron / 2, 0, Metal));
+            G.getChildren().add(Box(TableWidth - Inset * 2, Apron, TableThick,
+                    0, -TableThick - Apron / 2, Side * (TableLength / 2 - Inset), Metal));
+            G.getChildren().add(Box(TableThick * 0.25, TableThick * 0.18, TableLength,
+                    Side * TableWidth / 2, -TableThick * 0.75, 0, Rim));
+            G.getChildren().add(Box(TableWidth, TableThick * 0.18, TableThick * 0.25,
+                    0, -TableThick * 0.75, Side * TableLength / 2, Rim));
+            G.getChildren().add(Box(LegX * 2, TableThick * 1.4, TableThick * 1.4,
+                    0, -TableHeight * 0.68, Side * LegZ, Metal));
+            for (int End : new int[] { -1, 1 }) {
+                G.getChildren().add(Box(TableThick * 2, LegHeight, TableThick * 2,
+                        Side * LegX, -TableThick - LegHeight / 2, End * LegZ, Metal));
+                G.getChildren().add(Box(TableThick * 3.2, FootHeight, TableThick * 3.2,
+                        Side * LegX, -TableHeight + FootHeight / 2, End * LegZ, Rubber));
             }
         }
-        return g;
+        return G;
     }
 
     /**
      * Real opaque strands preserve front/behind ordering through the net's holes. The mesh
      * stays a little coarser than regulation to survive pixel sampling at the far end; making
      * it denser or replacing it with a translucent slab would hurt the most useful depth cue.
-     * TUNED strand/tape proportions derive from NET_THICK; the cord's top remains NET_HEIGHT.
+     * TUNED strand/tape proportions derive from NetThick; the cord's top remains NetHeight.
      */
-    private static Group net() {
-        Group g = new Group();
-        PhongMaterial cord = SurfaceMaterials.solid("#75949f", 0.035, 16);
-        PhongMaterial tape = SurfaceMaterials.tape();
-        PhongMaterial metal = SurfaceMaterials.solid("#344655", 0.3, 64);
-        PhongMaterial cap = SurfaceMaterials.solid("#aac2c7", 0.32, 64);
-        double halfW = NET_WIDTH / 2;
-        double strand = NET_THICK / 4;
-        double tapeHeight = NET_THICK * 2;
-        int columns = (int) Math.ceil(NET_WIDTH / (NET_HEIGHT / 9));
-        double spacing = NET_WIDTH / columns;
-        for (int i = 0; i <= columns; i++) {
-            g.getChildren().add(box(strand, NET_HEIGHT, strand,
-                    -halfW + i * spacing, NET_HEIGHT / 2, 0, cord));
+    private static Group Net() {
+        Group G = new Group();
+        PhongMaterial Cord = SurfaceMaterials.Solid("#75949f", 0.035, 16);
+        PhongMaterial Tape = SurfaceMaterials.Tape();
+        PhongMaterial Metal = SurfaceMaterials.Solid("#344655", 0.3, 64);
+        PhongMaterial Cap = SurfaceMaterials.Solid("#aac2c7", 0.32, 64);
+        double HalfW = NetWidth / 2;
+        double Strand = NetThick / 4;
+        double TapeHeight = NetThick * 2;
+        int Columns = (int) Math.ceil(NetWidth / (NetHeight / 9));
+        double Spacing = NetWidth / Columns;
+        for (int I = 0; I <= Columns; I++) {
+            G.getChildren().add(Box(Strand, NetHeight, Strand,
+                    -HalfW + I * Spacing, NetHeight / 2, 0, Cord));
         }
-        for (double y = spacing; y < NET_HEIGHT - tapeHeight; y += spacing) {
-            g.getChildren().add(box(NET_WIDTH, strand, strand, 0, y, 0, cord));
+        for (double Y = Spacing; Y < NetHeight - TapeHeight; Y += Spacing) {
+            G.getChildren().add(Box(NetWidth, Strand, Strand, 0, Y, 0, Cord));
         }
-        g.getChildren().add(box(NET_WIDTH, tapeHeight, NET_THICK * 2 / 3,
-                0, NET_HEIGHT - tapeHeight / 2, 0, tape));
-        g.getChildren().add(box(NET_WIDTH, strand * 1.4, strand * 1.4,
-                0, strand, 0, cord));
-        for (int side : new int[] { -1, 1 }) {
-            double sx = side * halfW;
-            Cylinder post = new Cylinder(Xform.length(NET_THICK * 1.6),
-                    Xform.length(NET_HEIGHT + TABLE_THICK), 20);
-            post.setMaterial(metal);
-            Xform.place(post, sx, (NET_HEIGHT - TABLE_THICK) / 2, 0);
-            Cylinder tip = new Cylinder(Xform.length(NET_THICK * 1.65),
-                    Xform.length(NET_THICK * 0.6), 20);
-            tip.setMaterial(cap);
-            Xform.place(tip, sx, NET_HEIGHT - NET_THICK * 0.3, 0);
-            double reach = (NET_WIDTH - TABLE_WIDTH) / 2;
-            g.getChildren().addAll(post, tip,
-                    box(reach + TABLE_THICK, TABLE_THICK * 0.6, TABLE_THICK * 2.5,
-                            side * (TABLE_WIDTH / 2 + reach / 2), -TABLE_THICK * 0.6, 0, metal),
-                    box(TABLE_THICK, TABLE_THICK * 2, TABLE_THICK * 2.5,
-                            side * (TABLE_WIDTH / 2 + TABLE_THICK / 2), -TABLE_THICK, 0, metal));
+        G.getChildren().add(Box(NetWidth, TapeHeight, NetThick * 2 / 3,
+                0, NetHeight - TapeHeight / 2, 0, Tape));
+        G.getChildren().add(Box(NetWidth, Strand * 1.4, Strand * 1.4,
+                0, Strand, 0, Cord));
+        for (int Side : new int[] { -1, 1 }) {
+            double Sx = Side * HalfW;
+            Cylinder Post = new Cylinder(Xform.Length(NetThick * 1.6),
+                    Xform.Length(NetHeight + TableThick), 20);
+            Post.setMaterial(Metal);
+            Xform.Place(Post, Sx, (NetHeight - TableThick) / 2, 0);
+            Cylinder Tip = new Cylinder(Xform.Length(NetThick * 1.65),
+                    Xform.Length(NetThick * 0.6), 20);
+            Tip.setMaterial(Cap);
+            Xform.Place(Tip, Sx, NetHeight - NetThick * 0.3, 0);
+            double Reach = (NetWidth - TableWidth) / 2;
+            G.getChildren().addAll(Post, Tip,
+                    Box(Reach + TableThick, TableThick * 0.6, TableThick * 2.5,
+                            Side * (TableWidth / 2 + Reach / 2), -TableThick * 0.6, 0, Metal),
+                    Box(TableThick, TableThick * 2, TableThick * 2.5,
+                            Side * (TableWidth / 2 + TableThick / 2), -TableThick, 0, Metal));
         }
-        return g;
+        return G;
     }
 
     /**
@@ -147,49 +147,49 @@ public final class Court {
      * face inward: a manual orbit outside the hall sees through the nearest wall instead of
      * losing the table behind a box. No camera bounds or controls need to know about the set.
      */
-    private static Group room() {
-        double half = TABLE_LENGTH * 3;
-        double floorY = -TABLE_HEIGHT;
-        double wallTop = TABLE_HEIGHT * 5;
-        PhongMaterial wall = SurfaceMaterials.wall();
-        Group g = new Group(horizontal(-half, half, -half, half, floorY,
-                SurfaceMaterials.floor(half * 2, half * 2)));
+    private static Group Room() {
+        double Half = TableLength * 3;
+        double FloorY = -TableHeight;
+        double WallTop = TableHeight * 5;
+        PhongMaterial Wall = SurfaceMaterials.Wall();
+        Group G = new Group(Horizontal(-Half, Half, -Half, Half, FloorY,
+                SurfaceMaterials.Floor(Half * 2, Half * 2)));
         // Corner ordering gives an inward normal after Xform's rotation of physics space.
-        Vec3[] corners = { new Vec3(-half, floorY, -half), new Vec3(half, floorY, -half),
-                new Vec3(half, floorY, half), new Vec3(-half, floorY, half) };
-        for (int i = 0; i < corners.length; i++) {
-            Vec3 a = corners[i], b = corners[(i + 1) % corners.length];
-            g.getChildren().add(quad(new Vec3(b.x(), wallTop, b.z()),
-                    new Vec3(a.x(), wallTop, a.z()), a, b, wall));
+        Vec3[] Corners = { new Vec3(-Half, FloorY, -Half), new Vec3(Half, FloorY, -Half),
+                new Vec3(Half, FloorY, Half), new Vec3(-Half, FloorY, Half) };
+        for (int I = 0; I < Corners.length; I++) {
+            Vec3 A = Corners[I], B = Corners[(I + 1) % Corners.length];
+            G.getChildren().add(Quad(new Vec3(B.X(), WallTop, B.Z()),
+                    new Vec3(A.X(), WallTop, A.Z()), A, B, Wall));
         }
-        return g;
+        return G;
     }
 
-    static Box box(double width, double height, double depth,
-                   double x, double y, double z, PhongMaterial material) {
-        Box b = new Box(Xform.length(width), Xform.length(height), Xform.length(depth));
-        b.setMaterial(material);
-        Xform.place(b, x, y, z);
-        return b;
+    static Box Box(double Width, double Height, double Depth,
+                   double X, double Y, double Z, PhongMaterial Material) {
+        Box B = new Box(Xform.Length(Width), Xform.Length(Height), Xform.Length(Depth));
+        B.setMaterial(Material);
+        Xform.Place(B, X, Y, Z);
+        return B;
     }
 
     /** Explicit UVs keep the baked floor shadow aligned with the physics-space footprint. */
-    static MeshView horizontal(double x0, double x1, double z0, double z1, double y,
-                               PhongMaterial material) {
-        return quad(new Vec3(x0, y, z1), new Vec3(x1, y, z1),
-                new Vec3(x1, y, z0), new Vec3(x0, y, z0), material);
+    static MeshView Horizontal(double X0, double X1, double Z0, double Z1, double Y,
+                               PhongMaterial Material) {
+        return Quad(new Vec3(X0, Y, Z1), new Vec3(X1, Y, Z1),
+                new Vec3(X1, Y, Z0), new Vec3(X0, Y, Z0), Material);
     }
 
-    private static MeshView quad(Vec3 a, Vec3 b, Vec3 c, Vec3 d, PhongMaterial material) {
-        TriangleMesh mesh = new TriangleMesh();
-        for (Vec3 p : new Vec3[] { a, b, c, d }) {
-            Point3D s = Xform.toScene(p);
-            mesh.getPoints().addAll((float) s.getX(), (float) s.getY(), (float) s.getZ());
+    private static MeshView Quad(Vec3 A, Vec3 B, Vec3 C, Vec3 D, PhongMaterial Material) {
+        TriangleMesh Mesh = new TriangleMesh();
+        for (Vec3 P : new Vec3[] { A, B, C, D }) {
+            Point3D S = Xform.ToScene(P);
+            Mesh.getPoints().addAll((float) S.getX(), (float) S.getY(), (float) S.getZ());
         }
-        mesh.getTexCoords().setAll(0, 0, 1, 0, 1, 1, 0, 1);
-        mesh.getFaces().setAll(0, 0, 1, 1, 2, 2, 0, 0, 2, 2, 3, 3);
-        MeshView view = new MeshView(mesh);
-        view.setMaterial(material);
-        return view;
+        Mesh.getTexCoords().setAll(0, 0, 1, 0, 1, 1, 0, 1);
+        Mesh.getFaces().setAll(0, 0, 1, 1, 2, 2, 0, 0, 2, 2, 3, 3);
+        MeshView View = new MeshView(Mesh);
+        View.setMaterial(Material);
+        return View;
     }
 }

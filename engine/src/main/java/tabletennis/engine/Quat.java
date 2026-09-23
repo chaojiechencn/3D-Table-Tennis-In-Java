@@ -4,55 +4,55 @@ package tabletennis.engine;
  * Unit quaternion carrying the ball's visual orientation only; a sphere flies the same however
  * it is turned. Chosen over Euler angles, which gimbal-lock on combined side- and topspin.
  */
-public record Quat(double w, double x, double y, double z) {
+public record Quat(double W, double X, double Y, double Z) {
 
-    public static final Quat IDENTITY = new Quat(1, 0, 0, 0);
+    public static final Quat Identity = new Quat(1, 0, 0, 0);
 
-    public static Quat fromAxisAngle(Vec3 axis, double angle) {
-        Vec3 n = axis.normalized();
-        if (n.lengthSquared() == 0) return IDENTITY;
-        double h = angle * 0.5, s = Math.sin(h);
-        return new Quat(Math.cos(h), n.x() * s, n.y() * s, n.z() * s);
+    public static Quat FromAxisAngle(Vec3 Axis, double Angle) {
+        Vec3 N = Axis.Normalized();
+        if (N.LengthSquared() == 0) return Identity;
+        double H = Angle * 0.5, S = Math.sin(H);
+        return new Quat(Math.cos(H), N.X() * S, N.Y() * S, N.Z() * S);
     }
 
     /** Hamilton product; q.times(r) applies r first. */
-    public Quat times(Quat r) {
+    public Quat Times(Quat R) {
         return new Quat(
-            w * r.w - x * r.x - y * r.y - z * r.z,
-            w * r.x + x * r.w + y * r.z - z * r.y,
-            w * r.y - x * r.z + y * r.w + z * r.x,
-            w * r.z + x * r.y - y * r.x + z * r.w);
+            W * R.W - X * R.X - Y * R.Y - Z * R.Z,
+            W * R.X + X * R.W + Y * R.Z - Z * R.Y,
+            W * R.Y - X * R.Z + Y * R.W + Z * R.X,
+            W * R.Z + X * R.Y - Y * R.X + Z * R.W);
     }
 
-    public Quat normalized() {
-        double len = Math.sqrt(w * w + x * x + y * y + z * z);
-        if (len < 1e-12) return IDENTITY;
-        return new Quat(w / len, x / len, y / len, z / len);
+    public Quat Normalized() {
+        double Len = Math.sqrt(W * W + X * X + Y * Y + Z * Z);
+        if (Len < 1e-12) return Identity;
+        return new Quat(W / Len, X / Len, Y / Len, Z / Len);
     }
 
     /** In [0, pi]. */
-    public double angle() {
-        return 2.0 * Math.acos(Math.min(1.0, Math.abs(w)));
+    public double Angle() {
+        return 2.0 * Math.acos(Math.min(1.0, Math.abs(W)));
     }
 
     /** Arbitrary unit vector when the angle is ~0. */
-    public Vec3 axis() {
-        double s = Math.sqrt(1.0 - w * w);
-        if (s < 1e-9) return Vec3.UP;
-        Vec3 a = new Vec3(x / s, y / s, z / s);
-        return w < 0 ? a.negate() : a;   // same branch as angle()
+    public Vec3 Axis() {
+        double S = Math.sqrt(1.0 - W * W);
+        if (S < 1e-9) return Vec3.Up;
+        Vec3 A = new Vec3(X / S, Y / S, Z / S);
+        return W < 0 ? A.Negate() : A;   // same branch as angle()
     }
 
-    public static Quat slerp(Quat a, Quat b, double t) {
-        double d = a.w * b.w + a.x * b.x + a.y * b.y + a.z * b.z;
-        if (d < 0) { b = new Quat(-b.w, -b.x, -b.y, -b.z); d = -d; }
-        if (d > 0.9995) {   // nearly parallel: lerp, or sin(theta) underflows
-            return new Quat(a.w + (b.w - a.w) * t, a.x + (b.x - a.x) * t,
-                            a.y + (b.y - a.y) * t, a.z + (b.z - a.z) * t).normalized();
+    public static Quat Slerp(Quat A, Quat B, double T) {
+        double D = A.W * B.W + A.X * B.X + A.Y * B.Y + A.Z * B.Z;
+        if (D < 0) { B = new Quat(-B.W, -B.X, -B.Y, -B.Z); D = -D; }
+        if (D > 0.9995) {   // nearly parallel: lerp, or sin(theta) underflows
+            return new Quat(A.W + (B.W - A.W) * T, A.X + (B.X - A.X) * T,
+                            A.Y + (B.Y - A.Y) * T, A.Z + (B.Z - A.Z) * T).Normalized();
         }
-        double theta = Math.acos(d), sin = Math.sin(theta);
-        double ka = Math.sin((1 - t) * theta) / sin, kb = Math.sin(t * theta) / sin;
-        return new Quat(a.w * ka + b.w * kb, a.x * ka + b.x * kb,
-                        a.y * ka + b.y * kb, a.z * ka + b.z * kb);
+        double Theta = Math.acos(D), Sin = Math.sin(Theta);
+        double Ka = Math.sin((1 - T) * Theta) / Sin, Kb = Math.sin(T * Theta) / Sin;
+        return new Quat(A.W * Ka + B.W * Kb, A.X * Ka + B.X * Kb,
+                        A.Y * Ka + B.Y * Kb, A.Z * Ka + B.Z * Kb);
     }
 }

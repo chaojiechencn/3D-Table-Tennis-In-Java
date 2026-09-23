@@ -8,89 +8,89 @@ package tabletennis.game;
 public final class Scoreboard {
 
     public enum Side {
-        PLAYER, OPPONENT;
+        Player, Opponent;
 
-        public Side other() { return this == PLAYER ? OPPONENT : PLAYER; }
+        public Side Other() { return this == Player ? Opponent : Player; }
     }
 
     /** ITTF 2.11.1 */
-    public static final int POINTS_TO_WIN_GAME = 11;
-    public static final int WIN_BY = 2;
+    public static final int PointsToWinGame = 11;
+    public static final int WinBy = 2;
     /** ITTF 2.13.3 */
-    public static final int SERVE_ROTATION = 2;
-    public static final int DEUCE_FROM = 10;
+    public static final int ServeRotation = 2;
+    public static final int DeuceFrom = 10;
 
     /** Read-only, for display; matchWinner is null until the match is decided. */
-    public record Snapshot(int playerPoints, int opponentPoints, int playerGames, int opponentGames,
-                           Side server, boolean deuce, Side matchWinner) {}
+    public record Snapshot(int PlayerPoints, int OpponentPoints, int PlayerGames, int OpponentGames,
+                           Side Server, boolean Deuce, Side MatchWinner) {}
 
-    private final int gamesToWinMatch;
-    private int playerPoints, opponentPoints;
-    private int playerGames, opponentGames;
+    private final int GamesToWinMatch;
+    private int PlayerPoints, OpponentPoints;
+    private int PlayerGames, OpponentGames;
 
     /** ITTF 2.13.6: whoever served first in a game receives first in the next. */
-    private Side openingServer = Side.PLAYER;
+    private Side OpeningServer = Side.Player;
 
     public Scoreboard() { this(3); }
 
-    public Scoreboard(int gamesToWinMatch) {
-        if (gamesToWinMatch < 1) throw new IllegalArgumentException("a match needs at least one game");
-        this.gamesToWinMatch = gamesToWinMatch;
+    public Scoreboard(int GamesToWinMatch) {
+        if (GamesToWinMatch < 1) throw new IllegalArgumentException("a match needs at least one game");
+        this.GamesToWinMatch = GamesToWinMatch;
     }
 
     /**
      * Award a point. A finished game is cleared on the NEXT point, so its winning score stays on
      * screen until play resumes; awarding into a finished match is absorbed, not an error.
      */
-    public void pointTo(Side winner) {
-        if (matchOver()) return;
-        if (gameOver()) startNextGame();
+    public void PointTo(Side Winner) {
+        if (MatchOver()) return;
+        if (GameOver()) StartNextGame();
 
-        if (winner == Side.PLAYER) playerPoints++; else opponentPoints++;
-        if (gameOver()) {
-            if (winner == Side.PLAYER) playerGames++; else opponentGames++;
+        if (Winner == Side.Player) PlayerPoints++; else OpponentPoints++;
+        if (GameOver()) {
+            if (Winner == Side.Player) PlayerGames++; else OpponentGames++;
         }
     }
 
-    private void startNextGame() {
-        playerPoints = 0;
-        opponentPoints = 0;
-        openingServer = openingServer.other();
+    private void StartNextGame() {
+        PlayerPoints = 0;
+        OpponentPoints = 0;
+        OpeningServer = OpeningServer.Other();
     }
 
-    public int points(Side s) { return s == Side.PLAYER ? playerPoints : opponentPoints; }
+    public int Points(Side S) { return S == Side.Player ? PlayerPoints : OpponentPoints; }
 
-    public int games(Side s) { return s == Side.PLAYER ? playerGames : opponentGames; }
+    public int Games(Side S) { return S == Side.Player ? PlayerGames : OpponentGames; }
 
-    public boolean isDeuce() {
-        return playerPoints >= DEUCE_FROM && opponentPoints >= DEUCE_FROM;
+    public boolean IsDeuce() {
+        return PlayerPoints >= DeuceFrom && OpponentPoints >= DeuceFrom;
     }
 
-    public boolean gameOver() {
-        int hi = Math.max(playerPoints, opponentPoints);
-        int lo = Math.min(playerPoints, opponentPoints);
-        return hi >= POINTS_TO_WIN_GAME && hi - lo >= WIN_BY;
+    public boolean GameOver() {
+        int Hi = Math.max(PlayerPoints, OpponentPoints);
+        int Lo = Math.min(PlayerPoints, OpponentPoints);
+        return Hi >= PointsToWinGame && Hi - Lo >= WinBy;
     }
 
-    public boolean matchOver() { return matchWinner() != null; }
+    public boolean MatchOver() { return MatchWinner() != null; }
 
-    public Side matchWinner() {
-        if (playerGames >= gamesToWinMatch) return Side.PLAYER;
-        if (opponentGames >= gamesToWinMatch) return Side.OPPONENT;
+    public Side MatchWinner() {
+        if (PlayerGames >= GamesToWinMatch) return Side.Player;
+        if (OpponentGames >= GamesToWinMatch) return Side.Opponent;
         return null;
     }
 
     /** Completed service turns: two points each before 10-all, one each after. */
-    public Side server() {
-        int played = playerPoints + opponentPoints;
-        int beforeDeuce = 2 * DEUCE_FROM;
-        int turns = isDeuce() ? beforeDeuce / SERVE_ROTATION + (played - beforeDeuce)
-                              : played / SERVE_ROTATION;
-        return turns % 2 == 0 ? openingServer : openingServer.other();
+    public Side Server() {
+        int Played = PlayerPoints + OpponentPoints;
+        int BeforeDeuce = 2 * DeuceFrom;
+        int Turns = IsDeuce() ? BeforeDeuce / ServeRotation + (Played - BeforeDeuce)
+                              : Played / ServeRotation;
+        return Turns % 2 == 0 ? OpeningServer : OpeningServer.Other();
     }
 
-    public Snapshot snapshot() {
-        return new Snapshot(playerPoints, opponentPoints, playerGames, opponentGames,
-                            server(), isDeuce(), matchWinner());
+    public Snapshot Snapshot() {
+        return new Snapshot(PlayerPoints, OpponentPoints, PlayerGames, OpponentGames,
+                            Server(), IsDeuce(), MatchWinner());
     }
 }

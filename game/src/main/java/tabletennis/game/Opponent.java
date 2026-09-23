@@ -7,5 +7,5 @@ import tabletennis.engine.Paddle;
 public interface Opponent {
 
     /** Move the blade for one PHYSICS step, never a frame time. */
-    void advance(BallState ball, Paddle blade, double dt);
+    void Advance(BallState Ball, Paddle Blade, double Dt);
 }

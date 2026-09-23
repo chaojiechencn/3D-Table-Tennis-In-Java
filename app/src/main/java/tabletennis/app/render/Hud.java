@@ -15,9 +15,9 @@ import tabletennis.game.Scoreboard;
  */
 public final class Hud {
 
-    private static final String MONO = "Consolas, 'DejaVu Sans Mono', monospace";
+    private static final String Mono = "Consolas, 'DejaVu Sans Mono', monospace";
 
-    private static final String LEGEND = """
+    private static final String LegendText = """
             MOUSE   move to move the paddle -- swing through the ball to hit
                     (how you move through the ball aims the shot; hit it CLEAN or it goes out)
                     RIGHT hold = brush: mouse up/down lifts/cuts the bat for spin
@@ -29,85 +29,85 @@ public final class Hud {
                     G ghost   T trail   B ball x2   H hud   ESC quit
             DEMO    M watch it play itself""";
 
-    private final StackPane root = new StackPane();
-    private final Label score = panelLabel(20, "#ffffff");   // the one number a player looks up for
-    private final Label feed = panelLabel(15, "#eaf2ff");
-    private final Label shot = panelLabel(12, "#ff9a3c");
-    private final Label legend = panelLabel(12, "#8d9bab");
-    private final Label controlReadout = panelLabel(12, "#7fd4a8");
+    private final StackPane Root = new StackPane();
+    private final Label Score = PanelLabel(20, "#ffffff");   // the one number a player looks up for
+    private final Label Feed = PanelLabel(15, "#eaf2ff");
+    private final Label Shot = PanelLabel(12, "#ff9a3c");
+    private final Label Legend = PanelLabel(12, "#8d9bab");
+    private final Label ControlReadout = PanelLabel(12, "#7fd4a8");
 
     public Hud() {
-        legend.setText(LEGEND);
-        setShot(null);
-        root.getChildren().addAll(corner(Pos.TOP_LEFT, feed, shot),
-                                  corner(Pos.TOP_CENTER, score),
-                                  corner(Pos.TOP_RIGHT, controlReadout),
-                                  corner(Pos.BOTTOM_LEFT, legend));
-        setControl(null);                  // only once corner() has given the label a parent
-        root.setPickOnBounds(false);       // clicks must reach the SubScene to orbit and aim
-        root.setPadding(new Insets(14));
+        Legend.setText(LegendText);
+        SetShot(null);
+        Root.getChildren().addAll(Corner(Pos.TOP_LEFT, Feed, Shot),
+                                  Corner(Pos.TOP_CENTER, Score),
+                                  Corner(Pos.TOP_RIGHT, ControlReadout),
+                                  Corner(Pos.BOTTOM_LEFT, Legend));
+        SetControl(null);                  // only once corner() has given the label a parent
+        Root.setPickOnBounds(false);       // clicks must reach the SubScene to orbit and aim
+        Root.setPadding(new Insets(14));
     }
 
-    public Region node() { return root; }
+    public Region Node() { return Root; }
 
-    public void setShown(boolean shown) { root.setVisible(shown); }
+    public void SetShown(boolean Shown) { Root.setVisible(Shown); }
 
-    public void setFeed(String name) { feed.setText("feed: " + name); }
+    public void SetFeed(String Name) { Feed.setText("feed: " + Name); }
 
-    public void setScore(Scoreboard.Snapshot s) {
-        score.setText(scoreLine(s));
+    public void SetScore(Scoreboard.Snapshot S) {
+        Score.setText(ScoreLine(S));
     }
 
     /** The serving dot sits by the server's score; "deuce" is spelled out because the rule changes. */
-    static String scoreLine(Scoreboard.Snapshot s) {
-        String games = "games " + s.playerGames() + " - " + s.opponentGames();
-        if (s.matchWinner() != null) {
-            return (s.matchWinner() == Scoreboard.Side.PLAYER ? "YOU WIN" : "OPPONENT WINS") + "   " + games;
+    static String ScoreLine(Scoreboard.Snapshot S) {
+        String Games = "games " + S.PlayerGames() + " - " + S.OpponentGames();
+        if (S.MatchWinner() != null) {
+            return (S.MatchWinner() == Scoreboard.Side.Player ? "YOU WIN" : "OPPONENT WINS") + "   " + Games;
         }
-        String youDot = s.server() == Scoreboard.Side.PLAYER ? "* " : "  ";
-        String oppDot = s.server() == Scoreboard.Side.OPPONENT ? " *" : "  ";
-        return games + "    " + youDot + s.playerPoints() + " - " + s.opponentPoints() + oppDot
-             + (s.deuce() ? "   deuce" : "");
+        String YouDot = S.Server() == Scoreboard.Side.Player ? "* " : "  ";
+        String OppDot = S.Server() == Scoreboard.Side.Opponent ? " *" : "  ";
+        return Games + "    " + YouDot + S.PlayerPoints() + " - " + S.OpponentPoints() + OppDot
+             + (S.Deuce() ? "   deuce" : "");
     }
 
     /** Null hides the line; unmanaged as well as invisible, or it leaves a blank row. */
-    public void setShot(String text) {
-        showLabel(shot, text);
+    public void SetShot(String Text) {
+        ShowLabel(Shot, Text);
     }
 
     /** Null hides the whole D panel, not just its text. */
-    public void setControl(String text) {
-        boolean on = showLabel(controlReadout, text);
-        controlReadout.getParent().setVisible(on);
-        controlReadout.getParent().setManaged(on);
+    public void SetControl(String Text) {
+        boolean On = ShowLabel(ControlReadout, Text);
+        ControlReadout.getParent().setVisible(On);
+        ControlReadout.getParent().setManaged(On);
     }
 
-    private static boolean showLabel(Label label, String text) {
-        boolean on = text != null && !text.isEmpty();
-        label.setText(on ? text : "");
-        label.setVisible(on);
-        label.setManaged(on);
-        return on;
+    private static boolean ShowLabel(Label Line, String Text) {
+        boolean On = Text != null && !Text.isEmpty();
+        Line.setText(On ? Text : "");
+        Line.setVisible(On);
+        Line.setManaged(On);
+        return On;
     }
 
-    private static Label panelLabel(double size, String colour) {
-        Label l = new Label();
-        l.setStyle(String.format("-fx-font-family: %s; -fx-font-size: %.1fpx; -fx-text-fill: %s;",
-                                 MONO, size, colour));
-        return l;
+    private static Label PanelLabel(double Size, String Colour) {
+        Label L = new Label();
+        L.setStyle(String.format("-fx-font-family: %s; -fx-font-size: %.1fpx; -fx-text-fill: %s;",
+                                 Mono, Size, Colour));
+        return L;
     }
 
     /** Max size pinned to preferred, or each translucent panel stretches across the window. */
-    private static VBox corner(Pos where, Node... children) {
-        VBox v = new VBox(6, children);
-        v.setPadding(new Insets(12, 16, 12, 16));
-        v.setStyle("-fx-background-color: rgba(10,14,20,0.74);"
+    private static VBox Corner(Pos Where, Node... Children) {
+        VBox V = new VBox(6, Children);
+        V.setPadding(new Insets(12, 16, 12, 16));
+        V.setStyle("-fx-background-color: rgba(10,14,20,0.74);"
                  + "-fx-background-radius: 8;"
                  + "-fx-border-color: rgba(140,170,205,0.22);"
                  + "-fx-border-radius: 8;");
-        v.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
-        v.setAlignment(Pos.CENTER_LEFT);
-        StackPane.setAlignment(v, where);
-        return v;
+        V.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
+        V.setAlignment(Pos.CENTER_LEFT);
+        StackPane.setAlignment(V, Where);
+        return V;
     }
 }

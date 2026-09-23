@@ -8,7 +8,7 @@ import javafx.scene.input.ScrollEvent;
 import javafx.scene.transform.Rotate;
 import tabletennis.engine.Vec3;
 
-import static tabletennis.engine.Constants.TABLE_LENGTH;
+import static tabletennis.engine.Constants.TableLength;
 
 /**
  * An orbiting camera on a gimbal, preset views, and the default rally-cam. The side view matters:
@@ -18,173 +18,173 @@ public final class CameraRig {
 
     /** Cycled with C: yaw, pitch (degrees), distance and pivot height (metres). */
     public enum View {
-        BEHIND(0, 16, 3.85, 0.12),
-        SIDE(90, 9, 3.35, 0.18),
-        HIGH(34, 42, 3.60, 0.05),
-        LOW(8, 1.5, 2.30, 0.16),
-        TOP(0, 86, 4.60, 0.0);
+        Behind(0, 16, 3.85, 0.12),
+        Side(90, 9, 3.35, 0.18),
+        High(34, 42, 3.60, 0.05),
+        Low(8, 1.5, 2.30, 0.16),
+        Top(0, 86, 4.60, 0.0);
 
-        final double yaw, pitch, distance, height;
+        final double Yaw, Pitch, Distance, Height;
 
-        View(double yaw, double pitch, double distance, double height) {
-            this.yaw = yaw;
-            this.pitch = pitch;
-            this.distance = distance;
-            this.height = height;
+        View(double Yaw, double Pitch, double Distance, double Height) {
+            this.Yaw = Yaw;
+            this.Pitch = Pitch;
+            this.Distance = Distance;
+            this.Height = Height;
         }
 
         /** Case-insensitive, so the documented --view=SIDE spelling keeps working. */
-        public static View fromArg(String name) {
-            for (View v : values()) if (v.name().equalsIgnoreCase(name)) return v;
-            throw new IllegalArgumentException("no view named " + name);
+        public static View FromArg(String Name) {
+            for (View V : values()) if (V.name().equalsIgnoreCase(Name)) return V;
+            throw new IllegalArgumentException("no view named " + Name);
         }
     }
 
     // Rally-cam views as {pitch deg, distance m, pivot height m}: IN after the player hits (their
-    // feed counts), OUT after the opponent. RALLY_IN is a CONTROL constraint: its frustum must
-    // reach PlayerReach.Z_FAR, or part of the envelope cannot be aimed at. {8, 3.45} reaches 2.47.
-    private static final double[] RALLY_IN  = {  8.0, 3.45, 0.16 };
-    private static final double[] RALLY_OUT = { 21.0, 4.75, 0.08 };
+    // feed counts), OUT after the opponent. RallyIn is a CONTROL constraint: its frustum must
+    // reach PlayerReach.ZFar, or part of the envelope cannot be aimed at. {8, 3.45} reaches 2.47.
+    private static final double[] RallyIn  = {  8.0, 3.45, 0.16 };
+    private static final double[] RallyOut = { 21.0, 4.75, 0.08 };
 
     /** Reads as a cut, not a drift, without snapping the table sideways. */
-    private static final double RALLY_TAU = 0.12;
+    private static final double RallyTau = 0.12;
 
     /** The swing keeps camera, ball and the opponent's half in line; it never moves toward the ball. */
-    private static final double OPP_CENTRE_Z = -TABLE_LENGTH / 4;
+    private static final double OppCentreZ = -TableLength / 4;
 
-    /** Measured: at this yaw the whole Z_NEAR..Z_FAR depth range is still addressable. */
-    private static final double MAX_SWING_DEG = 22.0;
+    /** Measured: at this yaw the whole ZNear..ZFar depth range is still addressable. */
+    private static final double MaxSwingDeg = 22.0;
 
     /** A pan, slower than the cut. */
-    private static final double SWING_TAU = 0.35;
+    private static final double SwingTau = 0.35;
 
-    private final PerspectiveCamera camera = new PerspectiveCamera(true);
-    private final Group gimbal = new Group();
-    private final Rotate yawRot = new Rotate(0, Rotate.Y_AXIS);
-    private final Rotate pitchRot = new Rotate(0, Rotate.X_AXIS);
+    private final PerspectiveCamera Camera = new PerspectiveCamera(true);
+    private final Group Gimbal = new Group();
+    private final Rotate YawRot = new Rotate(0, Rotate.Y_AXIS);
+    private final Rotate PitchRot = new Rotate(0, Rotate.X_AXIS);
 
-    private double yaw, pitch, distance, height;
-    private View current = View.BEHIND;
+    private double Yaw, Pitch, Distance, Height;
+    private View Current = View.Behind;
 
     /** Any manual camera input drops out of it. */
-    private boolean rallyCam = true;
-    private double[] rallyTarget = RALLY_IN;
-    private double rcPitch = RALLY_IN[0], rcDist = RALLY_IN[1], rcHeight = RALLY_IN[2];
-    private double rcYaw = 0;
+    private boolean RallyCam = true;
+    private double[] RallyTarget = RallyIn;
+    private double RcPitch = RallyIn[0], RcDist = RallyIn[1], RcHeight = RallyIn[2];
+    private double RcYaw = 0;
 
     public CameraRig() {
-        camera.setNearClip(1);
-        camera.setFarClip(20000);
-        camera.setFieldOfView(38);
+        Camera.setNearClip(1);
+        Camera.setFarClip(20000);
+        Camera.setFieldOfView(38);
         // The pivot rotates, not the camera: JavaFX has no look-at.
-        gimbal.getTransforms().addAll(yawRot, pitchRot);
-        gimbal.getChildren().add(camera);
-        set(View.BEHIND);
+        Gimbal.getTransforms().addAll(YawRot, PitchRot);
+        Gimbal.getChildren().add(Camera);
+        Set(View.Behind);
     }
 
-    public PerspectiveCamera camera() { return camera; }
-    public Group gimbal() { return gimbal; }
+    public PerspectiveCamera Camera() { return Camera; }
+    public Group Gimbal() { return Gimbal; }
 
-    public void toggleRallyCam() {
-        rallyCam = !rallyCam;
-        if (!rallyCam) set(current);
+    public void ToggleRallyCam() {
+        RallyCam = !RallyCam;
+        if (!RallyCam) Set(Current);
     }
 
     /** Capture mode wants a fixed preset. */
-    public void stopRallyCam() { rallyCam = false; set(current); }
+    public void StopRallyCam() { RallyCam = false; Set(Current); }
 
-    public void onRallyHit(boolean playerHit) {
-        rallyTarget = playerHit ? RALLY_IN : RALLY_OUT;
+    public void OnRallyHit(boolean PlayerHit) {
+        RallyTarget = PlayerHit ? RallyIn : RallyOut;
     }
 
-    public void apply(View v) {
-        rallyCam = false;
-        set(v);
+    public void Apply(View V) {
+        RallyCam = false;
+        Set(V);
     }
 
-    public void next() {
-        rallyCam = false;
-        View[] all = View.values();
-        set(all[(current.ordinal() + 1) % all.length]);
+    public void Next() {
+        RallyCam = false;
+        View[] All = View.values();
+        Set(All[(Current.ordinal() + 1) % All.length]);
     }
 
-    private void set(View v) {
-        current = v;
-        yaw = v.yaw;
-        pitch = v.pitch;
-        distance = v.distance;
-        height = v.height;
-        refresh();
+    private void Set(View V) {
+        Current = V;
+        Yaw = V.Yaw;
+        Pitch = V.Pitch;
+        Distance = V.Distance;
+        Height = V.Height;
+        Refresh();
     }
 
-    private void orbit(double dYawDeg, double dPitchDeg) {
-        rallyCam = false;
-        yaw += dYawDeg;
-        pitch = clamp(pitch + dPitchDeg, -12, 89);
-        refresh();
+    private void Orbit(double DYawDeg, double DPitchDeg) {
+        RallyCam = false;
+        Yaw += DYawDeg;
+        Pitch = Clamp(Pitch + DPitchDeg, -12, 89);
+        Refresh();
     }
 
-    private void zoom(double factor) {
-        rallyCam = false;
-        distance = clamp(distance * factor, 0.75, 12.0);
-        refresh();
+    private void Zoom(double Factor) {
+        RallyCam = false;
+        Distance = Clamp(Distance * Factor, 0.75, 12.0);
+        Refresh();
     }
 
     /** Once per FRAME on wall-clock time: a view, not physics. */
-    public void updateRally(double frameDt, Vec3 ball) {
-        if (!rallyCam) return;
+    public void UpdateRally(double FrameDt, Vec3 Ball) {
+        if (!RallyCam) return;
 
-        double dt = Math.max(1e-3, frameDt);
-        double k = 1 - Math.exp(-dt / RALLY_TAU);
-        rcPitch  += (rallyTarget[0] - rcPitch)  * k;
-        rcDist   += (rallyTarget[1] - rcDist)   * k;
-        rcHeight += (rallyTarget[2] - rcHeight) * k;
-        rcYaw += (swingYaw(ball) - rcYaw) * (1 - Math.exp(-dt / SWING_TAU));
+        double Dt = Math.max(1e-3, FrameDt);
+        double K = 1 - Math.exp(-Dt / RallyTau);
+        RcPitch  += (RallyTarget[0] - RcPitch)  * K;
+        RcDist   += (RallyTarget[1] - RcDist)   * K;
+        RcHeight += (RallyTarget[2] - RcHeight) * K;
+        RcYaw += (SwingYaw(Ball) - RcYaw) * (1 - Math.exp(-Dt / SwingTau));
 
-        yawRot.setAngle(rcYaw);
-        pitchRot.setAngle(-rcPitch);
-        Xform.place(gimbal, 0, rcHeight, 0);
-        camera.setTranslateZ(Xform.z(rcDist));
+        YawRot.setAngle(RcYaw);
+        PitchRot.setAngle(-RcPitch);
+        Xform.Place(Gimbal, 0, RcHeight, 0);
+        Camera.setTranslateZ(Xform.Z(RcDist));
     }
 
     /** Negated: Xform's axis flip turns a physics rotation about Y the other way in the scene. */
-    private static double swingYaw(Vec3 ball) {
-        if (ball == null || !ball.isFinite()) return 0;
-        return clamp(-Math.toDegrees(Math.atan2(ball.x(), ball.z() - OPP_CENTRE_Z)),
-                     -MAX_SWING_DEG, MAX_SWING_DEG);
+    private static double SwingYaw(Vec3 Ball) {
+        if (Ball == null || !Ball.IsFinite()) return 0;
+        return Clamp(-Math.toDegrees(Math.atan2(Ball.X(), Ball.Z() - OppCentreZ)),
+                     -MaxSwingDeg, MaxSwingDeg);
     }
 
     /** Pitch is negated because scene +Y is down; the pivot sits a little above the table. */
-    private void refresh() {
-        yawRot.setAngle(yaw);
-        pitchRot.setAngle(-pitch);
-        Xform.place(gimbal, 0, height, 0);
-        camera.setTranslateZ(Xform.z(distance));
+    private void Refresh() {
+        YawRot.setAngle(Yaw);
+        PitchRot.setAngle(-Pitch);
+        Xform.Place(Gimbal, 0, Height, 0);
+        Camera.setTranslateZ(Xform.Z(Distance));
     }
 
     /**
      * Left drag orbits and scroll zooms; bare movement is left to aiming. addEventHandler, not the
      * single-slot setOn* properties, so the application's aim handler can share this SubScene.
      */
-    public void attachControls(SubScene sub) {
-        final double[] anchor = new double[2];
-        sub.addEventHandler(MouseEvent.MOUSE_PRESSED, e -> {
-            if (!e.isPrimaryButtonDown()) return;
-            anchor[0] = e.getSceneX();
-            anchor[1] = e.getSceneY();
+    public void AttachControls(SubScene Sub) {
+        final double[] Anchor = new double[2];
+        Sub.addEventHandler(MouseEvent.MOUSE_PRESSED, E -> {
+            if (!E.isPrimaryButtonDown()) return;
+            Anchor[0] = E.getSceneX();
+            Anchor[1] = E.getSceneY();
         });
-        sub.addEventHandler(MouseEvent.MOUSE_DRAGGED, e -> {
-            if (!e.isPrimaryButtonDown()) return;
-            double dx = e.getSceneX() - anchor[0];
-            double dy = e.getSceneY() - anchor[1];
-            anchor[0] = e.getSceneX();
-            anchor[1] = e.getSceneY();
-            orbit(-dx * 0.3, dy * 0.3);
+        Sub.addEventHandler(MouseEvent.MOUSE_DRAGGED, E -> {
+            if (!E.isPrimaryButtonDown()) return;
+            double Dx = E.getSceneX() - Anchor[0];
+            double Dy = E.getSceneY() - Anchor[1];
+            Anchor[0] = E.getSceneX();
+            Anchor[1] = E.getSceneY();
+            Orbit(-Dx * 0.3, Dy * 0.3);
         });
-        sub.addEventHandler(ScrollEvent.SCROLL, e -> zoom(e.getDeltaY() > 0 ? 0.92 : 1.087));
+        Sub.addEventHandler(ScrollEvent.SCROLL, E -> Zoom(E.getDeltaY() > 0 ? 0.92 : 1.087));
     }
 
-    private static double clamp(double v, double lo, double hi) {
-        return v < lo ? lo : (v > hi ? hi : v);
+    private static double Clamp(double V, double Lo, double Hi) {
+        return V < Lo ? Lo : (V > Hi ? Hi : V);
     }
 }

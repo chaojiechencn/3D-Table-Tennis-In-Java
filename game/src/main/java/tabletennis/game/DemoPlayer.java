@@ -6,7 +6,7 @@ import tabletennis.engine.World;
 
 import java.util.List;
 
-import static tabletennis.engine.Constants.DT;
+import static tabletennis.engine.Constants.Dt;
 
 /**
  * A stand-in hand for demo mode. It produces a CURSOR point, as the mouse does, through the same
@@ -15,86 +15,86 @@ import static tabletennis.engine.Constants.DT;
  */
 public final class DemoPlayer {
 
-    public static final double LOOKAHEAD = 2.0;
+    public static final double Lookahead = 2.0;
 
     /** Every step: the meeting point is a crossing that a coarser stride steps over. */
-    private static final int STRIDE = 1;
+    private static final int Stride = 1;
 
     /** Room to come forward THROUGH the ball; aiming past it would overshoot and hit it backwards. */
-    public static final double SETBACK = 0.20;
+    public static final double Setback = 0.20;
 
     /** Sideways setup offset: ShotAssist reads aim from the bat's lateral velocity. */
-    public static final double PREP_ACROSS = 0.18;
+    public static final double PrepAcross = 0.18;
 
     /** TUNED: 20 Hz re-prediction; each flies a whole private simulation. */
-    public static final double REPREDICT = 0.05;
+    public static final double Repredict = 0.05;
 
     /** Inside this, the meeting point is fixed, or re-prediction walks the bat backwards. */
-    public static final double COMMIT = 0.30;
+    public static final double Commit = 0.30;
 
     /** Hold the stroke this long past the planned contact, then look again. */
-    public static final double STALE = 0.12;
+    public static final double Stale = 0.12;
 
-    /** Derived: time to cover SETBACK at TRACK_SPEED, with margin so the bat is still closing. */
-    public static double swingLead() {
-        return (SETBACK / Stroke.TRACK_SPEED) * 0.85;
+    /** Derived: time to cover SETBACK at TrackSpeed, with margin so the bat is still closing. */
+    public static double SwingLead() {
+        return (Setback / Stroke.TrackSpeed) * 0.85;
     }
 
-    private record Meeting(Vec3 point, double time) {}
+    private record Meeting(Vec3 Point, double Time) {}
 
-    private Meeting cached;
-    private double sincePredict = Double.MAX_VALUE;
+    private Meeting Cached;
+    private double SincePredict = Double.MAX_VALUE;
 
     /**
      * The cursor this hand wants, already inside the envelope. {@code mayHit} says whether the
      * ball has bounced on our half, which cannot be seen once it is past its apex.
      */
-    public Vec3 cursorFor(BallState ball, boolean mayHit, double dt) {
-        sincePredict += dt;
-        if (cached != null) cached = new Meeting(cached.point(), cached.time() - dt);
+    public Vec3 CursorFor(BallState Ball, boolean MayHit, double Dt) {
+        SincePredict += Dt;
+        if (Cached != null) Cached = new Meeting(Cached.Point(), Cached.Time() - Dt);
 
-        boolean committed = cached != null && cached.time() < COMMIT && cached.time() > -STALE;
-        boolean due = sincePredict >= REPREDICT || cached == null || cached.time() < -STALE;
-        if (!committed && due) {
-            cached = meeting(ball, mayHit);
-            sincePredict = 0;
+        boolean Committed = Cached != null && Cached.Time() < Commit && Cached.Time() > -Stale;
+        boolean Due = SincePredict >= Repredict || Cached == null || Cached.Time() < -Stale;
+        if (!Committed && Due) {
+            Cached = Meeting(Ball, MayHit);
+            SincePredict = 0;
         }
-        if (cached == null) return PlayerReach.clamp(PlayerReach.NEUTRAL);
+        if (Cached == null) return PlayerReach.Clamp(PlayerReach.Neutral);
 
-        Vec3 p = cached.point();
-        double side = p.x() >= 0 ? -1 : 1;
-        Vec3 aim = cached.time() > swingLead()
-                 ? new Vec3(p.x() - side * PREP_ACROSS, PlayerReach.HIT_Y, p.z() + SETBACK)
-                 : new Vec3(p.x(), PlayerReach.HIT_Y, p.z());
-        return PlayerReach.clamp(aim);
+        Vec3 P = Cached.Point();
+        double Side = P.X() >= 0 ? -1 : 1;
+        Vec3 Aim = Cached.Time() > SwingLead()
+                 ? new Vec3(P.X() - Side * PrepAcross, PlayerReach.HitY, P.Z() + Setback)
+                 : new Vec3(P.X(), PlayerReach.HitY, P.Z());
+        return PlayerReach.Clamp(Aim);
     }
 
     /**
      * The point after our-half bounce (seen as the ball starting to rise) where the ball passes
      * closest to the middle of the bat; the first reachable point is always a rim graze.
      */
-    private Meeting meeting(BallState ball, boolean mayHit) {
-        boolean goingAway = ball.vel().z() <= 0 && ball.pos().z() > 0;
-        if (goingAway) return null;
+    private Meeting Meeting(BallState Ball, boolean MayHit) {
+        boolean GoingAway = Ball.Vel().Z() <= 0 && Ball.Pos().Z() > 0;
+        if (GoingAway) return null;
 
-        List<Vec3> path = World.predict(ball, LOOKAHEAD, STRIDE);
-        boolean bounced = mayHit;
-        double prevY = ball.pos().y();
+        List<Vec3> Path = World.Predict(Ball, Lookahead, Stride);
+        boolean Bounced = MayHit;
+        double PrevY = Ball.Pos().Y();
 
-        Meeting best = null;
-        double bestErr = Double.MAX_VALUE;
-        for (int i = 0; i < path.size(); i++) {
-            Vec3 p = path.get(i);
-            if (p.z() > 0 && p.y() > prevY) bounced = true;
-            prevY = p.y();
+        Meeting Best = null;
+        double BestErr = Double.MAX_VALUE;
+        for (int I = 0; I < Path.size(); I++) {
+            Vec3 P = Path.get(I);
+            if (P.Z() > 0 && P.Y() > PrevY) Bounced = true;
+            PrevY = P.Y();
 
-            if (!bounced || p.z() <= 0) continue;
-            if (p.z() < PlayerReach.Z_NEAR || p.z() > PlayerReach.Z_FAR) continue;
+            if (!Bounced || P.Z() <= 0) continue;
+            if (P.Z() < PlayerReach.ZNear || P.Z() > PlayerReach.ZFar) continue;
 
-            double err = Math.abs(p.y() - PlayerReach.HIT_Y);
-            if (err > PlayerReach.VERTICAL_CAPTURE) continue;
-            if (err < bestErr) { bestErr = err; best = new Meeting(p, i * STRIDE * DT); }
+            double Err = Math.abs(P.Y() - PlayerReach.HitY);
+            if (Err > PlayerReach.VerticalCapture) continue;
+            if (Err < BestErr) { BestErr = Err; Best = new Meeting(P, I * Stride * Dt); }
         }
-        return best;
+        return Best;
     }
 }

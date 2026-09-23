@@ -6,11 +6,11 @@ import tabletennis.engine.Integrator;
 import tabletennis.engine.Paddle;
 import tabletennis.engine.Vec3;
 
-import static tabletennis.engine.Constants.BALL_R;
-import static tabletennis.engine.Constants.BLADE_R;
-import static tabletennis.engine.Constants.NET_HEIGHT;
-import static tabletennis.engine.Constants.TABLE_LENGTH;
-import static tabletennis.engine.Constants.TABLE_WIDTH;
+import static tabletennis.engine.Constants.BallR;
+import static tabletennis.engine.Constants.BladeR;
+import static tabletennis.engine.Constants.NetHeight;
+import static tabletennis.engine.Constants.TableLength;
+import static tabletennis.engine.Constants.TableWidth;
 
 /**
  * The arcade shot model for both rackets. The exact impulse still runs on every contact; this
@@ -21,150 +21,150 @@ import static tabletennis.engine.Constants.TABLE_WIDTH;
 public final class ShotAssist {
 
     /** Everything the last shot was built from, for the V overlay. */
-    public record Debug(Vec3 contact, Vec3 racketVel, Vec3 incomingVel, Vec3 reflectDir,
-                        Vec3 intendDir, Vec3 finalDir, Vec3 target, Vec3 landing,
-                        double speed, Vec3 spin, int passes, boolean legal) {}
+    public record Debug(Vec3 Contact, Vec3 RacketVel, Vec3 IncomingVel, Vec3 ReflectDir,
+                        Vec3 IntendDir, Vec3 FinalDir, Vec3 Goal, Vec3 Landing,
+                        double Speed, Vec3 SpinPlan, int Passes, boolean Legal) {}
 
-    private record Intent(double drive, double swipeX, double lift, double brush,
-                          double swingAmount, double offX, double offY, double faceX) {}
+    private record Intent(double Drive, double SwipeX, double Lift, double Brush,
+                          double SwingAmount, double OffX, double OffY, double FaceX) {}
 
-    private record Target(Vec3 want, Vec3 safe) {}
+    private record Target(Vec3 Want, Vec3 Safe) {}
 
-    private record Spin(double top, double side) {}
+    private record Spin(double Top, double Side) {}
 
     /** Height at the net plane (NaN if never crossed) and first descent to the table plane. */
-    private record Flight(double netHeight, Vec3 landing) {}
+    private record Flight(double NetHeight, Vec3 Landing) {}
 
-    private record Candidate(Vec3 vel, Vec3 target, Flight flight, double cost, int passes, Spin spin) {}
+    private record Candidate(Vec3 Vel, Vec3 Goal, Flight Trajectory, double Cost, int Passes, Spin SpinPlan) {}
 
-    private static final double HALF_WIDTH = TABLE_WIDTH / 2, HALF_LENGTH = TABLE_LENGTH / 2;
+    private static final double HalfWidth = TableWidth / 2, HalfLength = TableLength / 2;
 
     /** TUNED: 4x the game step; RK4 error stays two orders below the 5 cm landing margin. */
-    private static final double VALIDATE_DT = 1.0 / 120;
-    private static final double MAX_FLIGHT_TIME = 3.0;
+    private static final double ValidateDt = 1.0 / 120;
+    private static final double MaxFlightTime = 3.0;
 
     // Cost per metre of violation: missing the net dominates, the cord counts double the lines,
     // and any illegality outweighs the speed and pass preferences by two orders of magnitude.
-    private static final double NEVER_CROSSED_COST = 10;
-    private static final double NET_SHORTFALL_WEIGHT = 20;
-    private static final double LANDING_MISS_WEIGHT = 10;
-    private static final double ILLEGALITY_WEIGHT = 100;
+    private static final double NeverCrossedCost = 10;
+    private static final double NetShortfallWeight = 20;
+    private static final double LandingMissWeight = 10;
+    private static final double IllegalityWeight = 100;
 
-    private static final Vec3 DOWN_TABLE = new Vec3(0, 0, -1);
+    private static final Vec3 DownTable = new Vec3(0, 0, -1);
 
-    private final ShotTuning t;
-    private Debug debug = new Debug(Vec3.ZERO, Vec3.ZERO, Vec3.ZERO, DOWN_TABLE,
-            DOWN_TABLE, DOWN_TABLE, Vec3.ZERO, Vec3.ZERO, 0, Vec3.ZERO, 0, true);
+    private final ShotTuning T;
+    private Debug LastDecision = new Debug(Vec3.Zero, Vec3.Zero, Vec3.Zero, DownTable,
+            DownTable, DownTable, Vec3.Zero, Vec3.Zero, 0, Vec3.Zero, 0, true);
 
-    public ShotAssist()                  { this(ShotTuning.defaults()); }
-    public ShotAssist(ShotTuning tuning) { this.t = tuning; }
+    public ShotAssist()                  { this(ShotTuning.Defaults()); }
+    public ShotAssist(ShotTuning Tuning) { this.T = Tuning; }
 
-    public Debug debug() { return debug; }
+    public Debug Debug() { return LastDecision; }
 
-    public double targetHalfWidth() { return t.targetHalfWidthFrac * TABLE_WIDTH / 2; }
-    public double targetNearDepth() { return t.targetDepthMinFrac * TABLE_LENGTH / 2; }
-    public double targetFarDepth()  { return t.targetDepthMaxFrac * TABLE_LENGTH / 2; }
+    public double TargetHalfWidth() { return T.TargetHalfWidthFrac * TableWidth / 2; }
+    public double TargetNearDepth() { return T.TargetDepthMinFrac * TableLength / 2; }
+    public double TargetFarDepth()  { return T.TargetDepthMaxFrac * TableLength / 2; }
 
     /**
      * @param incoming  the ball just before the contact
      * @param physical  the raw impulse result
      * @param playerHit true sends the ball toward -Z, false toward +Z
      */
-    public BallState assist(BallState incoming, BallState physical, Paddle racket, boolean playerHit) {
-        double toOpp = playerHit ? -1.0 : 1.0;
-        Vec3 contact = physical.pos();
-        Vec3 reflect = physical.vel();
+    public BallState Assist(BallState Incoming, BallState Physical, Paddle Racket, boolean PlayerHit) {
+        double ToOpp = PlayerHit ? -1.0 : 1.0;
+        Vec3 Contact = Physical.Pos();
+        Vec3 Reflect = Physical.Vel();
 
-        Intent in = readIntent(contact, racket, toOpp);
-        double quality = quality(incoming, in.offX(), in.offY());
-        double assist = playerHit ? t.assistFloor + (1 - t.assistFloor) * quality : 1.0;
-        Target target = readTarget(in, toOpp);
-        double wantSpeed = readSpeed(in.swingAmount(), incoming);
-        Spin spin = readSpin(in.brush(), in.swipeX());
+        Intent In = ReadIntent(Contact, Racket, ToOpp);
+        double Quality = Quality(Incoming, In.OffX(), In.OffY());
+        double Assist = PlayerHit ? T.AssistFloor + (1 - T.AssistFloor) * Quality : 1.0;
+        Target Goal = ReadTarget(In, ToOpp);
+        double WantSpeed = ReadSpeed(In.SwingAmount(), Incoming);
+        Spin SpinPlan = ReadSpin(In.Brush(), In.SwipeX());
 
-        Candidate best = search(contact, reflect, target, wantSpeed, spin, toOpp);
-        boolean mayRescue = !playerHit
-                || (quality >= t.rescueQualityFloor && in.swingAmount() <= t.rescueEffortCeiling);
-        if (best.cost() > 0 && mayRescue) best = rescue(contact, target.want().x(), spin, toOpp, best);
+        Candidate Best = Search(Contact, Reflect, Goal, WantSpeed, SpinPlan, ToOpp);
+        boolean MayRescue = !PlayerHit
+                || (Quality >= T.RescueQualityFloor && In.SwingAmount() <= T.RescueEffortCeiling);
+        if (Best.Cost() > 0 && MayRescue) Best = Rescue(Contact, Goal.Want().X(), SpinPlan, ToOpp, Best);
 
         // A clean hit gets the authored shot; a shank keeps proportionally more raw physics.
-        Vec3 finalVel  = Vec3.lerp(capReflection(reflect), best.vel(), assist);
-        Vec3 finalSpin = Vec3.lerp(physical.spin(), spinFor(best.vel(), best.spin()), assist);
+        Vec3 FinalVel  = Vec3.Lerp(CapReflection(Reflect), Best.Vel(), Assist);
+        Vec3 FinalSpin = Vec3.Lerp(Physical.Spin(), SpinFor(Best.Vel(), Best.SpinPlan()), Assist);
 
-        debug = new Debug(contact, racket.vel(), incoming.vel(), safeDir(reflect),
-                          safeDir(new Vec3(best.target().x() - contact.x(), 0,
-                                           best.target().z() - contact.z())),
-                          safeDir(finalVel), best.target(), best.flight().landing(),
-                          finalVel.length(), finalSpin, best.passes(), best.cost() == 0);
+        LastDecision = new Debug(Contact, Racket.Vel(), Incoming.Vel(), SafeDir(Reflect),
+                          SafeDir(new Vec3(Best.Goal().X() - Contact.X(), 0,
+                                           Best.Goal().Z() - Contact.Z())),
+                          SafeDir(FinalVel), Best.Goal(), Best.Trajectory().Landing(),
+                          FinalVel.Length(), FinalSpin, Best.Passes(), Best.Cost() == 0);
 
-        return new BallState(physical.pos(), finalVel, finalSpin, physical.orient());
+        return new BallState(Physical.Pos(), FinalVel, FinalSpin, Physical.Orient());
     }
 
     /**
      * Correction passes pull the target toward safe and slow the pace; within a pass a speed ladder
      * starts at the asked-for pace. The first legal candidate ends the search.
      */
-    private Candidate search(Vec3 contact, Vec3 reflect, Target target, double wantSpeed, Spin spin,
-                             double toOpp) {
-        Candidate best = null;
-        double bestScore = Double.MAX_VALUE;
-        double floor = Math.max(t.minSearchSpeed, wantSpeed * t.searchSpeedFloorFrac);
+    private Candidate Search(Vec3 Contact, Vec3 Reflect, Target Goal, double WantSpeed, Spin SpinPlan,
+                             double ToOpp) {
+        Candidate Best = null;
+        double BestScore = Double.MAX_VALUE;
+        double Floor = Math.max(T.MinSearchSpeed, WantSpeed * T.SearchSpeedFloorFrac);
 
-        for (int pass = 0; pass <= t.maxCorrectionPasses; pass++) {
-            double give = Math.min(1, pass * t.targetAssist);
-            Vec3 aimAt = Vec3.lerp(target.want(), target.safe(), give);
-            double pace = wantSpeed * (1 - t.speedBackoffPerPass * pass);
+        for (int Pass = 0; Pass <= T.MaxCorrectionPasses; Pass++) {
+            double Give = Math.min(1, Pass * T.TargetAssist);
+            Vec3 AimAt = Vec3.Lerp(Goal.Want(), Goal.Safe(), Give);
+            double Pace = WantSpeed * (1 - T.SpeedBackoffPerPass * Pass);
 
-            for (int k = 0; k < t.speedCandidates; k++) {
-                double speed = clamp(pace * speedFactor(k), Math.min(floor, t.maxShotSpeed),
-                                     t.maxShotSpeed);
-                Aim.Solution sol = Aim.atTarget(contact, aimAt, speed, spin.top(), spin.side());
-                Vec3 blended = Vec3.lerp(sol.state().vel(), capReflection(reflect), t.physicalBlend);
-                Candidate c = evaluate(contact, aimAt, constrain(blended, toOpp, speed), spin, toOpp, pass);
+            for (int K = 0; K < T.SpeedCandidates; K++) {
+                double Speed = Clamp(Pace * SpeedFactor(K), Math.min(Floor, T.MaxShotSpeed),
+                                     T.MaxShotSpeed);
+                Aim.Solution Sol = Aim.AtTarget(Contact, AimAt, Speed, SpinPlan.Top(), SpinPlan.Side());
+                Vec3 Blended = Vec3.Lerp(Sol.State().Vel(), CapReflection(Reflect), T.PhysicalBlend);
+                Candidate C = Evaluate(Contact, AimAt, Constrain(Blended, ToOpp, Speed), SpinPlan, ToOpp, Pass);
 
-                double score = c.cost() * ILLEGALITY_WEIGHT
-                             + Math.abs(speed - wantSpeed) * t.speedPreference
-                             + pass * t.passPenalty;
-                if (score < bestScore) { bestScore = score; best = c; }
-                if (c.cost() == 0) return best;
+                double Score = C.Cost() * IllegalityWeight
+                             + Math.abs(Speed - WantSpeed) * T.SpeedPreference
+                             + Pass * T.PassPenalty;
+                if (Score < BestScore) { BestScore = Score; Best = C; }
+                if (C.Cost() == 0) return Best;
             }
         }
-        return best;
+        return Best;
     }
 
     /**
      * Every sensible depth down the middle from a soft lift to full pace, keeping as much of the
      * player's aim, then spin, as still works. Some contacts only have a slow, honest answer.
      */
-    private Candidate rescue(Vec3 contact, double wantX, Spin spin, double toOpp, Candidate best) {
-        Spin[] spins = {spin, new Spin(t.baseTopspin, 0)};
-        int rescuedPasses = t.maxCorrectionPasses + 1;
-        for (double aimFrac : t.rescueAimFracs) {
-            for (Spin sp : spins) {
-                for (double depth : t.rescueDepthFracs) {
-                    Vec3 aimAt = new Vec3(wantX * aimFrac, 0, toOpp * depth * HALF_LENGTH);
-                    for (int k = 0; k < t.rescueSpeedSteps; k++) {
-                        double speed = t.rescueMinSpeed + (t.maxShotSpeed - t.rescueMinSpeed)
-                                * k / (double) (t.rescueSpeedSteps - 1);
-                        Aim.Solution sol = Aim.atTarget(contact, aimAt, speed, sp.top(), sp.side());
-                        Vec3 vel = constrain(sol.state().vel(), toOpp, speed);
-                        Candidate c = evaluate(contact, aimAt, vel, sp, toOpp, rescuedPasses);
-                        if (c.cost() < best.cost()) best = c;
-                        if (c.cost() == 0) return best;
+    private Candidate Rescue(Vec3 Contact, double WantX, Spin SpinPlan, double ToOpp, Candidate Best) {
+        Spin[] Spins = {SpinPlan, new Spin(T.BaseTopspin, 0)};
+        int RescuedPasses = T.MaxCorrectionPasses + 1;
+        for (double AimFrac : T.RescueAimFracs) {
+            for (Spin Sp : Spins) {
+                for (double Depth : T.RescueDepthFracs) {
+                    Vec3 AimAt = new Vec3(WantX * AimFrac, 0, ToOpp * Depth * HalfLength);
+                    for (int K = 0; K < T.RescueSpeedSteps; K++) {
+                        double Speed = T.RescueMinSpeed + (T.MaxShotSpeed - T.RescueMinSpeed)
+                                * K / (double) (T.RescueSpeedSteps - 1);
+                        Aim.Solution Sol = Aim.AtTarget(Contact, AimAt, Speed, Sp.Top(), Sp.Side());
+                        Vec3 Vel = Constrain(Sol.State().Vel(), ToOpp, Speed);
+                        Candidate C = Evaluate(Contact, AimAt, Vel, Sp, ToOpp, RescuedPasses);
+                        if (C.Cost() < Best.Cost()) Best = C;
+                        if (C.Cost() == 0) return Best;
                     }
                 }
             }
         }
-        return best;
+        return Best;
     }
 
-    private Candidate evaluate(Vec3 contact, Vec3 target, Vec3 vel, Spin spin, double toOpp, int passes) {
-        Flight f = fly(contact, vel, spinFor(vel, spin), toOpp);
-        return new Candidate(vel, target, f, illegality(f, toOpp), passes, spin);
+    private Candidate Evaluate(Vec3 Contact, Vec3 Goal, Vec3 Vel, Spin SpinPlan, double ToOpp, int Passes) {
+        Flight F = Fly(Contact, Vel, SpinFor(Vel, SpinPlan), ToOpp);
+        return new Candidate(Vel, Goal, F, Illegality(F, ToOpp), Passes, SpinPlan);
     }
 
-    private static Vec3 spinFor(Vec3 vel, Spin spin) {
-        return Aim.spin(new Vec3(vel.x(), 0, vel.z()), spin.top(), spin.side());
+    private static Vec3 SpinFor(Vec3 Vel, Spin SpinPlan) {
+        return Aim.Spin(new Vec3(Vel.X(), 0, Vel.Z()), SpinPlan.Top(), SpinPlan.Side());
     }
 
     /**
@@ -172,156 +172,156 @@ public final class ShotAssist {
      * brushing). Strength comes from the forward drive on a saturating curve; the contact offset
      * is measured in the face's own plane as a fraction of the blade radius.
      */
-    private Intent readIntent(Vec3 contact, Paddle racket, double toOpp) {
-        Vec3 swing = racket.vel();
-        double drive  = swing.z() * toOpp;
-        double swipeX = swing.x();
-        double lift   = swing.y();
-        double brush = lift + drive * t.driveBrush;
+    private Intent ReadIntent(Vec3 Contact, Paddle Racket, double ToOpp) {
+        Vec3 Swing = Racket.Vel();
+        double Drive  = Swing.Z() * ToOpp;
+        double SwipeX = Swing.X();
+        double Lift   = Swing.Y();
+        double Brush = Lift + Drive * T.DriveBrush;
 
-        double effort = Math.max(0, drive) + t.lateralEffort * Math.hypot(swipeX, lift);
-        double swingAmount = clamp(Math.pow(
-                clamp(effort / t.maxSwingSpeed, 0, 1), t.swingCurve), 0, 1) * t.swingInfluence;
+        double Effort = Math.max(0, Drive) + T.LateralEffort * Math.hypot(SwipeX, Lift);
+        double SwingAmount = Clamp(Math.pow(
+                Clamp(Effort / T.MaxSwingSpeed, 0, 1), T.SwingCurve), 0, 1) * T.SwingInfluence;
 
-        Vec3 off = contact.minus(racket.pos());
-        Vec3 inPlane = off.minus(racket.normal().scale(off.dot(racket.normal())));
-        double offX = clamp(inPlane.x() / BLADE_R, -1, 1);
-        double offY = clamp(inPlane.y() / BLADE_R, -1, 1);
-        double faceX = clamp(racket.normal().x() * -toOpp, -1, 1);
+        Vec3 Off = Contact.Minus(Racket.Pos());
+        Vec3 InPlane = Off.Minus(Racket.Normal().Scale(Off.Dot(Racket.Normal())));
+        double OffX = Clamp(InPlane.X() / BladeR, -1, 1);
+        double OffY = Clamp(InPlane.Y() / BladeR, -1, 1);
+        double FaceX = Clamp(Racket.Normal().X() * -ToOpp, -1, 1);
 
-        return new Intent(drive, swipeX, lift, brush, swingAmount, offX, offY, faceX);
+        return new Intent(Drive, SwipeX, Lift, Brush, SwingAmount, OffX, OffY, FaceX);
     }
 
     /** 1 mid-blade to 0 at the rim, with a core that shrinks as the ball arrives faster. */
-    private double quality(BallState incoming, double offX, double offY) {
-        double offR = Math.min(1, Math.hypot(offX, offY));
-        double paceFrac = clamp((incoming.speed() - t.qualityPaceFrom) / t.qualityPaceSpan, 0, 1);
-        double core = Math.max(t.qualityCoreMin, t.qualityCore - t.qualityPaceLoss * paceFrac);
-        double rim  = core + t.qualityFalloff;
-        return clamp((rim - offR) / (rim - core), 0, 1);
+    private double Quality(BallState Incoming, double OffX, double OffY) {
+        double OffR = Math.min(1, Math.hypot(OffX, OffY));
+        double PaceFrac = Clamp((Incoming.Speed() - T.QualityPaceFrom) / T.QualityPaceSpan, 0, 1);
+        double Core = Math.max(T.QualityCoreMin, T.QualityCore - T.QualityPaceLoss * PaceFrac);
+        double Rim  = Core + T.QualityFalloff;
+        return Clamp((Rim - OffR) / (Rim - Core), 0, 1);
     }
 
-    private Target readTarget(Intent in, double toOpp) {
-        double aim = in.swipeX() * t.aimInfluence
-                   + in.faceX() * t.faceInfluence
-                   + in.offX() * t.contactPointInfluence;
-        double wantX = clamp(aim, -1, 1) * targetHalfWidth();
+    private Target ReadTarget(Intent In, double ToOpp) {
+        double AimFraction = In.SwipeX() * T.AimInfluence
+                   + In.FaceX() * T.FaceInfluence
+                   + In.OffX() * T.ContactPointInfluence;
+        double WantX = Clamp(AimFraction, -1, 1) * TargetHalfWidth();
 
-        double depthFrac = t.targetDepthMinFrac
-                + (t.targetDepthMaxFrac - t.targetDepthMinFrac)
-                  * clamp(t.baseDepthFrac + in.drive() * t.depthInfluence - in.brush() * t.arcInfluence
-                               - in.offY() * t.contactPointInfluence * t.contactDepthShare, 0, 1);
-        double wantZ = toOpp * clamp(depthFrac, t.targetDepthMinFrac, t.targetDepthMaxFrac) * HALF_LENGTH;
+        double DepthFrac = T.TargetDepthMinFrac
+                + (T.TargetDepthMaxFrac - T.TargetDepthMinFrac)
+                  * Clamp(T.BaseDepthFrac + In.Drive() * T.DepthInfluence - In.Brush() * T.ArcInfluence
+                               - In.OffY() * T.ContactPointInfluence * T.ContactDepthShare, 0, 1);
+        double WantZ = ToOpp * Clamp(DepthFrac, T.TargetDepthMinFrac, T.TargetDepthMaxFrac) * HalfLength;
 
-        return new Target(new Vec3(wantX, 0, wantZ),
-                          new Vec3(0, 0, toOpp * t.safeDepthFrac * HALF_LENGTH));
+        return new Target(new Vec3(WantX, 0, WantZ),
+                          new Vec3(0, 0, ToOpp * T.SafeDepthFrac * HalfLength));
     }
 
     /** The incoming pace only nudges the band, never adds to it, so a rally cannot compound. */
-    private double readSpeed(double swingAmount, BallState incoming) {
-        double wantSpeed = t.minShotSpeed + (t.maxShotSpeed - t.minShotSpeed) * swingAmount;
-        wantSpeed += clamp((incoming.speed() - t.incomingPaceNeutral) * t.incomingPaceGain,
-                           -t.incomingPaceNudge, t.incomingPaceNudge);
-        return clamp(wantSpeed, t.minShotSpeed, t.maxShotSpeed);
+    private double ReadSpeed(double SwingAmount, BallState Incoming) {
+        double WantSpeed = T.MinShotSpeed + (T.MaxShotSpeed - T.MinShotSpeed) * SwingAmount;
+        WantSpeed += Clamp((Incoming.Speed() - T.IncomingPaceNeutral) * T.IncomingPaceGain,
+                           -T.IncomingPaceNudge, T.IncomingPaceNudge);
+        return Clamp(WantSpeed, T.MinShotSpeed, T.MaxShotSpeed);
     }
 
-    private Spin readSpin(double brush, double swipeX) {
-        double topRevs  = clamp((t.baseTopspin + brush * t.topspinPerLift) * t.spinInfluence,
-                                -t.maxSpin, t.maxSpin);
-        double sideRevs = clamp(swipeX * t.sidespinPerSwipe * t.spinInfluence,
-                                -t.maxSpin, t.maxSpin);
-        return new Spin(topRevs, sideRevs);
+    private Spin ReadSpin(double Brush, double SwipeX) {
+        double TopRevs  = Clamp((T.BaseTopspin + Brush * T.TopspinPerLift) * T.SpinInfluence,
+                                -T.MaxSpin, T.MaxSpin);
+        double SideRevs = Clamp(SwipeX * T.SidespinPerSwipe * T.SpinInfluence,
+                                -T.MaxSpin, T.MaxSpin);
+        return new Spin(TopRevs, SideRevs);
     }
 
     /** 1.0 first, then alternately slower and faster, so a legal shot costs one solve. */
-    private double speedFactor(int k) {
-        if (k == 0) return 1.0;
-        int step = (k + 1) / 2;
-        double d = t.speedSpread * step / Math.max(1, t.speedCandidates / 2);
-        return (k % 2 == 1) ? 1.0 - d : 1.0 + d;
+    private double SpeedFactor(int K) {
+        if (K == 0) return 1.0;
+        int Step = (K + 1) / 2;
+        double D = T.SpeedSpread * Step / Math.max(1, T.SpeedCandidates / 2);
+        return (K % 2 == 1) ? 1.0 - D : 1.0 + D;
     }
 
-    private Vec3 capReflection(Vec3 raw) {
-        double sp = raw.length();
-        return sp > t.reflectionCap ? raw.scale(t.reflectionCap / sp) : raw;
+    private Vec3 CapReflection(Vec3 Raw) {
+        double Sp = Raw.Length();
+        return Sp > T.ReflectionCap ? Raw.Scale(T.ReflectionCap / Sp) : Raw;
     }
 
     /**
      * Forward pace, a lateral cone and cap, an elevation band, and the candidate's OWN top speed:
      * a shot that only works slowly must be allowed to stay slow.
      */
-    private Vec3 constrain(Vec3 v, double toOpp, double cap) {
-        double fwd = Math.max(Math.min(t.minForwardVelocity, cap), v.z() * toOpp);
+    private Vec3 Constrain(Vec3 V, double ToOpp, double Cap) {
+        double Fwd = Math.max(Math.min(T.MinForwardVelocity, Cap), V.Z() * ToOpp);
 
-        double coneLimit = Math.tan(Math.toRadians(t.maxHorizontalDeviationDeg)) * fwd;
-        double vx = clamp(v.x(), -Math.min(coneLimit, t.maxLateralVelocity),
-                                  Math.min(coneLimit, t.maxLateralVelocity));
+        double ConeLimit = Math.tan(Math.toRadians(T.MaxHorizontalDeviationDeg)) * Fwd;
+        double Vx = Clamp(V.X(), -Math.min(ConeLimit, T.MaxLateralVelocity),
+                                  Math.min(ConeLimit, T.MaxLateralVelocity));
 
-        double horiz = Math.hypot(vx, fwd);
-        double up = clamp(v.y(),
-                Math.tan(Math.toRadians(t.minVerticalLaunchAngleDeg)) * horiz,
-                Math.tan(Math.toRadians(t.maxVerticalLaunchAngleDeg)) * horiz);
+        double Horiz = Math.hypot(Vx, Fwd);
+        double Up = Clamp(V.Y(),
+                Math.tan(Math.toRadians(T.MinVerticalLaunchAngleDeg)) * Horiz,
+                Math.tan(Math.toRadians(T.MaxVerticalLaunchAngleDeg)) * Horiz);
 
-        Vec3 out = new Vec3(vx, up, toOpp * fwd);
-        double sp = out.length();
-        return sp > cap ? out.scale(cap / sp) : out;
+        Vec3 Out = new Vec3(Vx, Up, ToOpp * Fwd);
+        double Sp = Out.Length();
+        return Sp > Cap ? Out.Scale(Cap / Sp) : Out;
     }
 
     /** 0 clears the net and lands in; otherwise the size of the violation. */
-    private double illegality(Flight f, double toOpp) {
-        double cost = 0;
+    private double Illegality(Flight F, double ToOpp) {
+        double Cost = 0;
 
-        double needed = NET_HEIGHT + BALL_R + t.netClearance;
-        if (Double.isNaN(f.netHeight())) cost += NEVER_CROSSED_COST;
-        else if (f.netHeight() < needed) cost += (needed - f.netHeight()) * NET_SHORTFALL_WEIGHT;
+        double Needed = NetHeight + BallR + T.NetClearance;
+        if (Double.isNaN(F.NetHeight())) Cost += NeverCrossedCost;
+        else if (F.NetHeight() < Needed) Cost += (Needed - F.NetHeight()) * NetShortfallWeight;
 
-        Vec3 landing = f.landing();
-        double depth = landing.z() * toOpp;                                // + is into their half
-        if (depth < t.landingMargin) cost += (t.landingMargin - depth) * LANDING_MISS_WEIGHT;
-        double maxDepth = HALF_LENGTH - t.landingMargin;
-        if (depth > maxDepth) cost += (depth - maxDepth) * LANDING_MISS_WEIGHT;
+        Vec3 Landing = F.Landing();
+        double Depth = Landing.Z() * ToOpp;                                // + is into their half
+        if (Depth < T.LandingMargin) Cost += (T.LandingMargin - Depth) * LandingMissWeight;
+        double MaxDepth = HalfLength - T.LandingMargin;
+        if (Depth > MaxDepth) Cost += (Depth - MaxDepth) * LandingMissWeight;
 
-        double side = Math.abs(landing.x()) - (HALF_WIDTH - t.landingMargin);
-        if (side > 0) cost += side * LANDING_MISS_WEIGHT;
+        double Side = Math.abs(Landing.X()) - (HalfWidth - T.LandingMargin);
+        if (Side > 0) Cost += Side * LandingMissWeight;
 
-        return cost;
+        return Cost;
     }
 
     /** Contact-free flight: asking a World with a table in it where a shot lands is circular. */
-    private static Flight fly(Vec3 from, Vec3 vel, Vec3 spin, double toOpp) {
-        BallState s = BallState.at(from, vel, spin);
-        double netHeight = Double.NaN;
-        double prevZ = from.z();
+    private static Flight Fly(Vec3 From, Vec3 Vel, Vec3 SpinPlan, double ToOpp) {
+        BallState S = BallState.At(From, Vel, SpinPlan);
+        double NetHeight = Double.NaN;
+        double PrevZ = From.Z();
 
-        for (int i = 0; i < (int) (MAX_FLIGHT_TIME / VALIDATE_DT); i++) {
-            BallState next = Integrator.step(s, VALIDATE_DT);
-            Vec3 p = next.pos();
+        for (int I = 0; I < (int) (MaxFlightTime / ValidateDt); I++) {
+            BallState Next = Integrator.Step(S, ValidateDt);
+            Vec3 P = Next.Pos();
 
-            if (Double.isNaN(netHeight)) {
-                boolean crossed = toOpp < 0 ? (prevZ > 0 && p.z() <= 0)
-                                            : (prevZ < 0 && p.z() >= 0);
-                if (crossed && prevZ != p.z()) {
-                    double f = prevZ / (prevZ - p.z());
-                    netHeight = s.pos().y() + (p.y() - s.pos().y()) * f;
+            if (Double.isNaN(NetHeight)) {
+                boolean Crossed = ToOpp < 0 ? (PrevZ > 0 && P.Z() <= 0)
+                                            : (PrevZ < 0 && P.Z() >= 0);
+                if (Crossed && PrevZ != P.Z()) {
+                    double F = PrevZ / (PrevZ - P.Z());
+                    NetHeight = S.Pos().Y() + (P.Y() - S.Pos().Y()) * F;
                 }
             }
-            prevZ = p.z();
+            PrevZ = P.Z();
 
-            if (p.y() <= BALL_R && next.vel().y() < 0) {
-                double f = (s.pos().y() - BALL_R) / (s.pos().y() - p.y());
-                return new Flight(netHeight, Vec3.lerp(s.pos(), p, clamp(f, 0, 1)));
+            if (P.Y() <= BallR && Next.Vel().Y() < 0) {
+                double F = (S.Pos().Y() - BallR) / (S.Pos().Y() - P.Y());
+                return new Flight(NetHeight, Vec3.Lerp(S.Pos(), P, Clamp(F, 0, 1)));
             }
-            s = next;
+            S = Next;
         }
-        return new Flight(netHeight, s.pos());
+        return new Flight(NetHeight, S.Pos());
     }
 
-    private static Vec3 safeDir(Vec3 v) {
-        Vec3 n = v.normalized();
-        return n.lengthSquared() < 1e-6 ? DOWN_TABLE : n;
+    private static Vec3 SafeDir(Vec3 V) {
+        Vec3 N = V.Normalized();
+        return N.LengthSquared() < 1e-6 ? DownTable : N;
     }
 
-    private static double clamp(double x, double lo, double hi) {
-        return x < lo ? lo : (x > hi ? hi : x);
+    private static double Clamp(double X, double Lo, double Hi) {
+        return X < Lo ? Lo : (X > Hi ? Hi : X);
     }
 }

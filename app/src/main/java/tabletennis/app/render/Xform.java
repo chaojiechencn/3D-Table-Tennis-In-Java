@@ -15,38 +15,38 @@ public final class Xform {
     private Xform() {}
 
     /** JavaFX clip planes and light attenuation fall apart at metre scale. */
-    public static final double SPM = 300.0;
+    public static final double Spm = 300.0;
 
     /** Unsigned sizes: the same scale, no axis flip. */
-    public static double length(double metres) { return metres * SPM; }
+    public static double Length(double Metres) { return Metres * Spm; }
 
-    public static double x(double metres) { return  metres * SPM; }
-    public static double y(double metres) { return -metres * SPM; }
-    public static double z(double metres) { return -metres * SPM; }
+    public static double X(double Metres) { return  Metres * Spm; }
+    public static double Y(double Metres) { return -Metres * Spm; }
+    public static double Z(double Metres) { return -Metres * Spm; }
 
-    public static Point3D toScene(Vec3 v) {
-        return new Point3D(x(v.x()), y(v.y()), z(v.z()));
+    public static Point3D ToScene(Vec3 V) {
+        return new Point3D(X(V.X()), Y(V.Y()), Z(V.Z()));
     }
 
     /** diag(1,-1,-1) is its own inverse up to the scale. */
-    public static Vec3 toPhysics(Point3D p) {
-        return new Vec3(p.getX() / SPM, -p.getY() / SPM, -p.getZ() / SPM);
+    public static Vec3 ToPhysics(Point3D P) {
+        return new Vec3(P.getX() / Spm, -P.getY() / Spm, -P.getZ() / Spm);
     }
 
-    public static void place(Node node, Vec3 p) {
-        place(node, p.x(), p.y(), p.z());
+    public static void Place(Node Target, Vec3 P) {
+        Place(Target, P.X(), P.Y(), P.Z());
     }
 
-    public static void place(Node node, double mx, double my, double mz) {
-        node.setTranslateX(x(mx));
-        node.setTranslateY(y(my));
-        node.setTranslateZ(z(mz));
+    public static void Place(Node Target, double Mx, double My, double Mz) {
+        Target.setTranslateX(X(Mx));
+        Target.setTranslateY(Y(My));
+        Target.setTranslateZ(Z(Mz));
     }
 
     /** The map is a 180-degree rotation about X: same angle, axis with Y and Z flipped. */
-    public static Rotate toRotate(Quat q) {
-        Vec3 axis = q.axis();
-        return new Rotate(Math.toDegrees(q.angle()),
-                          new Point3D(axis.x(), -axis.y(), -axis.z()));
+    public static Rotate ToRotate(Quat Q) {
+        Vec3 Axis = Q.Axis();
+        return new Rotate(Math.toDegrees(Q.Angle()),
+                          new Point3D(Axis.X(), -Axis.Y(), -Axis.Z()));
     }
 }

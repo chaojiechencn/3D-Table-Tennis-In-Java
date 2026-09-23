@@ -7,130 +7,130 @@ public final class Aero {
 
     private Aero() {}
 
-    public record Derivative(Vec3 dPos, Vec3 dVel, Vec3 dSpin) {}
+    public record Derivative(Vec3 DPos, Vec3 DVel, Vec3 DSpin) {}
 
     /** A parameter rather than a global so SelfTest's closed-form checks can fly constant C_d. */
     @FunctionalInterface
     public interface DragModel {
-        double coefficient(double speed, double spinRatio);
+        double Coefficient(double Speed, double SpinRatio);
 
-        static DragModel constant(double cd) { return (speed, spinRatio) -> cd; }
+        static DragModel Constant(double Cd) { return (Speed, SpinRatio) -> Cd; }
     }
 
-    public static final DragModel DEFAULT_DRAG = Aero::measuredDragCoefficient;
+    public static final DragModel DefaultDrag = Aero::MeasuredDragCoefficient;
 
     /** Clamped, not extrapolated, outside the table: extrapolation goes negative at smash speed. */
-    public static double measuredDragCoefficient(double speed, double spinRatio) {
-        return bilinear(DRAG_TABLE, DRAG_SPEEDS, DRAG_SPIN_RATIOS, speed, spinRatio);
+    public static double MeasuredDragCoefficient(double Speed, double SpinRatio) {
+        return Bilinear(DragTable, DragSpeeds, DragSpinRatios, Speed, SpinRatio);
     }
 
     /** Volume-based C_M at a speed (m/s) and spin rate (rad/s). */
-    public static double magnusCoefficient(double speed, double omega) {
-        int hi = 1;
-        while (hi < LIFT_SPEEDS.length - 1 && LIFT_SPEEDS[hi] < speed) hi++;
-        int lo = hi - 1;
-        double f = frac(speed, LIFT_SPEEDS[lo], LIFT_SPEEDS[hi]);
-        return lerp(rowMagnus(lo, omega), rowMagnus(hi, omega), f);
+    public static double MagnusCoefficient(double Speed, double Omega) {
+        int Hi = 1;
+        while (Hi < LiftSpeeds.length - 1 && LiftSpeeds[Hi] < Speed) Hi++;
+        int Lo = Hi - 1;
+        double F = Frac(Speed, LiftSpeeds[Lo], LiftSpeeds[Hi]);
+        return Lerp(RowMagnus(Lo, Omega), RowMagnus(Hi, Omega), F);
     }
 
-    private static double rowMagnus(int row, double omega) {
-        double m = LIFT_LINEAR[row][0], c = LIFT_LINEAR[row][1], wb = LIFT_LINEAR[row][2];
-        double a = LIFT_QUADRATIC[row][0], b = LIFT_QUADRATIC[row][1], q = LIFT_QUADRATIC[row][2];
+    private static double RowMagnus(int Row, double Omega) {
+        double M = LiftLinear[Row][0], C = LiftLinear[Row][1], Wb = LiftLinear[Row][2];
+        double A = LiftQuadratic[Row][0], B = LiftQuadratic[Row][1], Q = LiftQuadratic[Row][2];
 
-        double linear = m * omega + c;
-        double quad = a * omega * omega + b * omega + q;
+        double Linear = M * Omega + C;
+        double Quad = A * Omega * Omega + B * Omega + Q;
 
-        double lo = wb * (1 - LIFT_BLEND), hi = wb * (1 + LIFT_BLEND);
-        if (omega <= lo) return linear;
-        if (omega >= hi) return quad;
-        return lerp(linear, quad, frac(omega, lo, hi));
+        double Lo = Wb * (1 - LiftBlend), Hi = Wb * (1 + LiftBlend);
+        if (Omega <= Lo) return Linear;
+        if (Omega >= Hi) return Quad;
+        return Lerp(Linear, Quad, Frac(Omega, Lo, Hi));
     }
 
-    private static double bilinear(double[][] table, double[] rows, double[] cols,
-                                   double r, double c) {
-        int ri = 1;
-        while (ri < rows.length - 1 && rows[ri] < r) ri++;
-        int ci = 1;
-        while (ci < cols.length - 1 && cols[ci] < c) ci++;
+    private static double Bilinear(double[][] Table, double[] Rows, double[] Cols,
+                                   double R, double C) {
+        int Ri = 1;
+        while (Ri < Rows.length - 1 && Rows[Ri] < R) Ri++;
+        int Ci = 1;
+        while (Ci < Cols.length - 1 && Cols[Ci] < C) Ci++;
 
-        double fr = frac(r, rows[ri - 1], rows[ri]);
-        double fc = frac(c, cols[ci - 1], cols[ci]);
+        double Fr = Frac(R, Rows[Ri - 1], Rows[Ri]);
+        double Fc = Frac(C, Cols[Ci - 1], Cols[Ci]);
 
-        double top = lerp(table[ri - 1][ci - 1], table[ri - 1][ci], fc);
-        double bot = lerp(table[ri][ci - 1], table[ri][ci], fc);
-        return lerp(top, bot, fr);
+        double Top = Lerp(Table[Ri - 1][Ci - 1], Table[Ri - 1][Ci], Fc);
+        double Bot = Lerp(Table[Ri][Ci - 1], Table[Ri][Ci], Fc);
+        return Lerp(Top, Bot, Fr);
     }
 
-    private static double frac(double x, double a, double b) {
-        if (b - a < 1e-12) return 0;
-        double t = (x - a) / (b - a);
-        return t < 0 ? 0 : (t > 1 ? 1 : t);
+    private static double Frac(double X, double A, double B) {
+        if (B - A < 1e-12) return 0;
+        double T = (X - A) / (B - A);
+        return T < 0 ? 0 : (T > 1 ? 1 : T);
     }
 
     /** Smootherstep, not linear: RK4 keeps 4th order only on a C2 right-hand side. */
-    private static double lerp(double a, double b, double t) {
-        double smooth = t * t * t * (t * (t * 6 - 15) + 10);
-        return a + (b - a) * smooth;
+    private static double Lerp(double A, double B, double T) {
+        double Smooth = T * T * T * (T * (T * 6 - 15) + 10);
+        return A + (B - A) * Smooth;
     }
 
-    public static Vec3 drag(Vec3 vel) {
-        return drag(vel, Vec3.ZERO, DEFAULT_DRAG);
+    public static Vec3 Drag(Vec3 Vel) {
+        return Drag(Vel, Vec3.Zero, DefaultDrag);
     }
 
-    public static Vec3 drag(Vec3 vel, Vec3 spin, DragModel model) {
-        double speed = vel.length();
-        if (speed < 1e-9) return Vec3.ZERO;
-        double cd = model.coefficient(speed, spinRatio(vel, spin));
-        return vel.scale(-HALF_RHO_A_OVER_M * cd * speed);
+    public static Vec3 Drag(Vec3 Vel, Vec3 Spin, DragModel Model) {
+        double Speed = Vel.Length();
+        if (Speed < 1e-9) return Vec3.Zero;
+        double Cd = Model.Coefficient(Speed, SpinRatio(Vel, Spin));
+        return Vel.Scale(-HalfRhoAOverM * Cd * Speed);
     }
 
     /** Along omega x v: topspin (about -X when heading -Z) gives (-X) x (-Z) = -Y, a dip. */
-    public static Vec3 magnus(Vec3 vel, Vec3 spin) {
-        double speed = vel.length(), omega = spin.length();
-        if (speed < 1e-9 || omega < 1e-9) return Vec3.ZERO;
+    public static Vec3 Magnus(Vec3 Vel, Vec3 Spin) {
+        double Speed = Vel.Length(), Omega = Spin.Length();
+        if (Speed < 1e-9 || Omega < 1e-9) return Vec3.Zero;
 
-        Vec3 dir = spin.cross(vel);
-        if (dir.lengthSquared() < 1e-18) return Vec3.ZERO;   // pure corkscrew: no lift
-        return dir.normalized().scale(HALF_RHO_A_OVER_M * liftCoefficient(vel, spin)
-                                      * speed * speed);
+        Vec3 Dir = Spin.Cross(Vel);
+        if (Dir.LengthSquared() < 1e-18) return Vec3.Zero;   // pure corkscrew: no lift
+        return Dir.Normalized().Scale(HalfRhoAOverM * LiftCoefficient(Vel, Spin)
+                                      * Speed * Speed);
     }
 
     /** Area-based C_L = (8/3) C_M S, converted only here so drag and lift share one factor. */
-    public static double liftCoefficient(Vec3 vel, Vec3 spin) {
-        double speed = vel.length(), omega = spin.length();
-        if (speed < 1e-9 || omega < 1e-9) return 0;
-        return (8.0 / 3.0) * magnusCoefficient(speed, omega) * spinRatio(vel, spin);
+    public static double LiftCoefficient(Vec3 Vel, Vec3 Spin) {
+        double Speed = Vel.Length(), Omega = Spin.Length();
+        if (Speed < 1e-9 || Omega < 1e-9) return 0;
+        return (8.0 / 3.0) * MagnusCoefficient(Speed, Omega) * SpinRatio(Vel, Spin);
     }
 
     /** S = r*omega/|v|. */
-    public static double spinRatio(Vec3 vel, Vec3 spin) {
-        double speed = vel.length();
-        return speed < 1e-9 ? 0 : BALL_R * spin.length() / speed;
+    public static double SpinRatio(Vec3 Vel, Vec3 Spin) {
+        double Speed = Vel.Length();
+        return Speed < 1e-9 ? 0 : BallR * Spin.Length() / Speed;
     }
 
     /** At the 12 m/s the decay constant was pinned at. */
-    public static Vec3 spinDecay(Vec3 spin) {
-        return spinDecay(spin, new Vec3(0, 0, -12));
+    public static Vec3 SpinDecay(Vec3 Spin) {
+        return SpinDecay(Spin, new Vec3(0, 0, -12));
     }
 
     /** Parallel to the spin, so the axis never moves. */
-    public static Vec3 spinDecay(Vec3 spin, Vec3 vel) {
-        return spin.scale(-SPIN_DECAY_PER_M * vel.length());
+    public static Vec3 SpinDecay(Vec3 Spin, Vec3 Vel) {
+        return Spin.Scale(-SpinDecayPerM * Vel.Length());
     }
 
-    public static Vec3 acceleration(Vec3 vel, Vec3 spin) {
-        return acceleration(vel, spin, DEFAULT_DRAG);
+    public static Vec3 Acceleration(Vec3 Vel, Vec3 Spin) {
+        return Acceleration(Vel, Spin, DefaultDrag);
     }
 
-    public static Vec3 acceleration(Vec3 vel, Vec3 spin, DragModel model) {
-        return new Vec3(0, -G, 0).plus(drag(vel, spin, model)).plus(magnus(vel, spin));
+    public static Vec3 Acceleration(Vec3 Vel, Vec3 Spin, DragModel Model) {
+        return new Vec3(0, -G, 0).Plus(Drag(Vel, Spin, Model)).Plus(Magnus(Vel, Spin));
     }
 
-    public static Derivative derivative(Vec3 pos, Vec3 vel, Vec3 spin) {
-        return derivative(pos, vel, spin, DEFAULT_DRAG);
+    public static Derivative Derivative(Vec3 Pos, Vec3 Vel, Vec3 Spin) {
+        return Derivative(Pos, Vel, Spin, DefaultDrag);
     }
 
-    public static Derivative derivative(Vec3 pos, Vec3 vel, Vec3 spin, DragModel model) {
-        return new Derivative(vel, acceleration(vel, spin, model), spinDecay(spin, vel));
+    public static Derivative Derivative(Vec3 Pos, Vec3 Vel, Vec3 Spin, DragModel Model) {
+        return new Derivative(Vel, Acceleration(Vel, Spin, Model), SpinDecay(Spin, Vel));
     }
 }

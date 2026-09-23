@@ -11,7 +11,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
-import static tabletennis.engine.Constants.DT;
+import static tabletennis.engine.Constants.Dt;
 
 /**
  * A bit-level record of the game, used to prove a restructuring changed nothing. Every scenario
@@ -51,14 +51,14 @@ public final class GoldenTrace {
 
     private static List<Scenario> Scenarios() {
         List<Scenario> All = new ArrayList<>();
-        for (Shots Feed : Shots.ALL) {
-            All.add(new Scenario(Feed.name() + " / idle", Feed, (Session, Step) -> { }));
-            All.add(new Scenario(Feed.name() + " / pointer", Feed, GoldenTrace::PointAtTheBall));
-            All.add(new Scenario(Feed.name() + " / demo", Feed, (Session, Step) -> {
-                if (Step == 0) Session.setDemoMode(true);
+        for (Shots Feed : Shots.All) {
+            All.add(new Scenario(Feed.Name() + " / idle", Feed, (Session, Step) -> { }));
+            All.add(new Scenario(Feed.Name() + " / pointer", Feed, GoldenTrace::PointAtTheBall));
+            All.add(new Scenario(Feed.Name() + " / demo", Feed, (Session, Step) -> {
+                if (Step == 0) Session.SetDemoMode(true);
             }));
         }
-        Shots Serve = Shots.byName("Serve");
+        Shots Serve = Shots.ByName("Serve");
         All.add(new Scenario("Serve / sweep with brush", Serve, new SweepingHand()));
         All.add(new Scenario("Serve / demo toggled", Serve, GoldenTrace::ToggleDemo));
         All.add(new Scenario("Serve / auto-replay toggled", Serve, GoldenTrace::ToggleAutoReplay));
@@ -66,21 +66,21 @@ public final class GoldenTrace {
     }
 
     private static void PointAtTheBall(GameSession Session, int Step) {
-        Vec3 Ball = Session.ball().pos();
-        Session.setAim(PlayerReach.clamp(new Vec3(Ball.x(), 0, Ball.z())));
+        Vec3 Ball = Session.Ball().Pos();
+        Session.SetAim(PlayerReach.Clamp(new Vec3(Ball.X(), 0, Ball.Z())));
     }
 
     /** Demo for four seconds, a pointing hand for four, then demo again. */
     private static void ToggleDemo(GameSession Session, int Step) {
-        if (Step == 0) Session.setDemoMode(true);
-        if (Step == 4 * StepsPerSecond) Session.setDemoMode(false);
-        if (Step == 8 * StepsPerSecond) Session.setDemoMode(true);
-        if (!Session.demoMode()) PointAtTheBall(Session, Step);
+        if (Step == 0) Session.SetDemoMode(true);
+        if (Step == 4 * StepsPerSecond) Session.SetDemoMode(false);
+        if (Step == 8 * StepsPerSecond) Session.SetDemoMode(true);
+        if (!Session.DemoMode()) PointAtTheBall(Session, Step);
     }
 
     private static void ToggleAutoReplay(GameSession Session, int Step) {
-        if (Step == 3 * StepsPerSecond) Session.setAutoReplay(false);
-        if (Step == 7 * StepsPerSecond) Session.setAutoReplay(true);
+        if (Step == 3 * StepsPerSecond) Session.SetAutoReplay(false);
+        if (Step == 7 * StepsPerSecond) Session.SetAutoReplay(true);
         PointAtTheBall(Session, Step);
     }
 
@@ -91,16 +91,16 @@ public final class GoldenTrace {
 
         @Override public void Apply(GameSession Session, int Step) {
             if (Step % MouseEventStride != 0) return;
-            double Seconds = Step * DT;
+            double Seconds = Step * Dt;
             boolean Brush = (Seconds >= 2 && Seconds < 4) || (Seconds >= 7 && Seconds < 8.5);
-            if (Brush && !Brushing) HoldZ = Session.playerBlade().centre().z();
+            if (Brush && !Brushing) HoldZ = Session.PlayerBlade().Centre().Z();
             Brushing = Brush;
 
-            Vec3 RawAim = new Vec3(0.9 * Math.sin(2 * Math.PI * Seconds / 2.3), PlayerReach.HIT_Y,
+            Vec3 RawAim = new Vec3(0.9 * Math.sin(2 * Math.PI * Seconds / 2.3), PlayerReach.HitY,
                                    1.3 + 0.9 * Math.sin(2 * Math.PI * Seconds / 3.1));
             double HeightFraction = 0.5 + 0.5 * Math.sin(2 * Math.PI * Seconds / 0.7);
-            Session.setAim(Brushing ? PlayerReach.clampBrushed(RawAim, HeightFraction, HoldZ)
-                                    : PlayerReach.clamp(RawAim));
+            Session.SetAim(Brushing ? PlayerReach.ClampBrushed(RawAim, HeightFraction, HoldZ)
+                                    : PlayerReach.Clamp(RawAim));
         }
     }
 
@@ -108,32 +108,32 @@ public final class GoldenTrace {
         List<String> Lines = new ArrayList<>();
         Lines.add("scenario " + Each.Name());
         GameSession Session = new GameSession();
-        Session.launch(Each.Feed());
+        Session.Launch(Each.Feed());
         StateHash Hash = new StateHash();
 
         for (int Step = 0; Step < ScenarioSteps; Step++) {
             Each.Input().Apply(Session, Step);
-            GameSession.StepResult Result = Session.step();
-            Hash.Mix(Session.ball());
-            Hash.Mix(Session.playerBlade());
-            Hash.Mix(Session.opponentBlade());
+            GameSession.StepResult Result = Session.Step();
+            Hash.Mix(Session.Ball());
+            Hash.Mix(Session.PlayerBlade());
+            Hash.Mix(Session.OpponentBlade());
 
-            if (Result.hitBy() != null) Lines.add("@" + Step + " hit " + Token(Result.hitBy()));
-            if (Result.pointTo() != null) Lines.add("@" + Step + " point " + Token(Result.pointTo()));
-            if (Session.replayDue()) {
+            if (Result.HitBy() != null) Lines.add("@" + Step + " hit " + Token(Result.HitBy()));
+            if (Result.PointTo() != null) Lines.add("@" + Step + " point " + Token(Result.PointTo()));
+            if (Session.ReplayDue()) {
                 Lines.add("@" + Step + " replay");
-                Session.launch(Each.Feed());
+                Session.Launch(Each.Feed());
             }
             if ((Step + 1) % StepsPerSecond == 0) Lines.add("#" + (Step + 1) + " " + Hash.Hex());
         }
-        Scoreboard.Snapshot Score = Session.score();
-        Lines.add(String.format("= %s points %d-%d games %d-%d", Hash.Hex(), Score.playerPoints(),
-                                Score.opponentPoints(), Score.playerGames(), Score.opponentGames()));
+        Scoreboard.Snapshot Score = Session.Score();
+        Lines.add(String.format("= %s points %d-%d games %d-%d", Hash.Hex(), Score.PlayerPoints(),
+                                Score.OpponentPoints(), Score.PlayerGames(), Score.OpponentGames()));
         return Lines;
     }
 
     private static String Token(Scoreboard.Side Side) {
-        return Side == Scoreboard.Side.PLAYER ? "player" : "opponent";
+        return Side == Scoreboard.Side.Player ? "player" : "opponent";
     }
 
     /** 64-bit FNV-1a over the exact bits of every double, so a last-place difference shows. */
@@ -141,26 +141,26 @@ public final class GoldenTrace {
         private long Value = 0xcbf29ce484222325L;
 
         void Mix(BallState Ball) {
-            Mix(Ball.pos());
-            Mix(Ball.vel());
-            Mix(Ball.spin());
-            Mix(Ball.orient().w());
-            Mix(Ball.orient().x());
-            Mix(Ball.orient().y());
-            Mix(Ball.orient().z());
+            Mix(Ball.Pos());
+            Mix(Ball.Vel());
+            Mix(Ball.Spin());
+            Mix(Ball.Orient().W());
+            Mix(Ball.Orient().X());
+            Mix(Ball.Orient().Y());
+            Mix(Ball.Orient().Z());
         }
 
         void Mix(Paddle.Blade Blade) {
-            Mix(Blade.centre());
-            Mix(Blade.normal());
-            Mix(Blade.vel());
-            Mix(Blade.angVel());
+            Mix(Blade.Centre());
+            Mix(Blade.Normal());
+            Mix(Blade.Vel());
+            Mix(Blade.AngVel());
         }
 
         void Mix(Vec3 Vector) {
-            Mix(Vector.x());
-            Mix(Vector.y());
-            Mix(Vector.z());
+            Mix(Vector.X());
+            Mix(Vector.Y());
+            Mix(Vector.Z());
         }
 
         void Mix(double Number) {
