@@ -1,14 +1,15 @@
 package tabletennis.app.render;
 
+import tabletennis.engine.TableSpec;
+import tabletennis.engine.BallSpec;
 import javafx.scene.Group;
 import javafx.scene.image.WritableImage;
 import javafx.scene.paint.Color;
 import javafx.scene.paint.PhongMaterial;
 import javafx.scene.shape.MeshView;
 import javafx.scene.shape.TriangleMesh;
-import tabletennis.engine.Vec3;
+import tabletennis.engine.math.Vec3;
 
-import static tabletennis.engine.Constants.*;
 
 /**
  * TUNED soft vertical projection that makes ball height readable without a shadow pass. The table
@@ -17,8 +18,8 @@ import static tabletennis.engine.Constants.*;
 final class BallShadow {
 
     private static final int TextureSize = 64;
-    private static final double TableLift = TableThick * 0.07;
-    private static final double FloorLift = TableThick * 0.04;
+    private static final double TableLift = TableSpec.TopThickness * 0.07;
+    private static final double FloorLift = TableSpec.TopThickness * 0.04;
 
     private final Group Root = new Group();
     private final MeshView Table;
@@ -30,8 +31,8 @@ final class BallShadow {
         PhongMaterial Ink = new PhongMaterial(Color.WHITE);
         Ink.setDiffuseMap(PenumbraTexture());
         Ink.setSpecularColor(Color.BLACK);
-        Table = Court.Horizontal(-BallR, BallR, -BallR, BallR, TableLift, Ink);
-        Floor = Court.Horizontal(-BallR, BallR, -BallR, BallR, -TableHeight + FloorLift, Ink);
+        Table = Court.Horizontal(-BallSpec.Radius, BallSpec.Radius, -BallSpec.Radius, BallSpec.Radius, TableLift, Ink);
+        Floor = Court.Horizontal(-BallSpec.Radius, BallSpec.Radius, -BallSpec.Radius, BallSpec.Radius, -TableSpec.Height + FloorLift, Ink);
         Root.getChildren().addAll(Floor, Table);
         Root.setMouseTransparent(true);
         Root.setVisible(false);
@@ -56,22 +57,22 @@ final class BallShadow {
     /** The interpolated ball position, so shadow and ball cannot judder apart. */
     void Update(Vec3 Position, boolean Magnified) {
         Root.setVisible(true);
-        Project(Table, Position, 0, TableWidth / 2, TableLength / 2, Magnified);
-        Project(Floor, Position, -TableHeight, TableLength * 3, TableLength * 3, Magnified);
+        Project(Table, Position, 0, TableSpec.Width / 2, TableSpec.Length / 2, Magnified);
+        Project(Floor, Position, -TableSpec.Height, TableSpec.Length * 3, TableSpec.Length * 3, Magnified);
     }
 
     /** A higher ball casts a larger, fainter penumbra centred below it; size follows the drawn ball. */
     private static void Project(MeshView View, Vec3 P, double SurfaceY,
                                 double HalfW, double HalfL, boolean Magnified) {
         double Height = P.Y() - SurfaceY;
-        double Radius = BallR * (Magnified ? 2 : 1) * 2.2 + Height * 0.16;
+        double Radius = BallSpec.Radius * (Magnified ? 2 : 1) * 2.2 + Height * 0.16;
         Bounds B = new Bounds(Math.max(-HalfW, P.X() - Radius), Math.min(HalfW, P.X() + Radius),
                               Math.max(-HalfL, P.Z() - Radius), Math.min(HalfL, P.Z() + Radius));
         boolean Visible = Height >= 0 && B.X0() < B.X1() && B.Z0() < B.Z1();
         View.setVisible(Visible);
         if (!Visible) return;
 
-        View.setOpacity(0.62 / (1 + Math.max(0, Height - BallR) / TableHeight * 2.5));
+        View.setOpacity(0.62 / (1 + Math.max(0, Height - BallSpec.Radius) / TableSpec.Height * 2.5));
         double Lift = SurfaceY == 0 ? TableLift : FloorLift;
         Reshape((TriangleMesh) View.getMesh(), B, SurfaceY + Lift, P, Radius);
     }

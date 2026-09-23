@@ -1,17 +1,17 @@
 package tabletennis.game;
 
-import tabletennis.engine.Aim;
+import tabletennis.engine.BallSpec;
 import tabletennis.engine.BallState;
-import tabletennis.engine.Vec3;
-
-import static tabletennis.engine.Constants.*;
+import tabletennis.engine.flight.LaunchSolver;
+import tabletennis.engine.flight.SpinVector;
+import tabletennis.engine.math.Vec3;
 
 /**
  * Named launch presets that differ mainly in spin, so the difference on screen is the spin.
- * Each states intent (speed, spin, target) and {@link Aim} solves the angle; speeds and spins
+ * Each states intent (speed, spin, target) and {@link LaunchSolver} solves the angle; speeds and spins
  * are match-realistic.
  */
-public record Shots(String Name, String Detail, BallState State, Aim.Solution AimSolution) {
+public record Shots(String Name, String Detail, BallState State, LaunchSolver.Solution AimSolution) {
 
     // A flat 18 m/s ball from 30 cm cannot clear the net; topspin can be hit upward from there.
     private static final Vec3 LowLaunch = new Vec3(0, 0.30, 1.52);
@@ -21,7 +21,7 @@ public record Shots(String Name, String Detail, BallState State, Aim.Solution Ai
 
     private static Shots Aimed(String Name, String Detail, Vec3 From, Vec3 Target,
                                double Speed, double TopRevs, double SideRevs) {
-        Aim.Solution Sol = Aim.AtTarget(From, Target, Speed, TopRevs, SideRevs);
+        LaunchSolver.Solution Sol = LaunchSolver.AtTarget(From, Target, Speed, TopRevs, SideRevs);
         return new Shots(Name, Detail, Sol.State(), Sol);
     }
 
@@ -56,14 +56,14 @@ public record Shots(String Name, String Detail, BallState State, Aim.Solution Ai
 
         Raw("Into the net", "8 m/s, low and flat - the net kills it dead",
             BallState.At(new Vec3(0, 0.17, 0.95), new Vec3(0, -0.20, -8.0),
-                         Aim.Spin(new Vec3(0, 0, -1), 25, 0))),
+                         SpinVector.Of(new Vec3(0, 0, -1), 25, 0))),
 
         // Must land on the server's own half first and still clear the net afterwards.
         Aimed("Corkscrew serve", "4.5 m/s, 125 rev/s sidespin - own court, then over",
               new Vec3(0.15, 0.26, 1.60), Target(0.05, 0.80), 4.5, 40, 125),
 
         Raw("ITTF drop test", "released from 30.5 cm - should rebound to 24-26 cm",
-            BallState.At(new Vec3(0, 0.305 + BallR, -0.70), Vec3.Zero, Vec3.Zero)),
+            BallState.At(new Vec3(0, 0.305 + BallSpec.Radius, -0.70), Vec3.Zero, Vec3.Zero)),
 
         Aimed("Backspin lob", "9 m/s, 60 rev/s backspin - the Magnus float",
               new Vec3(0, 0.35, 1.52), Target(0, -1.15), 9.0, -60, 0),
@@ -78,7 +78,7 @@ public record Shots(String Name, String Detail, BallState State, Aim.Solution Ai
         throw new IllegalArgumentException("no shot named " + Name);
     }
 
-    public double SpinRevs() { return State.SpinRevsPerSec(); }
+    public double SpinRevs() { return State.SpinRevsPerSecond(); }
 
     public BallState WithoutSpin() { return State.WithSpin(Vec3.Zero); }
 

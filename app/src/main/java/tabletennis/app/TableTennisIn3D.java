@@ -11,11 +11,16 @@ import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
 import javafx.stage.Stage;
-import tabletennis.engine.*;
+import tabletennis.engine.BallState;
+import tabletennis.engine.Simulation;
+import tabletennis.engine.contact.BladeCollider;
+import tabletennis.engine.math.Quat;
+import tabletennis.engine.math.Vec3;
+import tabletennis.engine.world.FlightPredictor;
 import tabletennis.game.GameSession;
 import tabletennis.game.Shots;
 import tabletennis.game.PlayerReach;
-import tabletennis.game.Scoreboard;
+import tabletennis.game.Side;
 import tabletennis.game.ShotAssist;
 import tabletennis.game.Stroke;
 import tabletennis.app.render.*;
@@ -26,8 +31,6 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.List;
 
-import static tabletennis.engine.Constants.Dt;
-import static tabletennis.engine.Constants.MaxFrame;
 
 /**
  * Mr. Pong, a 3D table tennis game. The JavaFX entry point and composition root: frame loop,
@@ -39,8 +42,11 @@ public class TableTennisIn3D extends Application {
     private static final Color Background = Color.web("#17232e");
     private static final int WindowWidth = 1280, WindowHeight = 780;
 
-    /** Stops a catch-up spiral after a stall; MaxFrame already bounds a normal frame. */
+    /** Stops a catch-up spiral after a stall; MaxFrameSeconds already bounds a normal frame. */
     private static final int MaxStepsPerFrame = 4000;
+
+    /** Longest frame the accumulator honours; beyond it time is dropped to avoid a death spiral. */
+    private static final double MaxFrameSeconds = 0.25;
 
     /** TUNED: whole physics steps per trail dot (4.2 ms), shared by trail and ghost. */
     private static final int TrailStride = 2;
@@ -69,12 +75,12 @@ public class TableTennisIn3D extends Application {
     private final PaddleView OpponentView = new PaddleView(false);
 
     /** Poses at the start of the last step, so blades interpolate with the same alpha as the ball. */
-    private Paddle.Blade PrevPlayerPose = Session.PlayerBlade();
-    private Paddle.Blade PrevOpponentPose = Session.OpponentBlade();
+    private BladeCollider PrevPlayerPose = Session.PlayerBlade();
+    private BladeCollider PrevOpponentPose = Session.OpponentBlade();
 
     private final Deque<Vec3> TrailPoints = new ArrayDeque<>();
     private int StepsSinceTrailPoint = 0;
-    private int MarksAtBounceSerial = 0;
+    private int MarksAtBounceCount = 0;
 
     private boolean ShowGhost = true;
     private boolean ShowTrail = true;
@@ -161,7 +167,7 @@ public class TableTennisIn3D extends Application {
                 }
                 if (LastNanos == 0) { LastNanos = Now; return; }   // first frame has no dt
                 // Clamped before scaling, so a stall cannot hand the accumulator a second of work.
-                double Frame = Math.min((Now - LastNanos) / 1e9, MaxFrame);
+                double Frame = Math.min((Now - LastNanos) / 1e9, MaxFrameSeconds);
                 LastNanos = Now;
 
                 StepFrame(Frame);
@@ -172,7 +178,7 @@ public class TableTennisIn3D extends Application {
 
     /** Capture runs whole physics steps, not wall-clock frames, so the same arguments give the same image. */
     private void AdvanceToCaptureTime() {
-        long Steps = Math.round(ScreenshotAt / Dt);
+        long Steps = Math.round(ScreenshotAt / Simulation.Step);
         for (long Step = 0; Step < Steps; Step++) AdvanceOne();
     }
 
@@ -183,9 +189,9 @@ public class TableTennisIn3D extends Application {
         }
         int Steps = 0;
         Accumulator += FrameSeconds * TimeScale;
-        while (Accumulator >= Dt) {
+        while (Accumulator >= Simulation.Step) {
             AdvanceOne();
-            Accumulator -= Dt;
+            Accumulator -= Simulation.Step;
             if (++Steps > MaxStepsPerFrame) { Accumulator = 0; break; }
             if (Session.ReplayDue()) {
                 LaunchShot(CurrentShot);   // resets the accumulator
@@ -215,12 +221,12 @@ public class TableTennisIn3D extends Application {
     private void SampleTrail() {
         if (++StepsSinceTrailPoint < TrailStride) return;
         StepsSinceTrailPoint = 0;
-        TrailPoints.addLast(Session.Ball().Pos());
+        TrailPoints.addLast(Session.Ball().Position());
         while (TrailPoints.size() > TrailDots) TrailPoints.removeFirst();
     }
 
-    private void ShowContact(Scoreboard.Side HitBy) {
-        boolean PlayerHit = HitBy == Scoreboard.Side.Player;
+    private void ShowContact(Side HitBy) {
+        boolean PlayerHit = HitBy == Side.Player;
         Rig.OnRallyHit(PlayerHit);
 
         ShotAssist.Debug D = Session.LastShot();
@@ -234,28 +240,28 @@ public class TableTennisIn3D extends Application {
 
     /** Interpolated between the last two physics states, or 480 Hz against 60 Hz stutters. */
     private void Render(double FrameSeconds) {
-        double Alpha = Paused ? 0 : Math.min(1, Accumulator / Dt);
+        double Alpha = Paused ? 0 : Math.min(1, Accumulator / Simulation.Step);
         BallState From = Session.PreviousBall(), To = Session.Ball();
         BallModel.Update(new BallState(
-                Vec3.Lerp(From.Pos(), To.Pos(), Alpha),
-                Vec3.Lerp(From.Vel(), To.Vel(), Alpha),
+                Vec3.Lerp(From.Position(), To.Position(), Alpha),
+                Vec3.Lerp(From.Velocity(), To.Velocity(), Alpha),
                 Vec3.Lerp(From.Spin(), To.Spin(), Alpha),
-                Quat.Slerp(From.Orient(), To.Orient(), Alpha)));
+                Quat.Slerp(From.Orientation(), To.Orientation(), Alpha)));
 
-        Rig.UpdateRally(FrameSeconds, To.Pos());
+        Rig.UpdateRally(FrameSeconds, To.Position());
         DrawPaddle(PlayerView, PrevPlayerPose, Session.PlayerBlade(), Alpha);
         DrawPaddle(OpponentView, PrevOpponentPose, Session.OpponentBlade(), Alpha);
 
         if (ShowTrail) FlightTrail.SetPath(TrailPoints);
-        if (MarksAtBounceSerial != Session.BounceSerial()) {
-            MarksAtBounceSerial = Session.BounceSerial();
+        if (MarksAtBounceCount != Session.BounceCount()) {
+            MarksAtBounceCount = Session.BounceCount();
             Marks.SetMarks(Session.BounceMarks());
         }
         if (ShowControlDebug) HudLayer.SetControl(ControlReadout());
     }
 
     /** The normal is lerped, not slerped: under a degree per step, the two agree to 1e-6. */
-    private static void DrawPaddle(PaddleView PaddleModel, Paddle.Blade From, Paddle.Blade To, double Alpha) {
+    private static void DrawPaddle(PaddleView PaddleModel, BladeCollider From, BladeCollider To, double Alpha) {
         PaddleModel.Update(Vec3.Lerp(From.Centre(), To.Centre(), Alpha),
                     Vec3.Lerp(From.Normal(), To.Normal(), Alpha).Normalized());
     }
@@ -299,7 +305,7 @@ public class TableTennisIn3D extends Application {
             Target.X(), Target.Y(), Target.Z(), Clamped ? "   (clamped)" : "",
             -PlayerReach.MaxX, PlayerReach.MaxX, PlayerReach.HitY, PlayerReach.ZNear, PlayerReach.ZFar,
             Dist, Travel * 1000, Stroke.TrackSpeed,
-            B.Pos().X(), B.Pos().Y(), B.Pos().Z(),
+            B.Position().X(), B.Position().Y(), B.Position().Z(),
             Double.isNaN(Arrive) ? "  --  " : String.format("%.0f ms", Arrive * 1000), Target.Z(),
             ReachVerdict(Travel, Arrive));
     }
@@ -417,7 +423,7 @@ public class TableTennisIn3D extends Application {
         Marks.Clear();
 
         // The no-spin ghost, predicted once at the trail's stride and length so they compare dot for dot.
-        List<Vec3> GhostPath = World.Predict(Shot.WithoutSpin(), TrailDots * TrailStride * Dt, TrailStride);
+        List<Vec3> GhostPath = FlightPredictor.Path(Shot.WithoutSpin(), TrailDots * TrailStride * Simulation.Step, TrailStride);
         Ghost.SetPath(GhostPath);
         RefreshGhost();
     }

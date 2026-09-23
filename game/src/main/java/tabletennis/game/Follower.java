@@ -1,14 +1,16 @@
 package tabletennis.game;
 
 import tabletennis.engine.BallState;
-import tabletennis.engine.Paddle;
-import tabletennis.engine.Vec3;
+import tabletennis.engine.world.Racket;
+import tabletennis.engine.math.Vec3;
 
-import static tabletennis.engine.Constants.*;
+import tabletennis.engine.TableSpec;
+
+import static tabletennis.engine.math.Numeric.Clamp;
 
 /**
  * An unbeatable opponent that moves to where the ball IS and swings when it arrives. It cannot be
- * made beatable by slowing it down; that needs prediction ({@link tabletennis.engine.World#Predict}).
+ * made beatable by slowing it down; that needs prediction ({@link tabletennis.engine.world.FlightPredictor}).
  */
 public final class Follower implements Opponent {
 
@@ -16,7 +18,7 @@ public final class Follower implements Opponent {
     private static final double MaxSpeed = 25.0;
 
     /** Just beyond the opponent's end of the table. */
-    public static final double PlaneZ = -(TableLength / 2 + 0.12);
+    public static final double PlaneZ = -(TableSpec.HalfLength + 0.12);
 
     /** TUNED: without a ceiling the blade rides a rising ball up, hitting it every step. */
     private static final double MaxReachY = 0.55;
@@ -45,9 +47,9 @@ public final class Follower implements Opponent {
     private Vec3 SwingFrom = Ready;
 
     @Override
-    public void Advance(BallState Ball, Paddle Blade, double Dt) {
-        Vec3 B = Ball.Pos();
-        boolean Incoming = B.Z() < 0 && Ball.Vel().Z() < 0;
+    public void Advance(BallState Ball, Racket Blade, double Dt) {
+        Vec3 B = Ball.Position();
+        boolean Incoming = B.Z() < 0 && Ball.Velocity().Z() < 0;
 
         if (Incoming && B.Z() - PlaneZ < SwingRange && SwingElapsed < 0) {
             SwingFrom = Reachable(B);
@@ -59,7 +61,7 @@ public final class Follower implements Opponent {
         else if (Incoming) Want = Reachable(B);
         else Want = Ready;   // following a departing ball would chase it into the roof
 
-        Blade.MoveTo(LimitStep(Blade.Pos(), Want, MaxSpeed * Dt), Face, Dt);
+        Blade.MoveTo(Blade.Position().MovedToward(Want, MaxSpeed * Dt), Face, Dt);
     }
 
     /** A half-sine stroke profile: an instant start would read as an impossible velocity. */
@@ -74,21 +76,12 @@ public final class Follower implements Opponent {
                         SwingFrom.Z() + SwingSpeed * Travel);
     }
 
-    private static Vec3 LimitStep(Vec3 From, Vec3 To, double MaxStep) {
-        Vec3 Step = To.Minus(From);
-        return Step.Length() > MaxStep ? From.PlusScaled(Step.Normalized(), MaxStep) : To;
-    }
-
     /** The ball's position, clamped to where the blade can be: above the table, below the roof. */
     private static Vec3 Reachable(Vec3 B) {
         double ToPlane = B.Z() - PlaneZ;
         boolean StepIn = B.Y() < StepInHeight && ToPlane > 0 && ToPlane < ReachFwd;
-        return new Vec3(Clamp(B.X(), -TableWidth, TableWidth),
+        return new Vec3(Clamp(B.X(), -TableSpec.Width, TableSpec.Width),
                         Clamp(B.Y(), 0.04, MaxReachY),
                         StepIn ? B.Z() : PlaneZ);
-    }
-
-    private static double Clamp(double V, double Lo, double Hi) {
-        return V < Lo ? Lo : (V > Hi ? Hi : V);
     }
 }

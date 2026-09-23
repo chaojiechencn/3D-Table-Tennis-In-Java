@@ -1,12 +1,12 @@
 package tabletennis.game;
 
 import tabletennis.engine.BallState;
-import tabletennis.engine.Vec3;
-import tabletennis.engine.World;
+import tabletennis.engine.Simulation;
+import tabletennis.engine.math.Vec3;
+import tabletennis.engine.world.FlightPredictor;
 
 import java.util.List;
 
-import static tabletennis.engine.Constants.Dt;
 
 /**
  * A stand-in hand for demo mode. It produces a CURSOR point, as the mouse does, through the same
@@ -74,12 +74,12 @@ public final class DemoPlayer {
      * closest to the middle of the bat; the first reachable point is always a rim graze.
      */
     private Meeting Meeting(BallState Ball, boolean MayHit) {
-        boolean GoingAway = Ball.Vel().Z() <= 0 && Ball.Pos().Z() > 0;
+        boolean GoingAway = Ball.Velocity().Z() <= 0 && Ball.Position().Z() > 0;
         if (GoingAway) return null;
 
-        List<Vec3> Path = World.Predict(Ball, Lookahead, Stride);
+        List<Vec3> Path = FlightPredictor.Path(Ball, Lookahead, Stride);
         boolean Bounced = MayHit;
-        double PrevY = Ball.Pos().Y();
+        double PrevY = Ball.Position().Y();
 
         Meeting Best = null;
         double BestErr = Double.MAX_VALUE;
@@ -93,7 +93,7 @@ public final class DemoPlayer {
 
             double Err = Math.abs(P.Y() - PlayerReach.HitY);
             if (Err > PlayerReach.VerticalCapture) continue;
-            if (Err < BestErr) { BestErr = Err; Best = new Meeting(P, I * Stride * Dt); }
+            if (Err < BestErr) { BestErr = Err; Best = new Meeting(P, I * Stride * Simulation.Step); }
         }
         return Best;
     }

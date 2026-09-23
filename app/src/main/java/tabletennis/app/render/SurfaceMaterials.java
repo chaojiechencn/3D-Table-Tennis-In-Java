@@ -1,11 +1,11 @@
 package tabletennis.app.render;
 
+import tabletennis.engine.TableSpec;
 import javafx.scene.image.PixelWriter;
 import javafx.scene.image.WritableImage;
 import javafx.scene.paint.Color;
 import javafx.scene.paint.PhongMaterial;
 
-import static tabletennis.engine.Constants.*;
 
 /**
  * Small, deterministic material maps for the training hall. All maps are built once, never
@@ -116,18 +116,18 @@ final class SurfaceMaterials {
         return Material;
     }
 
-    private static final double BoardWidth = TableWidth / 5;
-    private static final double BoardLength = TableLength * 0.75;
+    private static final double BoardWidth = TableSpec.Width / 5;
+    private static final double BoardLength = TableSpec.Length * 0.75;
 
     private static double WithTableOcclusion(double Shade, double X, double Z) {
-        double Dx = Math.max(0, Math.abs(X) - TableWidth * 0.46);
-        double Dz = Math.max(0, Math.abs(Z) - TableLength * 0.46);
-        double Softness = TableHeight * 0.52;
+        double Dx = Math.max(0, Math.abs(X) - TableSpec.Width * 0.46);
+        double Dz = Math.max(0, Math.abs(Z) - TableSpec.Length * 0.46);
+        double Softness = TableSpec.Height * 0.52;
         return Shade * (1 - 0.48 * Math.exp(-(Dx * Dx + Dz * Dz) / (Softness * Softness)));
     }
 
     private static double WithLegContacts(double Shade, double X, double Z) {
-        double Spread = TableHeight * 0.12;
+        double Spread = TableSpec.Height * 0.12;
         for (double LegX : new double[] { -Court.LegX, Court.LegX }) {
             for (double LegZ : new double[] { -Court.LegZ, Court.LegZ }) {
                 double Lx = X - LegX;
@@ -140,7 +140,7 @@ final class SurfaceMaterials {
 
     /** Room dressing, not a moving shadow: stable through every camera cut. */
     private static double WithRoomPool(double Shade, double X, double Z) {
-        double Pool = Math.exp(-(X * X + Z * Z) / (TableLength * TableLength * 2));
+        double Pool = Math.exp(-(X * X + Z * Z) / (TableSpec.Length * TableSpec.Length * 2));
         return Shade * (0.62 + 0.38 * Pool);
     }
 

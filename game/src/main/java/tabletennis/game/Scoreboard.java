@@ -7,12 +7,6 @@ package tabletennis.game;
  */
 public final class Scoreboard {
 
-    public enum Side {
-        Player, Opponent;
-
-        public Side Other() { return this == Player ? Opponent : Player; }
-    }
-
     /** ITTF 2.11.1 */
     public static final int PointsToWinGame = 11;
     public static final int WinBy = 2;

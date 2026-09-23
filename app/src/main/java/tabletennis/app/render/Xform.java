@@ -3,8 +3,8 @@ package tabletennis.app.render;
 import javafx.geometry.Point3D;
 import javafx.scene.Node;
 import javafx.scene.transform.Rotate;
-import tabletennis.engine.Quat;
-import tabletennis.engine.Vec3;
+import tabletennis.engine.math.Quat;
+import tabletennis.engine.math.Vec3;
 
 /**
  * The ONLY place physics space becomes scene space, in both directions. Physics is right-handed

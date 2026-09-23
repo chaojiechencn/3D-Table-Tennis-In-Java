@@ -1,5 +1,6 @@
 package tabletennis.app.render;
 
+import tabletennis.engine.BallSpec;
 import javafx.scene.Group;
 import javafx.scene.image.PixelWriter;
 import javafx.scene.image.WritableImage;
@@ -8,7 +9,6 @@ import javafx.scene.paint.PhongMaterial;
 import javafx.scene.shape.Sphere;
 import tabletennis.engine.BallState;
 
-import static tabletennis.engine.Constants.BallR;
 
 /** The ball, painted and rotated so its spin is visible; a plain sphere looks the same at any spin. */
 public final class BallView {
@@ -23,7 +23,7 @@ public final class BallView {
     private boolean Magnified = false;
 
     public BallView() {
-        Sprite = new Sphere(Xform.Length(BallR), 32);
+        Sprite = new Sphere(Xform.Length(BallSpec.Radius), 32);
         PhongMaterial Mat = new PhongMaterial(Color.WHITE);
         Mat.setDiffuseMap(SpinTexture(1));
         // A faint self-lit copy stands in for room bounce, keeping the underside trackable.
@@ -40,9 +40,9 @@ public final class BallView {
     public Group ShadowNode() { return Shadow.Node(); }
 
     public void Update(BallState S) {
-        Xform.Place(Root, S.Pos());
-        Root.getTransforms().setAll(Xform.ToRotate(S.Orient()));
-        Shadow.Update(S.Pos(), Magnified);
+        Xform.Place(Root, S.Position());
+        Root.getTransforms().setAll(Xform.ToRotate(S.Orientation()));
+        Shadow.Update(S.Position(), Magnified);
     }
 
     /** Twice life size for projectors; the sprite only, never the physics radius. */

@@ -4,24 +4,7 @@ plugins {
 
 dependencies {
     api project(':engine')
-}
-
-tasks.register('selfTest', JavaExec) {
-    group = 'verification'
-    description = 'Runs the headless physics validation suite'
-    dependsOn tasks.named('testClasses')
-    mainClass = 'tabletennis.engine.SelfTest'
-    classpath = sourceSets.test.runtimeClasspath
-    javaLauncher = javaToolchains.launcherFor(java.toolchain)
-}
-
-tasks.register('rallyTest', JavaExec) {
-    group = 'verification'
-    description = 'Runs the headless gameplay validation suite'
-    dependsOn tasks.named('testClasses')
-    mainClass = 'tabletennis.game.RallyTest'
-    classpath = sourceSets.test.runtimeClasspath
-    javaLauncher = javaToolchains.launcherFor(java.toolchain)
+    testImplementation testFixtures(project(':engine'))
 }
 
 tasks.register('writeGoldenTrace', JavaExec) {
@@ -32,8 +15,4 @@ tasks.register('writeGoldenTrace', JavaExec) {
     classpath = sourceSets.test.runtimeClasspath
     args file('src/test/resources/tabletennis/game/golden-trace.txt').absolutePath
     javaLauncher = javaToolchains.launcherFor(java.toolchain)
-}
-
-tasks.named('test') {
-    dependsOn tasks.named('selfTest'), tasks.named('rallyTest')
 }

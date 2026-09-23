@@ -1,21 +1,24 @@
 package tabletennis.game;
 
 import tabletennis.engine.BallState;
-import tabletennis.engine.Paddle;
-import tabletennis.engine.Vec3;
-import tabletennis.engine.World;
+import tabletennis.engine.Simulation;
+import tabletennis.engine.contact.BladeCollider;
+import tabletennis.engine.math.Vec3;
+import tabletennis.engine.world.PhysicsWorld;
+import tabletennis.engine.world.Racket;
+import tabletennis.engine.world.StepReport;
+import tabletennis.game.rally.EventType;
+import tabletennis.game.rally.RallyEvent;
+import tabletennis.game.rally.RallyFacts;
+import tabletennis.game.rally.Referee;
 
+import java.util.ArrayList;
 import java.util.List;
 
-import static tabletennis.engine.Constants.Dt;
-
 /**
- * One headless game: the world, both rackets, the rally rules and the score. The application and
- * RallyTest both drive it, so the game that is tested is the game that is played. It advances
- * only in whole physics steps and hands out immutable snapshots.
- *
- * The one-bounce rule is enforced by giving {@link World} a null racket for whoever may not hit
- * yet; a decided point withdraws both.
+ * One headless game: the world, both rackets, the referee and the score. The application and the
+ * tests both drive it, so the game that is tested is the game that is played. It advances only in
+ * whole physics steps and hands out immutable values.
  */
 public final class GameSession {
 
@@ -25,30 +28,27 @@ public final class GameSession {
     /** A decided point is cut short rather than left to trickle to a stop. */
     static final double PointEndDelay = 0.9;
 
-    /** A push dug off the surface touches the table on the contact's own step; that is not a bounce. */
-    static final double ContactBounceWindow = Dt * 2;
-
-    private static final double TerminalEventWindow = Dt * 2;
-
     // With no clean event, the rally ends once the ball has dropped this far or all but stopped.
     private static final double DroppedBelowY = -0.60;
     private static final double StoppedSpeed = 0.25;
     private static final double StoppedAfter = 1.5;
 
-    /** What one step produced; either side may be null. */
-    public record StepResult(Scoreboard.Side HitBy, Scoreboard.Side PointTo) {
-        static final StepResult None = new StepResult(null, null);
+    private static final int BounceMarksKept = 24;
+
+    /** What one step produced; HitBy and PointTo are null when nothing of the kind happened. */
+    public record StepResult(Side HitBy, Side PointTo, List<RallyEvent> Events) {
         public boolean Contact()      { return HitBy != null; }
         public boolean PointAwarded() { return PointTo != null; }
     }
 
-    private final World Physics = new World();
-    private final Paddle PlayerPaddle = new Paddle(PlayerReach.Neutral, Stroke.Square);
-    private final Paddle OpponentPaddle = new Paddle(Follower.Ready, Follower.Square);
+    private final PhysicsWorld Physics = new PhysicsWorld();
+    private final Racket PlayerRacket = new Racket(PlayerReach.Neutral, Stroke.Square);
+    private final Racket OpponentRacket = new Racket(Follower.Ready, Follower.Square);
     private final Stroke PlayerStroke = new Stroke(PlayerReach.Neutral);
     private final DemoPlayer Demo = new DemoPlayer();
     private final Opponent OpponentPlayer;
     private final ShotAssist Assist;
+    private final Referee Rules = new Referee();
     private final Scoreboard Score = new Scoreboard();
 
     private Vec3 Aim;                     // null until the mouse has moved
@@ -56,34 +56,22 @@ public final class GameSession {
     private boolean AutoReplay = true;
     private double ReplayAt = Double.NaN; // NaN while the rally is live
 
-    private int LastPaddleHits;
-    private int LastBounceSerial;
-    private double LastHitTime;
-    private Scoreboard.Side LastHitter;   // null while the feed is the last thing that hit it
-    private boolean PlayerMayHit;
-    private boolean OpponentMayHit;
-    private boolean PointOver;
-    private Scoreboard.Side AwardedThisStep;
+    private final List<Vec3> BounceMarks = new ArrayList<>();
+    private int BounceCount;              // never reset: "has anything landed since I looked?"
 
     public GameSession() { this(new Follower(), new ShotAssist()); }
 
     GameSession(Opponent OpponentPlayer, ShotAssist Assist) {
         this.OpponentPlayer = OpponentPlayer;
         this.Assist = Assist;
-        Physics.SetPaddles(PlayerPaddle, OpponentPaddle);
     }
 
     /** Put a feed in play, keeping the match score. */
     public void Launch(Shots Shot) {
         Physics.Launch(Shot.State());
-        LastPaddleHits = 0;
-        LastBounceSerial = Physics.BounceSerial();
-        LastHitTime = -1;
-        LastHitter = null;
-        PlayerMayHit = false;
-        OpponentMayHit = false;
-        PointOver = false;
+        Rules.StartRally();
         ReplayAt = Double.NaN;
+        BounceMarks.clear();
     }
 
     /** Already mapped and clamped by the caller. */
@@ -100,133 +88,92 @@ public final class GameSession {
 
     public boolean ReplayDue() { return !Double.isNaN(ReplayAt) && Physics.Time() >= ReplayAt; }
 
-    /** Advance exactly one DT. Both blades are posed first, so contact uses this step's swing. */
+    /**
+     * Advance exactly one Simulation.Step. Both blades are posed first, so a contact uses this
+     * step's swing; a racket that may not strike yet is simply absent, so the ball phases through.
+     */
     public StepResult Step() {
-        AwardedThisStep = null;
         MoveRackets();
-        Physics.SetPaddles(PlayerMayHit && !PointOver ? PlayerPaddle : null,
-                         OpponentMayHit && !PointOver ? OpponentPaddle : null);
+        Physics.SetRackets(StrikableRackets());
 
-        BallState BeforeStep = Physics.State();
-        Physics.Step();
+        BallState BeforeStep = Physics.Ball();
+        StepReport Report = Physics.Step();
+        List<RallyEvent> Contacts = RallyFacts.Of(Report, PlayerRacket);
 
-        Scoreboard.Side HitBy = HandleContact(BeforeStep);
-        HandleBounce();
-        HandleOutOrFloor();
+        Side HitBy = LastHitter(Contacts);
+        if (HitBy != null) {
+            Racket Struck = HitBy == Side.Player ? PlayerRacket : OpponentRacket;
+            Physics.ReplaceBall(Assist.Assist(BeforeStep, Physics.Ball(), Struck, HitBy == Side.Player));
+        }
+
+        Referee.Ruling Ruling = Rules.Judge(Contacts, Report.Before(), Report.After(), Physics.Time());
+        if (Ruling.PointTo() != null) AwardPoint(Ruling.PointTo());
+        KeepBounceMarks(Ruling.Events());
         ScheduleFallbackReplay();
-
-        return HitBy == null && AwardedThisStep == null
-                ? StepResult.None : new StepResult(HitBy, AwardedThisStep);
+        return new StepResult(HitBy, Ruling.PointTo(), Ruling.Events());
     }
 
     private void MoveRackets() {
-        if (DemoMode) PlayerStroke.AimAt(Demo.CursorFor(Physics.State(), PlayerMayHit && !PointOver, Dt));
+        if (DemoMode) PlayerStroke.AimAt(Demo.CursorFor(Physics.Ball(), Rules.MayHit(Side.Player), Simulation.Step));
         else if (Aim != null) PlayerStroke.AimAt(Aim);
-        PlayerStroke.Advance(PlayerPaddle, Dt);
-        OpponentPlayer.Advance(Physics.State(), OpponentPaddle, Dt);
+        PlayerStroke.Advance(PlayerRacket, Simulation.Step);
+        OpponentPlayer.Advance(Physics.Ball(), OpponentRacket, Simulation.Step);
     }
 
-    private Scoreboard.Side HandleContact(BallState BeforeStep) {
-        if (Physics.PaddleHits() <= LastPaddleHits) return null;
-        LastPaddleHits = Physics.PaddleHits();
-
-        boolean PlayerHit = LastHitByPlayer();
-        Paddle Racket = PlayerHit ? PlayerPaddle : OpponentPaddle;
-        Physics.SetState(Assist.Assist(BeforeStep, Physics.State(), Racket, PlayerHit));
-
-        LastHitter = PlayerHit ? Scoreboard.Side.Player : Scoreboard.Side.Opponent;
-        LastHitTime = Physics.Time();
-        PlayerMayHit = false;
-        OpponentMayHit = false;
-        return LastHitter;
+    /** Player first, then opponent: the order equal times of impact resolve in. */
+    private List<Racket> StrikableRackets() {
+        List<Racket> Strikable = new ArrayList<>(2);
+        if (Rules.MayHit(Side.Player)) Strikable.add(PlayerRacket);
+        if (Rules.MayHit(Side.Opponent)) Strikable.add(OpponentRacket);
+        return Strikable;
     }
 
-    /**
-     * A first bounce opens the receiver's racket; a second, or the hitter's own half, decides the
-     * point. The serial always advances, or the next bounce is compared with a stale one.
-     */
-    private void HandleBounce() {
-        boolean NewBounce = Physics.BounceSerial() > LastBounceSerial;
-        if (NewBounce && Physics.Time() - LastHitTime > ContactBounceWindow) {
-            Scoreboard.Side Half = LastBounceHalf();
-            if (LastHitter == Half) {
-                EndPoint(Half.Other());                        // never crossed the net
-            } else if (Half == Scoreboard.Side.Player) {
-                if (PlayerMayHit) EndPoint(Scoreboard.Side.Opponent); else PlayerMayHit = true;
-            } else {
-                if (OpponentMayHit) EndPoint(Scoreboard.Side.Player); else OpponentMayHit = true;
-            }
-        }
-        LastBounceSerial = Physics.BounceSerial();
+    private static Side LastHitter(List<RallyEvent> Contacts) {
+        Side Hitter = null;
+        for (RallyEvent Each : Contacts) if (Each.Type() == EventType.RacketHit) Hitter = Each.HitBy();
+        return Hitter;
     }
 
-    /**
-     * Out or floor decides against the last hitter; the feed counts as the player's. A net cord is
-     * not here: a ball that clips the cord and lands legally is a good shot.
-     */
-    private void HandleOutOrFloor() {
-        World.Event Last = Physics.LastEvent();
-        boolean Terminal = Last != null && Physics.Time() - Last.Time() < TerminalEventWindow
-                && (Last.Type() == World.EventType.OutOfBounds || Last.Type() == World.EventType.Floor);
-        if (Terminal) {
-            EndPoint(LastHitter == Scoreboard.Side.Opponent
-                     ? Scoreboard.Side.Player : Scoreboard.Side.Opponent);
-        }
+    /** Counts even with replay off. */
+    private void AwardPoint(Side Winner) {
+        Score.PointTo(Winner);
+        if (AutoReplay && Double.isNaN(ReplayAt)) ReplayAt = Physics.Time() + PointEndDelay;
     }
 
     private void ScheduleFallbackReplay() {
-        BallState B = Physics.State();
-        boolean Gone = B.Pos().Y() < DroppedBelowY;
-        boolean Stopped = Physics.Time() > StoppedAfter && B.Speed() < StoppedSpeed;
+        BallState Ball = Physics.Ball();
+        boolean Gone = Ball.Position().Y() < DroppedBelowY;
+        boolean Stopped = Physics.Time() > StoppedAfter && Ball.Speed() < StoppedSpeed;
         if (AutoReplay && Double.isNaN(ReplayAt) && (Gone || Stopped)) {
             ReplayAt = Physics.Time() + ReplayDelay;
         }
     }
 
-    /** Awards once however many rules fire, and counts even with replay off. */
-    private void EndPoint(Scoreboard.Side Winner) {
-        if (PointOver) return;
-        PointOver = true;
-        AwardedThisStep = Winner;
-        Score.PointTo(Winner);
-        if (AutoReplay && Double.isNaN(ReplayAt)) ReplayAt = Physics.Time() + PointEndDelay;
-    }
-
-    private boolean LastHitByPlayer() {
-        World.Event Hit = Latest(World.EventType.PaddleHit);
-        return Hit == null || Hit.Side() < 0;
-    }
-
-    private Scoreboard.Side LastBounceHalf() {
-        World.Event Bounce = Latest(World.EventType.TableBounce);
-        return Bounce != null && Bounce.Side() < 0 ? Scoreboard.Side.Player : Scoreboard.Side.Opponent;
-    }
-
-    private World.Event Latest(World.EventType Type) {
-        List<World.Event> Events = Physics.Events();
-        for (int I = Events.size() - 1; I >= 0; I--) {
-            if (Events.get(I).Type() == Type) return Events.get(I);
+    private void KeepBounceMarks(List<RallyEvent> Events) {
+        for (RallyEvent Each : Events) {
+            if (Each.Type() != EventType.TableBounce) continue;
+            BounceCount++;
+            BounceMarks.add(new Vec3(Each.Point().X(), 0.001, Each.Point().Z()));
+            while (BounceMarks.size() > BounceMarksKept) BounceMarks.remove(0);
         }
-        return null;
     }
 
-    public BallState Ball()              { return Physics.State(); }
-    public BallState PreviousBall()      { return Physics.Previous(); }
-    public double Time()                 { return Physics.Time(); }
-    public Paddle.Blade PlayerBlade()    { return PlayerPaddle.Collider(); }
-    public Paddle.Blade OpponentBlade()  { return OpponentPaddle.Collider(); }
-    public int BounceSerial()            { return Physics.BounceSerial(); }
-    public List<Vec3> BounceMarks()      { return Physics.BounceMarks(); }
-    public List<World.Event> Events()    { return Physics.Events(); }
-    public Scoreboard.Snapshot Score()   { return Score.Snapshot(); }
-    public boolean DemoMode()            { return DemoMode; }
-    public boolean AutoReplay()          { return AutoReplay; }
-    public boolean PlayerMayHit()        { return PlayerMayHit && !PointOver; }
-    public boolean OpponentMayHit()      { return OpponentMayHit && !PointOver; }
-    public boolean PointOver()           { return PointOver; }
+    public BallState Ball()               { return Physics.Ball(); }
+    public BallState PreviousBall()       { return Physics.PreviousBall(); }
+    public double Time()                  { return Physics.Time(); }
+    public BladeCollider PlayerBlade()    { return PlayerRacket.Blade(); }
+    public BladeCollider OpponentBlade()  { return OpponentRacket.Blade(); }
+    public int BounceCount()              { return BounceCount; }
+    public List<Vec3> BounceMarks()       { return List.copyOf(BounceMarks); }
+    public Scoreboard.Snapshot Score()    { return Score.Snapshot(); }
+    public boolean DemoMode()             { return DemoMode; }
+    public boolean AutoReplay()           { return AutoReplay; }
+    public boolean PlayerMayHit()         { return Rules.MayHit(Side.Player); }
+    public boolean OpponentMayHit()       { return Rules.MayHit(Side.Opponent); }
+    public boolean PointOver()            { return Rules.PointOver(); }
 
-    public ShotAssist.Debug LastShot()   { return Assist.Debug(); }
-    public double TargetHalfWidth()      { return Assist.TargetHalfWidth(); }
-    public double TargetNearDepth()      { return Assist.TargetNearDepth(); }
-    public double TargetFarDepth()       { return Assist.TargetFarDepth(); }
+    public ShotAssist.Debug LastShot()    { return Assist.Debug(); }
+    public double TargetHalfWidth()       { return Assist.TargetHalfWidth(); }
+    public double TargetNearDepth()       { return Assist.TargetNearDepth(); }
+    public double TargetFarDepth()        { return Assist.TargetFarDepth(); }
 }

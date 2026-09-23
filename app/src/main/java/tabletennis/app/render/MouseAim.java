@@ -4,7 +4,7 @@ import javafx.geometry.Point3D;
 import javafx.scene.Camera;
 import javafx.scene.PerspectiveCamera;
 import javafx.scene.SubScene;
-import tabletennis.engine.Vec3;
+import tabletennis.engine.math.Vec3;
 
 /**
  * Where the cursor's ray meets a HORIZONTAL plane at a given height. Geometry only: no clamping

@@ -1,21 +1,21 @@
 package tabletennis.game;
 
-import tabletennis.engine.Aim;
+import tabletennis.engine.BallSpec;
 import tabletennis.engine.BallState;
-import tabletennis.engine.Integrator;
-import tabletennis.engine.Paddle;
-import tabletennis.engine.Vec3;
-
-import static tabletennis.engine.Constants.BallR;
-import static tabletennis.engine.Constants.BladeR;
-import static tabletennis.engine.Constants.NetHeight;
-import static tabletennis.engine.Constants.TableLength;
-import static tabletennis.engine.Constants.TableWidth;
+import tabletennis.engine.NetSpec;
+import tabletennis.engine.RacketSpec;
+import tabletennis.engine.TableSpec;
+import tabletennis.engine.flight.LaunchSolver;
+import tabletennis.engine.flight.SpinVector;
+import tabletennis.engine.flight.TrialFlight;
+import tabletennis.engine.flight.TrialFlight.Flight;
+import tabletennis.engine.world.Racket;
+import tabletennis.engine.math.Vec3;
 
 /**
  * The arcade shot model for both rackets. The exact impulse still runs on every contact; this
  * turns it into a playable shot: read the racket's motion as intent, build a target inside the
- * opponent's court, solve the launch with {@link Aim}, constrain it, then fly and grade every
+ * opponent's court, solve the launch with {@link LaunchSolver}, constrain it, then fly and grade every
  * candidate. Only the launch is authored; the flight after it is the real simulation.
  */
 public final class ShotAssist {
@@ -32,12 +32,9 @@ public final class ShotAssist {
 
     private record Spin(double Top, double Side) {}
 
-    /** Height at the net plane (NaN if never crossed) and first descent to the table plane. */
-    private record Flight(double NetHeight, Vec3 Landing) {}
-
     private record Candidate(Vec3 Vel, Vec3 Goal, Flight Trajectory, double Cost, int Passes, Spin SpinPlan) {}
 
-    private static final double HalfWidth = TableWidth / 2, HalfLength = TableLength / 2;
+    private static final double HalfWidth = TableSpec.HalfWidth, HalfLength = TableSpec.HalfLength;
 
     /** TUNED: 4x the game step; RK4 error stays two orders below the 5 cm landing margin. */
     private static final double ValidateDt = 1.0 / 120;
@@ -61,21 +58,21 @@ public final class ShotAssist {
 
     public Debug Debug() { return LastDecision; }
 
-    public double TargetHalfWidth() { return T.TargetHalfWidthFrac * TableWidth / 2; }
-    public double TargetNearDepth() { return T.TargetDepthMinFrac * TableLength / 2; }
-    public double TargetFarDepth()  { return T.TargetDepthMaxFrac * TableLength / 2; }
+    public double TargetHalfWidth() { return T.TargetHalfWidthFrac * TableSpec.Width / 2; }
+    public double TargetNearDepth() { return T.TargetDepthMinFrac * TableSpec.Length / 2; }
+    public double TargetFarDepth()  { return T.TargetDepthMaxFrac * TableSpec.Length / 2; }
 
     /**
      * @param incoming  the ball just before the contact
      * @param physical  the raw impulse result
      * @param playerHit true sends the ball toward -Z, false toward +Z
      */
-    public BallState Assist(BallState Incoming, BallState Physical, Paddle Racket, boolean PlayerHit) {
+    public BallState Assist(BallState Incoming, BallState Physical, Racket Struck, boolean PlayerHit) {
         double ToOpp = PlayerHit ? -1.0 : 1.0;
-        Vec3 Contact = Physical.Pos();
-        Vec3 Reflect = Physical.Vel();
+        Vec3 Contact = Physical.Position();
+        Vec3 Reflect = Physical.Velocity();
 
-        Intent In = ReadIntent(Contact, Racket, ToOpp);
+        Intent In = ReadIntent(Contact, Struck, ToOpp);
         double Quality = Quality(Incoming, In.OffX(), In.OffY());
         double Assist = PlayerHit ? T.AssistFloor + (1 - T.AssistFloor) * Quality : 1.0;
         Target Goal = ReadTarget(In, ToOpp);
@@ -91,13 +88,13 @@ public final class ShotAssist {
         Vec3 FinalVel  = Vec3.Lerp(CapReflection(Reflect), Best.Vel(), Assist);
         Vec3 FinalSpin = Vec3.Lerp(Physical.Spin(), SpinFor(Best.Vel(), Best.SpinPlan()), Assist);
 
-        LastDecision = new Debug(Contact, Racket.Vel(), Incoming.Vel(), SafeDir(Reflect),
+        LastDecision = new Debug(Contact, Struck.Velocity(), Incoming.Velocity(), SafeDir(Reflect),
                           SafeDir(new Vec3(Best.Goal().X() - Contact.X(), 0,
                                            Best.Goal().Z() - Contact.Z())),
                           SafeDir(FinalVel), Best.Goal(), Best.Trajectory().Landing(),
                           FinalVel.Length(), FinalSpin, Best.Passes(), Best.Cost() == 0);
 
-        return new BallState(Physical.Pos(), FinalVel, FinalSpin, Physical.Orient());
+        return new BallState(Physical.Position(), FinalVel, FinalSpin, Physical.Orientation());
     }
 
     /**
@@ -118,8 +115,8 @@ public final class ShotAssist {
             for (int K = 0; K < T.SpeedCandidates; K++) {
                 double Speed = Clamp(Pace * SpeedFactor(K), Math.min(Floor, T.MaxShotSpeed),
                                      T.MaxShotSpeed);
-                Aim.Solution Sol = Aim.AtTarget(Contact, AimAt, Speed, SpinPlan.Top(), SpinPlan.Side());
-                Vec3 Blended = Vec3.Lerp(Sol.State().Vel(), CapReflection(Reflect), T.PhysicalBlend);
+                LaunchSolver.Solution Sol = LaunchSolver.AtTarget(Contact, AimAt, Speed, SpinPlan.Top(), SpinPlan.Side());
+                Vec3 Blended = Vec3.Lerp(Sol.State().Velocity(), CapReflection(Reflect), T.PhysicalBlend);
                 Candidate C = Evaluate(Contact, AimAt, Constrain(Blended, ToOpp, Speed), SpinPlan, ToOpp, Pass);
 
                 double Score = C.Cost() * IllegalityWeight
@@ -146,8 +143,8 @@ public final class ShotAssist {
                     for (int K = 0; K < T.RescueSpeedSteps; K++) {
                         double Speed = T.RescueMinSpeed + (T.MaxShotSpeed - T.RescueMinSpeed)
                                 * K / (double) (T.RescueSpeedSteps - 1);
-                        Aim.Solution Sol = Aim.AtTarget(Contact, AimAt, Speed, Sp.Top(), Sp.Side());
-                        Vec3 Vel = Constrain(Sol.State().Vel(), ToOpp, Speed);
+                        LaunchSolver.Solution Sol = LaunchSolver.AtTarget(Contact, AimAt, Speed, Sp.Top(), Sp.Side());
+                        Vec3 Vel = Constrain(Sol.State().Velocity(), ToOpp, Speed);
                         Candidate C = Evaluate(Contact, AimAt, Vel, Sp, ToOpp, RescuedPasses);
                         if (C.Cost() < Best.Cost()) Best = C;
                         if (C.Cost() == 0) return Best;
@@ -164,7 +161,7 @@ public final class ShotAssist {
     }
 
     private static Vec3 SpinFor(Vec3 Vel, Spin SpinPlan) {
-        return Aim.Spin(new Vec3(Vel.X(), 0, Vel.Z()), SpinPlan.Top(), SpinPlan.Side());
+        return SpinVector.Of(new Vec3(Vel.X(), 0, Vel.Z()), SpinPlan.Top(), SpinPlan.Side());
     }
 
     /**
@@ -172,8 +169,8 @@ public final class ShotAssist {
      * brushing). Strength comes from the forward drive on a saturating curve; the contact offset
      * is measured in the face's own plane as a fraction of the blade radius.
      */
-    private Intent ReadIntent(Vec3 Contact, Paddle Racket, double ToOpp) {
-        Vec3 Swing = Racket.Vel();
+    private Intent ReadIntent(Vec3 Contact, Racket Struck, double ToOpp) {
+        Vec3 Swing = Struck.Velocity();
         double Drive  = Swing.Z() * ToOpp;
         double SwipeX = Swing.X();
         double Lift   = Swing.Y();
@@ -183,11 +180,11 @@ public final class ShotAssist {
         double SwingAmount = Clamp(Math.pow(
                 Clamp(Effort / T.MaxSwingSpeed, 0, 1), T.SwingCurve), 0, 1) * T.SwingInfluence;
 
-        Vec3 Off = Contact.Minus(Racket.Pos());
-        Vec3 InPlane = Off.Minus(Racket.Normal().Scale(Off.Dot(Racket.Normal())));
-        double OffX = Clamp(InPlane.X() / BladeR, -1, 1);
-        double OffY = Clamp(InPlane.Y() / BladeR, -1, 1);
-        double FaceX = Clamp(Racket.Normal().X() * -ToOpp, -1, 1);
+        Vec3 Off = Contact.Minus(Struck.Position());
+        Vec3 InPlane = Off.Minus(Struck.Normal().Scale(Off.Dot(Struck.Normal())));
+        double OffX = Clamp(InPlane.X() / RacketSpec.BladeRadius, -1, 1);
+        double OffY = Clamp(InPlane.Y() / RacketSpec.BladeRadius, -1, 1);
+        double FaceX = Clamp(Struck.Normal().X() * -ToOpp, -1, 1);
 
         return new Intent(Drive, SwipeX, Lift, Brush, SwingAmount, OffX, OffY, FaceX);
     }
@@ -271,7 +268,7 @@ public final class ShotAssist {
     private double Illegality(Flight F, double ToOpp) {
         double Cost = 0;
 
-        double Needed = NetHeight + BallR + T.NetClearance;
+        double Needed = NetSpec.Height + BallSpec.Radius + T.NetClearance;
         if (Double.isNaN(F.NetHeight())) Cost += NeverCrossedCost;
         else if (F.NetHeight() < Needed) Cost += (Needed - F.NetHeight()) * NetShortfallWeight;
 
@@ -289,31 +286,10 @@ public final class ShotAssist {
 
     /** Contact-free flight: asking a World with a table in it where a shot lands is circular. */
     private static Flight Fly(Vec3 From, Vec3 Vel, Vec3 SpinPlan, double ToOpp) {
-        BallState S = BallState.At(From, Vel, SpinPlan);
-        double NetHeight = Double.NaN;
-        double PrevZ = From.Z();
-
-        for (int I = 0; I < (int) (MaxFlightTime / ValidateDt); I++) {
-            BallState Next = Integrator.Step(S, ValidateDt);
-            Vec3 P = Next.Pos();
-
-            if (Double.isNaN(NetHeight)) {
-                boolean Crossed = ToOpp < 0 ? (PrevZ > 0 && P.Z() <= 0)
-                                            : (PrevZ < 0 && P.Z() >= 0);
-                if (Crossed && PrevZ != P.Z()) {
-                    double F = PrevZ / (PrevZ - P.Z());
-                    NetHeight = S.Pos().Y() + (P.Y() - S.Pos().Y()) * F;
-                }
-            }
-            PrevZ = P.Z();
-
-            if (P.Y() <= BallR && Next.Vel().Y() < 0) {
-                double F = (S.Pos().Y() - BallR) / (S.Pos().Y() - P.Y());
-                return new Flight(NetHeight, Vec3.Lerp(S.Pos(), P, Clamp(F, 0, 1)));
-            }
-            S = Next;
-        }
-        return new Flight(NetHeight, S.Pos());
+        TrialFlight.Heading Toward = ToOpp < 0 ? TrialFlight.Heading.TowardNegativeZ
+                                               : TrialFlight.Heading.TowardPositiveZ;
+        return TrialFlight.Fly(BallState.At(From, Vel, SpinPlan), Toward, ValidateDt,
+                               (int) (MaxFlightTime / ValidateDt));
     }
 
     private static Vec3 SafeDir(Vec3 V) {

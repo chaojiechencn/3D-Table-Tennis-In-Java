@@ -1,7 +1,7 @@
 package tabletennis.game;
 
-import tabletennis.engine.Paddle;
-import tabletennis.engine.Vec3;
+import tabletennis.engine.world.Racket;
+import tabletennis.engine.math.Vec3;
 
 /**
  * The player's paddle: follows the cursor and nothing else. {@code advance} takes no BallState, so
@@ -46,11 +46,11 @@ public final class Stroke {
     }
 
     /** Carry the blade toward the cursor at TrackSpeed and lean its face the way it travels. */
-    public void Advance(Paddle Blade, double Dt) {
-        Vec3 From = Blade.Pos();
+    public void Advance(Racket Blade, double Dt) {
+        Vec3 From = Blade.Position();
         IdleTime += Dt;
 
-        Vec3 Pos = Towards(From, Target, TrackSpeed * Dt);
+        Vec3 Pos = From.MovedToward(Target, TrackSpeed * Dt);
         Vec3 Moved = Pos.Minus(From);
         if (Moved.Length() > StrokeEps * Dt) {
             StrokeDir = Moved.Normalized();
@@ -60,12 +60,6 @@ public final class Stroke {
         // Otherwise the hand moved recently: still mid-stroke, so hold the lean.
 
         Blade.MoveTo(Pos, FaceToward(Blade.Normal(), Dt), Dt);
-    }
-
-    private static Vec3 Towards(Vec3 From, Vec3 To, double MaxStep) {
-        Vec3 Step = To.Minus(From);
-        double Len = Step.Length();
-        return Len <= MaxStep ? To : From.PlusScaled(Step.Scale(1.0 / Len), MaxStep);
     }
 
     /** Sideways lean follows the swipe; driving forward (-Z) closes the face for topspin. */

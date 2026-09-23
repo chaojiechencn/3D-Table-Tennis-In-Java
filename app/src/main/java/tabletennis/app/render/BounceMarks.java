@@ -1,14 +1,14 @@
 package tabletennis.app.render;
 
+import tabletennis.engine.BallSpec;
 import javafx.scene.Group;
 import javafx.scene.paint.Color;
 import javafx.scene.paint.PhongMaterial;
 import javafx.scene.shape.Cylinder;
-import tabletennis.engine.Vec3;
+import tabletennis.engine.math.Vec3;
 
 import java.util.List;
 
-import static tabletennis.engine.Constants.BallR;
 
 /** Discs where the ball landed, so in-or-out can be judged against the lines at leisure. */
 public final class BounceMarks {
@@ -23,7 +23,7 @@ public final class BounceMarks {
         Discs = new Cylinder[Capacity];
         for (int I = 0; I < Capacity; I++) {
             double Age = Capacity == 1 ? 1 : I / (double) (Capacity - 1);
-            Cylinder C = new Cylinder(Xform.Length(BallR * 1.05), Xform.Length(BallR * 0.04), 16);
+            Cylinder C = new Cylinder(Xform.Length(BallSpec.Radius * 1.05), Xform.Length(BallSpec.Radius * 0.04), 16);
             // Old marks fade toward the table colour, so a rally's order stays readable.
             PhongMaterial M = new PhongMaterial(Color.web("#2f6da0").interpolate(Color.web("#ffd24a"), Age));
             M.setSpecularColor(Color.TRANSPARENT);

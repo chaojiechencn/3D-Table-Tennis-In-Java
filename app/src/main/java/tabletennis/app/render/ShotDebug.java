@@ -7,7 +7,7 @@ import javafx.scene.paint.PhongMaterial;
 import javafx.scene.shape.Cylinder;
 import javafx.scene.shape.Sphere;
 import javafx.scene.transform.Rotate;
-import tabletennis.engine.Vec3;
+import tabletennis.engine.math.Vec3;
 
 /**
  * The V overlay for tuning play.ShotAssist, drawn from the last contact: racket velocity (yellow),

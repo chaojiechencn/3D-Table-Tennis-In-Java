@@ -1,14 +1,14 @@
 package tabletennis.app.render;
 
+import tabletennis.engine.TableSpec;
 import javafx.scene.Group;
 import javafx.scene.PerspectiveCamera;
 import javafx.scene.SubScene;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.input.ScrollEvent;
 import javafx.scene.transform.Rotate;
-import tabletennis.engine.Vec3;
+import tabletennis.engine.math.Vec3;
 
-import static tabletennis.engine.Constants.TableLength;
 
 /**
  * An orbiting camera on a gimbal, preset views, and the default rally-cam. The side view matters:
@@ -50,7 +50,7 @@ public final class CameraRig {
     private static final double RallyTau = 0.12;
 
     /** The swing keeps camera, ball and the opponent's half in line; it never moves toward the ball. */
-    private static final double OppCentreZ = -TableLength / 4;
+    private static final double OppCentreZ = -TableSpec.Length / 4;
 
     /** Measured: at this yaw the whole ZNear..ZFar depth range is still addressable. */
     private static final double MaxSwingDeg = 22.0;

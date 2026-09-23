@@ -4,7 +4,7 @@ import javafx.scene.Group;
 import javafx.scene.paint.Color;
 import javafx.scene.paint.PhongMaterial;
 import javafx.scene.shape.Sphere;
-import tabletennis.engine.Vec3;
+import tabletennis.engine.math.Vec3;
 
 import java.util.Collection;
 

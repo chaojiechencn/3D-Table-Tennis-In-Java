@@ -1,10 +1,13 @@
 package tabletennis.game;
 
 import tabletennis.engine.BallState;
-import tabletennis.engine.Vec3;
-import tabletennis.engine.World;
+import tabletennis.engine.BallSpec;
+import tabletennis.engine.RacketSpec;
+import tabletennis.engine.Simulation;
+import tabletennis.engine.TableSpec;
+import tabletennis.engine.math.Vec3;
+import tabletennis.engine.world.FlightPredictor;
 
-import static tabletennis.engine.Constants.*;
 
 /**
  * Where the player's racket may be and how long it takes to get there. Cursor X maps to racket X,
@@ -25,13 +28,13 @@ public final class PlayerReach {
     public static final double ZFar = 2.40;
 
     /** A metre outside the table edge, so a ball run into the corner can be chased. */
-    public static final double MaxX = TableWidth / 2 + 1.0;
+    public static final double MaxX = TableSpec.HalfWidth + 1.0;
 
     /** TUNED: 1.90 m sits where returns arrive, minimising the worst-case dash. */
     public static final Vec3 Neutral = new Vec3(0, HitY, 1.90);
 
     /** Ball heights a blade at HitY can touch: its rim, plus the ball's own radius. */
-    public static final double VerticalCapture = BladeR + BallR;
+    public static final double VerticalCapture = RacketSpec.BladeRadius + BallSpec.Radius;
 
     /** TUNED: a real brushing forehand's vertical travel; too small to become a reach axis. */
     public static final double BrushBand = 0.18;
@@ -49,7 +52,7 @@ public final class PlayerReach {
     public static Vec3 ClampBrushed(Vec3 RawAim, double HeightFrac, double HoldZ) {
         if (RawAim == null || !RawAim.IsFinite()) return Neutral;
         double Up = 1 - 2 * Clamp(HeightFrac, 0, 1);
-        double Y = Math.max(BladeR, HitY + Up * BrushBand);   // never through the table top
+        double Y = Math.max(RacketSpec.BladeRadius, HitY + Up * BrushBand);   // never through the table top
         return new Vec3(ClampX(RawAim.X()), Y, ClampZ(HoldZ));
     }
 
@@ -71,14 +74,14 @@ public final class PlayerReach {
     /** Seconds until the ball reaches depthZ on a paddle-free flight, or NaN within 3 s. */
     public static double TimeToDepth(BallState Ball, double DepthZ) {
         final int Stride = 4;
-        var Path = World.Predict(Ball, 3.0, Stride);
-        double Prev = Ball.Pos().Z();
+        var Path = FlightPredictor.Path(Ball, 3.0, Stride);
+        double Prev = Ball.Position().Z();
         for (int I = 0; I < Path.size(); I++) {
             double Z = Path.get(I).Z();
             boolean Crossed = (Prev < DepthZ && Z >= DepthZ) || (Prev > DepthZ && Z <= DepthZ);
             if (Crossed) {
                 double F = (DepthZ - Prev) / (Z - Prev);
-                return (I + F) * Stride * Dt;
+                return (I + F) * Stride * Simulation.Step;
             }
             Prev = Z;
         }

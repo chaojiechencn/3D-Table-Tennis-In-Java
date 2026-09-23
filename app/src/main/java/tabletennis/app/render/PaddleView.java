@@ -1,5 +1,7 @@
 package tabletennis.app.render;
 
+import tabletennis.engine.RacketSpec;
+import tabletennis.engine.BallSpec;
 import javafx.geometry.Point3D;
 import javafx.scene.Group;
 import javafx.scene.paint.Color;
@@ -7,9 +9,8 @@ import javafx.scene.paint.PhongMaterial;
 import javafx.scene.shape.Cylinder;
 import javafx.scene.transform.Affine;
 import javafx.scene.transform.Rotate;
-import tabletennis.engine.Vec3;
+import tabletennis.engine.math.Vec3;
 
-import static tabletennis.engine.Constants.*;
 
 /**
  * A racket: blade, rubbers, handle. The frame is built in SCENE space, after Xform, because the
@@ -26,7 +27,7 @@ public final class PaddleView {
     private final Group Root = new Group();
 
     public PaddleView(boolean RedFacingAway) {
-        Cylinder Blade = new Cylinder(Xform.Length(BladeR), Xform.Length(BladeThick), 36);
+        Cylinder Blade = new Cylinder(Xform.Length(RacketSpec.BladeRadius), Xform.Length(RacketSpec.BladeThickness), 36);
         Blade.setMaterial(Matte(BladeEdge));
         Cylinder Front = Face(RedFacingAway ? RubberRed : RubberBlack, +1);
         Cylinder Back = Face(RedFacingAway ? RubberBlack : RubberRed, -1);
@@ -36,18 +37,18 @@ public final class PaddleView {
         Group Discs = new Group(Blade, Front, Back);
         Discs.getTransforms().add(new Rotate(90, Rotate.X_AXIS));
 
-        Cylinder Handle = new Cylinder(Xform.Length(BallR * 0.7), Xform.Length(BallR * 5), 12);
+        Cylinder Handle = new Cylinder(Xform.Length(BallSpec.Radius * 0.7), Xform.Length(BallSpec.Radius * 5), 12);
         Handle.setMaterial(Matte(HandleColour));
-        Handle.setTranslateY(Xform.Length(BladeR + BallR * 2.25));   // scene +Y is down
+        Handle.setTranslateY(Xform.Length(RacketSpec.BladeRadius + BallSpec.Radius * 2.25));   // scene +Y is down
 
         Root.getChildren().addAll(Discs, Handle);
     }
 
     /** A hair proud of the blade, so it does not z-fight. */
     private static Cylinder Face(Color Colour, int Side) {
-        Cylinder C = new Cylinder(Xform.Length(BladeR * 0.97), Xform.Length(BladeThick * 0.35), 36);
+        Cylinder C = new Cylinder(Xform.Length(RacketSpec.BladeRadius * 0.97), Xform.Length(RacketSpec.BladeThickness * 0.35), 36);
         C.setMaterial(SurfaceMaterials.Rubber(Colour));
-        C.setTranslateY(Xform.Length(Side * BladeThick * 0.5));
+        C.setTranslateY(Xform.Length(Side * RacketSpec.BladeThickness * 0.5));
         return C;
     }
 

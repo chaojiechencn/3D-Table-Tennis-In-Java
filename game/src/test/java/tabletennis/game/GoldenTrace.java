@@ -1,8 +1,9 @@
 package tabletennis.game;
 
 import tabletennis.engine.BallState;
-import tabletennis.engine.Paddle;
-import tabletennis.engine.Vec3;
+import tabletennis.engine.Simulation;
+import tabletennis.engine.contact.BladeCollider;
+import tabletennis.engine.math.Vec3;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -10,8 +11,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-
-import static tabletennis.engine.Constants.Dt;
 
 /**
  * A bit-level record of the game, used to prove a restructuring changed nothing. Every scenario
@@ -66,7 +65,7 @@ public final class GoldenTrace {
     }
 
     private static void PointAtTheBall(GameSession Session, int Step) {
-        Vec3 Ball = Session.Ball().Pos();
+        Vec3 Ball = Session.Ball().Position();
         Session.SetAim(PlayerReach.Clamp(new Vec3(Ball.X(), 0, Ball.Z())));
     }
 
@@ -91,7 +90,7 @@ public final class GoldenTrace {
 
         @Override public void Apply(GameSession Session, int Step) {
             if (Step % MouseEventStride != 0) return;
-            double Seconds = Step * Dt;
+            double Seconds = Step * Simulation.Step;
             boolean Brush = (Seconds >= 2 && Seconds < 4) || (Seconds >= 7 && Seconds < 8.5);
             if (Brush && !Brushing) HoldZ = Session.PlayerBlade().Centre().Z();
             Brushing = Brush;
@@ -132,8 +131,8 @@ public final class GoldenTrace {
         return Lines;
     }
 
-    private static String Token(Scoreboard.Side Side) {
-        return Side == Scoreboard.Side.Player ? "player" : "opponent";
+    private static String Token(Side Hitter) {
+        return Hitter == Side.Player ? "player" : "opponent";
     }
 
     /** 64-bit FNV-1a over the exact bits of every double, so a last-place difference shows. */
@@ -141,20 +140,20 @@ public final class GoldenTrace {
         private long Value = 0xcbf29ce484222325L;
 
         void Mix(BallState Ball) {
-            Mix(Ball.Pos());
-            Mix(Ball.Vel());
+            Mix(Ball.Position());
+            Mix(Ball.Velocity());
             Mix(Ball.Spin());
-            Mix(Ball.Orient().W());
-            Mix(Ball.Orient().X());
-            Mix(Ball.Orient().Y());
-            Mix(Ball.Orient().Z());
+            Mix(Ball.Orientation().W());
+            Mix(Ball.Orientation().X());
+            Mix(Ball.Orientation().Y());
+            Mix(Ball.Orientation().Z());
         }
 
-        void Mix(Paddle.Blade Blade) {
+        void Mix(BladeCollider Blade) {
             Mix(Blade.Centre());
             Mix(Blade.Normal());
-            Mix(Blade.Vel());
-            Mix(Blade.AngVel());
+            Mix(Blade.Velocity());
+            Mix(Blade.AngularVelocity());
         }
 
         void Mix(Vec3 Vector) {

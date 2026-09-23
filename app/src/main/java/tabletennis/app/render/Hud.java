@@ -8,6 +8,7 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import tabletennis.game.Scoreboard;
+import tabletennis.game.Side;
 
 /**
  * What a player needs on screen: the score, the feed name, the key legend, and the V and D debug
@@ -62,10 +63,10 @@ public final class Hud {
     static String ScoreLine(Scoreboard.Snapshot S) {
         String Games = "games " + S.PlayerGames() + " - " + S.OpponentGames();
         if (S.MatchWinner() != null) {
-            return (S.MatchWinner() == Scoreboard.Side.Player ? "YOU WIN" : "OPPONENT WINS") + "   " + Games;
+            return (S.MatchWinner() == Side.Player ? "YOU WIN" : "OPPONENT WINS") + "   " + Games;
         }
-        String YouDot = S.Server() == Scoreboard.Side.Player ? "* " : "  ";
-        String OppDot = S.Server() == Scoreboard.Side.Opponent ? " *" : "  ";
+        String YouDot = S.Server() == Side.Player ? "* " : "  ";
+        String OppDot = S.Server() == Side.Opponent ? " *" : "  ";
         return Games + "    " + YouDot + S.PlayerPoints() + " - " + S.OpponentPoints() + OppDot
              + (S.Deuce() ? "   deuce" : "");
     }
