@@ -5,7 +5,6 @@ import tabletennis.engine.BallState;
 import tabletennis.engine.Simulation;
 import tabletennis.engine.TableSpec;
 import tabletennis.engine.math.Vec3;
-import tabletennis.game.Side;
 
 import java.util.ArrayList;
 import java.util.List;

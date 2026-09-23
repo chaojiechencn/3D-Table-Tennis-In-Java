@@ -4,6 +4,11 @@ import tabletennis.engine.BallState;
 import tabletennis.engine.Simulation;
 import tabletennis.engine.contact.BladeCollider;
 import tabletennis.engine.math.Vec3;
+import tabletennis.game.control.ReachEnvelope;
+import tabletennis.game.feed.Feed;
+import tabletennis.game.feed.Feeds;
+import tabletennis.game.match.ScoreSnapshot;
+import tabletennis.game.rally.Side;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -33,7 +38,7 @@ public final class GoldenTrace {
         void Apply(GameSession Session, int Step);
     }
 
-    private record Scenario(String Name, Shots Feed, Hand Input) {}
+    private record Scenario(String Name, Feed Shot, Hand Input) {}
 
     public static void main(String[] Args) throws IOException {
         Path Target = Path.of(Args[0]);
@@ -50,14 +55,14 @@ public final class GoldenTrace {
 
     private static List<Scenario> Scenarios() {
         List<Scenario> All = new ArrayList<>();
-        for (Shots Feed : Shots.All) {
-            All.add(new Scenario(Feed.Name() + " / idle", Feed, (Session, Step) -> { }));
-            All.add(new Scenario(Feed.Name() + " / pointer", Feed, GoldenTrace::PointAtTheBall));
-            All.add(new Scenario(Feed.Name() + " / demo", Feed, (Session, Step) -> {
+        for (Feed Each : Feeds.All) {
+            All.add(new Scenario(Each.Name() + " / idle", Each, (Session, Step) -> { }));
+            All.add(new Scenario(Each.Name() + " / pointer", Each, GoldenTrace::PointAtTheBall));
+            All.add(new Scenario(Each.Name() + " / demo", Each, (Session, Step) -> {
                 if (Step == 0) Session.SetDemoMode(true);
             }));
         }
-        Shots Serve = Shots.ByName("Serve");
+        Feed Serve = Feeds.ByName("Serve");
         All.add(new Scenario("Serve / sweep with brush", Serve, new SweepingHand()));
         All.add(new Scenario("Serve / demo toggled", Serve, GoldenTrace::ToggleDemo));
         All.add(new Scenario("Serve / auto-replay toggled", Serve, GoldenTrace::ToggleAutoReplay));
@@ -65,8 +70,8 @@ public final class GoldenTrace {
     }
 
     private static void PointAtTheBall(GameSession Session, int Step) {
-        Vec3 Ball = Session.Ball().Position();
-        Session.SetAim(PlayerReach.Clamp(new Vec3(Ball.X(), 0, Ball.Z())));
+        Vec3 Ball = Session.Snapshot().Ball().Position();
+        Session.SetAim(ReachEnvelope.Clamp(new Vec3(Ball.X(), 0, Ball.Z())));
     }
 
     /** Demo for four seconds, a pointing hand for four, then demo again. */
@@ -74,7 +79,7 @@ public final class GoldenTrace {
         if (Step == 0) Session.SetDemoMode(true);
         if (Step == 4 * StepsPerSecond) Session.SetDemoMode(false);
         if (Step == 8 * StepsPerSecond) Session.SetDemoMode(true);
-        if (!Session.DemoMode()) PointAtTheBall(Session, Step);
+        if (!Session.Snapshot().DemoMode()) PointAtTheBall(Session, Step);
     }
 
     private static void ToggleAutoReplay(GameSession Session, int Step) {
@@ -92,14 +97,14 @@ public final class GoldenTrace {
             if (Step % MouseEventStride != 0) return;
             double Seconds = Step * Simulation.Step;
             boolean Brush = (Seconds >= 2 && Seconds < 4) || (Seconds >= 7 && Seconds < 8.5);
-            if (Brush && !Brushing) HoldZ = Session.PlayerBlade().Centre().Z();
+            if (Brush && !Brushing) HoldZ = Session.Snapshot().PlayerBlade().Centre().Z();
             Brushing = Brush;
 
-            Vec3 RawAim = new Vec3(0.9 * Math.sin(2 * Math.PI * Seconds / 2.3), PlayerReach.HitY,
+            Vec3 RawAim = new Vec3(0.9 * Math.sin(2 * Math.PI * Seconds / 2.3), ReachEnvelope.HitY,
                                    1.3 + 0.9 * Math.sin(2 * Math.PI * Seconds / 3.1));
             double HeightFraction = 0.5 + 0.5 * Math.sin(2 * Math.PI * Seconds / 0.7);
-            Session.SetAim(Brushing ? PlayerReach.ClampBrushed(RawAim, HeightFraction, HoldZ)
-                                    : PlayerReach.Clamp(RawAim));
+            Session.SetAim(Brushing ? ReachEnvelope.ClampBrushed(RawAim, HeightFraction, HoldZ)
+                                    : ReachEnvelope.Clamp(RawAim));
         }
     }
 
@@ -107,25 +112,26 @@ public final class GoldenTrace {
         List<String> Lines = new ArrayList<>();
         Lines.add("scenario " + Each.Name());
         GameSession Session = new GameSession();
-        Session.Launch(Each.Feed());
+        Session.Launch(Each.Shot());
         StateHash Hash = new StateHash();
 
         for (int Step = 0; Step < ScenarioSteps; Step++) {
             Each.Input().Apply(Session, Step);
-            GameSession.StepResult Result = Session.Step();
-            Hash.Mix(Session.Ball());
-            Hash.Mix(Session.PlayerBlade());
-            Hash.Mix(Session.OpponentBlade());
+            StepResult Result = Session.Step();
+            GameSnapshot After = Session.Snapshot();
+            Hash.Mix(After.Ball());
+            Hash.Mix(After.PlayerBlade());
+            Hash.Mix(After.OpponentBlade());
 
             if (Result.HitBy() != null) Lines.add("@" + Step + " hit " + Token(Result.HitBy()));
             if (Result.PointTo() != null) Lines.add("@" + Step + " point " + Token(Result.PointTo()));
             if (Session.ReplayDue()) {
                 Lines.add("@" + Step + " replay");
-                Session.Launch(Each.Feed());
+                Session.Launch(Each.Shot());
             }
             if ((Step + 1) % StepsPerSecond == 0) Lines.add("#" + (Step + 1) + " " + Hash.Hex());
         }
-        Scoreboard.Snapshot Score = Session.Score();
+        ScoreSnapshot Score = Session.Snapshot().Score();
         Lines.add(String.format("= %s points %d-%d games %d-%d", Hash.Hex(), Score.PlayerPoints(),
                                 Score.OpponentPoints(), Score.PlayerGames(), Score.OpponentGames()));
         return Lines;

@@ -1,7 +1,6 @@
 package tabletennis.game.rally;
 
 import tabletennis.engine.math.Vec3;
-import tabletennis.game.Side;
 
 /** One rally fact: what happened, where, and for a racket hit, whose racket. */
 public record RallyEvent(EventType Type, Vec3 Point, Side HitBy) {

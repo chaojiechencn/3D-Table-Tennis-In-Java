@@ -2,15 +2,23 @@ package tabletennis.game;
 
 import tabletennis.engine.BallState;
 import tabletennis.engine.Simulation;
-import tabletennis.engine.contact.BladeCollider;
 import tabletennis.engine.math.Vec3;
 import tabletennis.engine.world.PhysicsWorld;
 import tabletennis.engine.world.Racket;
 import tabletennis.engine.world.StepReport;
+import tabletennis.game.ai.BallFollower;
+import tabletennis.game.ai.Opponent;
+import tabletennis.game.control.CursorFollower;
+import tabletennis.game.control.DemoHand;
+import tabletennis.game.control.ReachEnvelope;
+import tabletennis.game.feed.Feed;
+import tabletennis.game.match.Scoreboard;
 import tabletennis.game.rally.EventType;
 import tabletennis.game.rally.RallyEvent;
 import tabletennis.game.rally.RallyFacts;
 import tabletennis.game.rally.Referee;
+import tabletennis.game.rally.Side;
+import tabletennis.game.shot.ShotAssist;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -33,19 +41,11 @@ public final class GameSession {
     private static final double StoppedSpeed = 0.25;
     private static final double StoppedAfter = 1.5;
 
-    private static final int BounceMarksKept = 24;
-
-    /** What one step produced; HitBy and PointTo are null when nothing of the kind happened. */
-    public record StepResult(Side HitBy, Side PointTo, List<RallyEvent> Events) {
-        public boolean Contact()      { return HitBy != null; }
-        public boolean PointAwarded() { return PointTo != null; }
-    }
-
     private final PhysicsWorld Physics = new PhysicsWorld();
-    private final Racket PlayerRacket = new Racket(PlayerReach.Neutral, Stroke.Square);
-    private final Racket OpponentRacket = new Racket(Follower.Ready, Follower.Square);
-    private final Stroke PlayerStroke = new Stroke(PlayerReach.Neutral);
-    private final DemoPlayer Demo = new DemoPlayer();
+    private final Racket PlayerRacket = new Racket(ReachEnvelope.Neutral, CursorFollower.Square);
+    private final Racket OpponentRacket = new Racket(BallFollower.Ready, BallFollower.Square);
+    private final CursorFollower PlayerHand = new CursorFollower(ReachEnvelope.Neutral);
+    private final DemoHand Demo = new DemoHand();
     private final Opponent OpponentPlayer;
     private final ShotAssist Assist;
     private final Referee Rules = new Referee();
@@ -56,10 +56,7 @@ public final class GameSession {
     private boolean AutoReplay = true;
     private double ReplayAt = Double.NaN; // NaN while the rally is live
 
-    private final List<Vec3> BounceMarks = new ArrayList<>();
-    private int BounceCount;              // never reset: "has anything landed since I looked?"
-
-    public GameSession() { this(new Follower(), new ShotAssist()); }
+    public GameSession() { this(new BallFollower(), new ShotAssist()); }
 
     GameSession(Opponent OpponentPlayer, ShotAssist Assist) {
         this.OpponentPlayer = OpponentPlayer;
@@ -67,11 +64,10 @@ public final class GameSession {
     }
 
     /** Put a feed in play, keeping the match score. */
-    public void Launch(Shots Shot) {
-        Physics.Launch(Shot.State());
+    public void Launch(Feed Shot) {
+        Physics.Launch(Shot.Ball());
         Rules.StartRally();
         ReplayAt = Double.NaN;
-        BounceMarks.clear();
     }
 
     /** Already mapped and clamped by the caller. */
@@ -87,6 +83,13 @@ public final class GameSession {
     }
 
     public boolean ReplayDue() { return !Double.isNaN(ReplayAt) && Physics.Time() >= ReplayAt; }
+
+    public GameSnapshot Snapshot() {
+        return new GameSnapshot(Physics.Ball(), Physics.PreviousBall(), Physics.Time(),
+                                PlayerRacket.Blade(), OpponentRacket.Blade(), Score.Snapshot(),
+                                Rules.MayHit(Side.Player), Rules.MayHit(Side.Opponent), Rules.PointOver(),
+                                DemoMode, AutoReplay, Assist.LastDecision());
+    }
 
     /**
      * Advance exactly one Simulation.Step. Both blades are posed first, so a contact uses this
@@ -108,15 +111,14 @@ public final class GameSession {
 
         Referee.Ruling Ruling = Rules.Judge(Contacts, Report.Before(), Report.After(), Physics.Time());
         if (Ruling.PointTo() != null) AwardPoint(Ruling.PointTo());
-        KeepBounceMarks(Ruling.Events());
         ScheduleFallbackReplay();
         return new StepResult(HitBy, Ruling.PointTo(), Ruling.Events());
     }
 
     private void MoveRackets() {
-        if (DemoMode) PlayerStroke.AimAt(Demo.CursorFor(Physics.Ball(), Rules.MayHit(Side.Player), Simulation.Step));
-        else if (Aim != null) PlayerStroke.AimAt(Aim);
-        PlayerStroke.Advance(PlayerRacket, Simulation.Step);
+        if (DemoMode) PlayerHand.AimAt(Demo.CursorFor(Physics.Ball(), Rules.MayHit(Side.Player), Simulation.Step));
+        else if (Aim != null) PlayerHand.AimAt(Aim);
+        PlayerHand.Advance(PlayerRacket, Simulation.Step);
         OpponentPlayer.Advance(Physics.Ball(), OpponentRacket, Simulation.Step);
     }
 
@@ -148,32 +150,4 @@ public final class GameSession {
             ReplayAt = Physics.Time() + ReplayDelay;
         }
     }
-
-    private void KeepBounceMarks(List<RallyEvent> Events) {
-        for (RallyEvent Each : Events) {
-            if (Each.Type() != EventType.TableBounce) continue;
-            BounceCount++;
-            BounceMarks.add(new Vec3(Each.Point().X(), 0.001, Each.Point().Z()));
-            while (BounceMarks.size() > BounceMarksKept) BounceMarks.remove(0);
-        }
-    }
-
-    public BallState Ball()               { return Physics.Ball(); }
-    public BallState PreviousBall()       { return Physics.PreviousBall(); }
-    public double Time()                  { return Physics.Time(); }
-    public BladeCollider PlayerBlade()    { return PlayerRacket.Blade(); }
-    public BladeCollider OpponentBlade()  { return OpponentRacket.Blade(); }
-    public int BounceCount()              { return BounceCount; }
-    public List<Vec3> BounceMarks()       { return List.copyOf(BounceMarks); }
-    public Scoreboard.Snapshot Score()    { return Score.Snapshot(); }
-    public boolean DemoMode()             { return DemoMode; }
-    public boolean AutoReplay()           { return AutoReplay; }
-    public boolean PlayerMayHit()         { return Rules.MayHit(Side.Player); }
-    public boolean OpponentMayHit()       { return Rules.MayHit(Side.Opponent); }
-    public boolean PointOver()            { return Rules.PointOver(); }
-
-    public ShotAssist.Debug LastShot()    { return Assist.Debug(); }
-    public double TargetHalfWidth()       { return Assist.TargetHalfWidth(); }
-    public double TargetNearDepth()       { return Assist.TargetNearDepth(); }
-    public double TargetFarDepth()        { return Assist.TargetFarDepth(); }
 }

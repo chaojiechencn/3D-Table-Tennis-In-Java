@@ -1,4 +1,4 @@
-package tabletennis.game;
+package tabletennis.game.ai;
 
 import org.junit.jupiter.api.Test;
 import tabletennis.engine.BallState;
@@ -10,13 +10,16 @@ import tabletennis.engine.math.Vec3;
 import tabletennis.engine.world.PhysicsWorld;
 import tabletennis.engine.world.Racket;
 import tabletennis.engine.world.SurfaceKind;
+import tabletennis.game.feed.Feed;
+import tabletennis.game.feed.Feeds;
+import tabletennis.game.shot.ShotAssist;
 
 import java.util.List;
 
 import static tabletennis.testing.Claims.Check;
 
 /** The current opponent against every feed that reaches it: a wall that must not miss or cheat. */
-final class FollowerTest {
+final class BallFollowerTest {
 
     /** What happened when one shot was fed at the opponent. */
     private record Rally(boolean Touched, boolean Returned, double MaxZ, double RawSpeed) {}
@@ -42,7 +45,7 @@ final class FollowerTest {
     void TheOpponentReachesEveryShot() {
         int Reached = 0, Playable = 0;
         StringBuilder Missed = new StringBuilder();
-        for (Shots Shot : Shots.All) {
+        for (Feed Shot : Feeds.All) {
             if (!IsFedAtTheOpponent(Shot)) continue;
             Playable++;
             if (Feed(Shot).Touched()) Reached++;
@@ -59,7 +62,7 @@ final class FollowerTest {
     void TheOpponentReturnsEveryShot() {
         int Returned = 0, Playable = 0;
         StringBuilder Failed = new StringBuilder();
-        for (Shots Shot : Shots.All) {
+        for (Feed Shot : Feeds.All) {
             if (!IsFedAtTheOpponent(Shot)) continue;
             Playable++;
             Rally Result = Feed(Shot);
@@ -77,7 +80,7 @@ final class FollowerTest {
     void TheOpponentDoesNotCheat() {
         double Fastest = 0;
         String Worst = "";
-        for (Shots Shot : Shots.All) {
+        for (Feed Shot : Feeds.All) {
             if (!IsFedAtTheOpponent(Shot)) continue;
             Rally Result = Feed(Shot);
             if (Result.RawSpeed() > Fastest) { Fastest = Result.RawSpeed(); Worst = Shot.Name(); }
@@ -93,7 +96,7 @@ final class FollowerTest {
     void ARallyStaysInTheRoom() {
         double Highest = 0;
         String Worst = "";
-        for (Shots Shot : Shots.All) {
+        for (Feed Shot : Feeds.All) {
             if (!IsFedAtTheOpponent(Shot)) continue;
             Return Result = PlayOut(Shot);
             if (Result.Apex() > Highest) { Highest = Result.Apex(); Worst = Shot.Name(); }
@@ -109,7 +112,7 @@ final class FollowerTest {
         System.out.println("  where the returns land:");
         int In = 0, Played = 0;
         StringBuilder Missed = new StringBuilder();
-        for (Shots Shot : Shots.All) {
+        for (Feed Shot : Feeds.All) {
             if (!IsFedAtTheOpponent(Shot)) continue;
             Played++;
             Return Result = PlayOut(Shot);
@@ -124,13 +127,13 @@ final class FollowerTest {
     }
 
     /** Feed one shot and let the follower play it, through the assist as the game does. */
-    private static Rally Feed(Shots Shot) {
+    private static Rally Feed(Feed Shot) {
         PhysicsWorld Physics = new PhysicsWorld();
-        Racket Blade = new Racket(Follower.Ready, Follower.Square);
-        Opponent Ai = new Follower();
+        Racket Blade = new Racket(BallFollower.Ready, BallFollower.Square);
+        Opponent Ai = new BallFollower();
         ShotAssist Assist = new ShotAssist();
         Physics.SetRackets(List.of(Blade));
-        Physics.Launch(Shot.State());
+        Physics.Launch(Shot.Ball());
 
         boolean Touched = false;
         double MaxZ = -9, RawSpeed = 0;
@@ -154,12 +157,12 @@ final class FollowerTest {
     }
 
     /** Feed one shot, let the follower answer it, and watch the answer all the way down. */
-    private static Return PlayOut(Shots Shot) {
+    private static Return PlayOut(Feed Shot) {
         PhysicsWorld Physics = new PhysicsWorld();
-        Racket Blade = new Racket(Follower.Ready, Follower.Square);
-        Opponent Ai = new Follower();
+        Racket Blade = new Racket(BallFollower.Ready, BallFollower.Square);
+        Opponent Ai = new BallFollower();
         Physics.SetRackets(List.of(Blade));
-        Physics.Launch(Shot.State());
+        Physics.Launch(Shot.Ball());
 
         ShotAssist Assist = new ShotAssist();
         boolean Hit = false;
@@ -189,11 +192,11 @@ final class FollowerTest {
                                : new Return(Apex, Landing.Z(), Landing.X(), OutSpeed);
     }
 
-    /** Shots the opponent actually ever sees: launched from the near end and carried past the net. */
-    private static boolean IsFedAtTheOpponent(Shots Shot) {
-        if (Shot.State().Position().Z() <= 0) return false;
+    /** Feeds the opponent actually ever sees: launched from the near end and carried past the net. */
+    private static boolean IsFedAtTheOpponent(Feed Shot) {
+        if (Shot.Ball().Position().Z() <= 0) return false;
         PhysicsWorld Physics = new PhysicsWorld();
-        Physics.Launch(Shot.State());
+        Physics.Launch(Shot.Ball());
         for (int Step = 0; Step < (int) (3.0 / Simulation.Step); Step++) {
             Physics.Step();
             if (Physics.Ball().Position().Z() < -0.5) return true;

@@ -1,4 +1,4 @@
-package tabletennis.game;
+package tabletennis.game.feed;
 
 import org.junit.jupiter.api.Test;
 import tabletennis.engine.BallState;
@@ -28,9 +28,9 @@ final class FeedsTest {
     /** Every aimed preset: the solver converged, it clears the net, and it lands inside the lines. */
     @Test
     void EveryAimedShotIsLegal() {
-        for (Shots Shot : Shots.All) {
-            if (Shot.AimSolution() == null) continue;
-            LaunchSolver.Solution Solution = Shot.AimSolution();
+        for (Feed Shot : Feeds.All) {
+            if (Shot.Solution() == null) continue;
+            LaunchSolver.Solution Solution = Shot.Solution();
 
             Check("aim solver converged: " + Shot.Name(), Solution.Converged(),
                   String.format("elevation %+.1f deg", Solution.ElevationDegrees()));
@@ -51,9 +51,9 @@ final class FeedsTest {
     }
 
     /** A legal serve: its own half, over the net without touching it, then the receiver's half. */
-    private static void ServeIsLegal(Shots Shot) {
+    private static void ServeIsLegal(Feed Shot) {
         PhysicsWorld World = new PhysicsWorld();
-        World.Launch(Shot.State());
+        World.Launch(Shot.Ball());
 
         boolean TouchedNet = false;
         double NearZ = Double.NaN, FarZ = Double.NaN;
@@ -91,10 +91,10 @@ final class FeedsTest {
         Check("a ball missing the table wide is reported out of bounds", Out, "");
 
         // The negative case matters as much: a detector that fires on everything passes the check above.
-        for (Shots Shot : Shots.All) {
-            if (Shot.AimSolution() == null) continue;
-            Vec3 Landing = TrialFlight.LandingPoint(Shot.State());
-            Check("aimed shot lands in: " + Shot.Name(), !LandsOut(Shot.State()),
+        for (Feed Shot : Feeds.All) {
+            if (Shot.Solution() == null) continue;
+            Vec3 Landing = TrialFlight.LandingPoint(Shot.Ball());
+            Check("aimed shot lands in: " + Shot.Name(), !LandsOut(Shot.Ball()),
                   String.format("landed at x=%+.2f z=%+.2f", Landing.X(), Landing.Z()));
         }
     }
@@ -103,13 +103,13 @@ final class FeedsTest {
     @Test
     void LongRunStaysStable() {
         PhysicsWorld World = new PhysicsWorld();
-        World.Launch(Shots.ByName("Topspin loop").State());
+        World.Launch(Feeds.ByName("Topspin loop").Ball());
 
         int Steps = (int) (600 / Simulation.Step);
         int RelaunchEvery = StepsPerSecond * 12;
         for (int Step = 0; Step < Steps; Step++) {
             World.Step();
-            if (Step % RelaunchEvery == 0 && Step > 0) World.Launch(Shots.ByIndex(Step / RelaunchEvery).State());
+            if (Step % RelaunchEvery == 0 && Step > 0) World.Launch(Feeds.ByIndex(Step / RelaunchEvery).Ball());
         }
 
         BallState Ball = World.Ball();

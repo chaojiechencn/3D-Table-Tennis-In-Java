@@ -3,7 +3,6 @@ package tabletennis.game.rally;
 import tabletennis.engine.world.Racket;
 import tabletennis.engine.world.StepReport;
 import tabletennis.engine.world.SurfaceHit;
-import tabletennis.game.Side;
 
 import java.util.ArrayList;
 import java.util.List;

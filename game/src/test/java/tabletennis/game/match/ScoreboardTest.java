@@ -1,6 +1,7 @@
-package tabletennis.game;
+package tabletennis.game.match;
 
 import org.junit.jupiter.api.Test;
+import tabletennis.game.rally.Side;
 
 import static tabletennis.testing.Claims.Check;
 

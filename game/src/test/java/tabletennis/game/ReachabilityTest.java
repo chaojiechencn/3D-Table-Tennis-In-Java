@@ -4,6 +4,12 @@ import org.junit.jupiter.api.Test;
 import tabletennis.engine.Simulation;
 import tabletennis.engine.TableSpec;
 import tabletennis.engine.math.Vec3;
+import tabletennis.game.control.CursorFollower;
+import tabletennis.game.control.ReachEnvelope;
+import tabletennis.game.control.ReachTiming;
+import tabletennis.game.feed.Feed;
+import tabletennis.game.feed.Feeds;
+import tabletennis.game.rally.Side;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -19,7 +25,7 @@ final class ReachabilityTest {
         String WorstWindowShot = "", WorstMarginShot = "";
         int Playable = 0, Fed = 0;
 
-        for (Shots Shot : Shots.All) {
+        for (Feed Shot : Feeds.All) {
             List<Vec3> Path = PathAfterThePlayerSideBounce(Shot);
             if (Path == null) continue;
             Fed++;
@@ -27,7 +33,7 @@ final class ReachabilityTest {
             int Steps = 0;
             Vec3 First = null;
             for (Vec3 Point : Path) {
-                if (!PlayerReach.CanTouch(Point)) continue;
+                if (!ReachTiming.CanTouch(Point)) continue;
                 Steps++;
                 if (First == null) First = Point;
             }
@@ -35,7 +41,7 @@ final class ReachabilityTest {
             Playable++;
 
             double Window = Steps * Simulation.Step;
-            double Dash = PlayerReach.TravelTime(PlayerReach.Neutral, new Vec3(First.X(), PlayerReach.HitY, First.Z()));
+            double Dash = ReachTiming.TravelTime(ReachEnvelope.Neutral, new Vec3(First.X(), ReachEnvelope.HitY, First.Z()));
             if (Window < WorstWindow) { WorstWindow = Window; WorstWindowShot = Shot.Name(); }
             if (Window - Dash < WorstMargin) { WorstMargin = Window - Dash; WorstMarginShot = Shot.Name(); }
         }
@@ -56,7 +62,7 @@ final class ReachabilityTest {
         Check("the blade can cross to every one of them in the time the ball allows",
               WorstMargin > 0,
               String.format("tightest case %s: %.0f ms of margin at TRACK_SPEED = %.1f m/s",
-                            WorstMarginShot, WorstMargin * 1000, Stroke.TrackSpeed));
+                            WorstMarginShot, WorstMargin * 1000, CursorFollower.TrackSpeed));
     }
 
     /** End to end: can a player who simply points at the ball hit it back? */
@@ -64,7 +70,7 @@ final class ReachabilityTest {
     void APlayerPointingAtTheBallCanReturnIt() {
         int Returned = 0, Attempted = 0;
         List<String> Missed = new ArrayList<>();
-        for (Shots Shot : Shots.All) {
+        for (Feed Shot : Feeds.All) {
             if (PathAfterThePlayerSideBounce(Shot) == null) continue;
             Attempted++;
             if (PlayThePoint(Shot)) Returned++; else Missed.add(Shot.Name());
@@ -76,18 +82,18 @@ final class ReachabilityTest {
     }
 
     /** Play one point with a stand-in hand: point the CURSOR at the ball, let envelope and speed decide. */
-    private static boolean PlayThePoint(Shots Shot) {
+    private static boolean PlayThePoint(Feed Shot) {
         GameSession Game = new GameSession();
         Game.Launch(Shot);
         boolean Returned = false;
         for (int Step = 0; Step < (int) (14.0 / Simulation.Step); Step++) {
-            Vec3 Ball = Game.Ball().Position();
-            Game.SetAim(PlayerReach.Clamp(new Vec3(Ball.X(), 0, Ball.Z())));
+            Vec3 Ball = Game.Snapshot().Ball().Position();
+            Game.SetAim(ReachEnvelope.Clamp(new Vec3(Ball.X(), 0, Ball.Z())));
             if (Game.Step().HitBy() == Side.Player) Returned = true;
 
             // Returned AND over to the other side: a ball popped straight up is not a return.
-            if (Returned && Game.Ball().Position().Z() < -0.1) return true;
-            if (Game.Ball().Position().Y() < -TableSpec.Height) break;
+            if (Returned && Game.Snapshot().Ball().Position().Z() < -0.1) return true;
+            if (Game.Snapshot().Ball().Position().Y() < -TableSpec.Height) break;
         }
         return false;
     }
@@ -96,18 +102,18 @@ final class ReachabilityTest {
      * One feed, played by the real game until the opponent has returned it and the return has
      * bounced on the player's half: the ball's path from that bounce on, or null if no such rally.
      */
-    private static List<Vec3> PathAfterThePlayerSideBounce(Shots Shot) {
+    private static List<Vec3> PathAfterThePlayerSideBounce(Feed Shot) {
         GameSession Game = new GameSession();
-        Game.SetAim(PlayerReach.Clamp(new Vec3(-9, 0, 9)));
+        Game.SetAim(ReachEnvelope.Clamp(new Vec3(-9, 0, 9)));
         Game.Launch(Shot);
 
         boolean Returned = false, Bounced = false;
         List<Vec3> Path = new ArrayList<>();
         for (int Step = 0; Step < (int) (14.0 / Simulation.Step); Step++) {
             if (Game.Step().HitBy() == Side.Opponent) Returned = true;
-            if (Returned && Game.PlayerMayHit()) Bounced = true;
-            if (Bounced) Path.add(Game.Ball().Position());
-            if (Game.Ball().Position().Y() < -TableSpec.Height) break;
+            if (Returned && Game.Snapshot().PlayerMayHit()) Bounced = true;
+            if (Bounced) Path.add(Game.Snapshot().Ball().Position());
+            if (Game.Snapshot().Ball().Position().Y() < -TableSpec.Height) break;
         }
         return Bounced ? Path : null;
     }

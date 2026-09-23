@@ -1,4 +1,4 @@
-package tabletennis.game;
+package tabletennis.game.rally;
 
 /** The two ends of the table. The player's end is +Z, the opponent's -Z. */
 public enum Side {

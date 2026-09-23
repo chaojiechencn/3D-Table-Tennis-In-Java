@@ -18,16 +18,22 @@ import tabletennis.engine.math.Quat;
 import tabletennis.engine.math.Vec3;
 import tabletennis.engine.world.FlightPredictor;
 import tabletennis.game.GameSession;
-import tabletennis.game.Shots;
-import tabletennis.game.PlayerReach;
-import tabletennis.game.Side;
-import tabletennis.game.ShotAssist;
-import tabletennis.game.Stroke;
+import tabletennis.game.StepResult;
+import tabletennis.game.control.CursorFollower;
+import tabletennis.game.control.ReachEnvelope;
+import tabletennis.game.control.ReachTiming;
+import tabletennis.game.feed.Feed;
+import tabletennis.game.feed.Feeds;
+import tabletennis.game.rally.EventType;
+import tabletennis.game.rally.RallyEvent;
+import tabletennis.game.rally.Side;
+import tabletennis.game.shot.ShotDecision;
 import tabletennis.app.render.*;
 
 import javax.imageio.ImageIO;
 import java.io.File;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
 
@@ -54,8 +60,10 @@ public class TableTennisIn3D extends Application {
     /** 1.25 s of flight at TrailStride: any shot end to end. */
     private static final int TrailDots = 300;
 
+    private static final int BounceMarksKept = 24;
+
     private final GameSession Session = new GameSession();
-    private Shots CurrentShot = Shots.ByName("Serve");
+    private Feed CurrentShot = Feeds.Default();
 
     private double Accumulator = 0;
     private long LastNanos = 0;
@@ -67,7 +75,7 @@ public class TableTennisIn3D extends Application {
     private final BallView BallModel = new BallView();
     private final Trail FlightTrail = new Trail(TrailDots, 0.0060, Color.web("#a8401a"), Color.web("#ffe08a"));
     private final Trail Ghost = new Trail(TrailDots, 0.0042, Color.web("#454b54"), Color.web("#9aa5b2"));
-    private final BounceMarks Marks = new BounceMarks(24);
+    private final BounceMarks Marks = new BounceMarks(BounceMarksKept);
     private final CameraRig Rig = new CameraRig();
     private final Hud HudLayer = new Hud();
     private final ShotDebug ShotOverlay = new ShotDebug();
@@ -75,12 +83,13 @@ public class TableTennisIn3D extends Application {
     private final PaddleView OpponentView = new PaddleView(false);
 
     /** Poses at the start of the last step, so blades interpolate with the same alpha as the ball. */
-    private BladeCollider PrevPlayerPose = Session.PlayerBlade();
-    private BladeCollider PrevOpponentPose = Session.OpponentBlade();
+    private BladeCollider PrevPlayerPose = Session.Snapshot().PlayerBlade();
+    private BladeCollider PrevOpponentPose = Session.Snapshot().OpponentBlade();
 
     private final Deque<Vec3> TrailPoints = new ArrayDeque<>();
     private int StepsSinceTrailPoint = 0;
-    private int MarksAtBounceCount = 0;
+    private final List<Vec3> BounceMarkPoints = new ArrayList<>();
+    private boolean MarksChanged = false;
 
     private boolean ShowGhost = true;
     private boolean ShowTrail = true;
@@ -94,7 +103,7 @@ public class TableTennisIn3D extends Application {
 
     /** While the right button is held the cursor's Y means height and depth is frozen. */
     private boolean Brushing = false;
-    private double BrushHoldZ = PlayerReach.Neutral.Z();
+    private double BrushHoldZ = ReachEnvelope.Neutral.Z();
 
     private String ScreenshotPath = null;
     private double ScreenshotAt = 0;
@@ -209,19 +218,29 @@ public class TableTennisIn3D extends Application {
     }
 
     private void AdvanceOne() {
-        PrevPlayerPose = Session.PlayerBlade();
-        PrevOpponentPose = Session.OpponentBlade();
+        PrevPlayerPose = Session.Snapshot().PlayerBlade();
+        PrevOpponentPose = Session.Snapshot().OpponentBlade();
 
-        GameSession.StepResult Result = Session.Step();
+        StepResult Result = Session.Step();
         if (Result.Contact()) ShowContact(Result.HitBy());
-        if (Result.PointAwarded()) HudLayer.SetScore(Session.Score());
+        if (Result.PointAwarded()) HudLayer.SetScore(Session.Snapshot().Score());
+        KeepBounceMarks(Result.Events());
         SampleTrail();
+    }
+
+    private void KeepBounceMarks(List<RallyEvent> Events) {
+        for (RallyEvent Each : Events) {
+            if (Each.Type() != EventType.TableBounce) continue;
+            BounceMarkPoints.add(Each.Point());
+            while (BounceMarkPoints.size() > BounceMarksKept) BounceMarkPoints.remove(0);
+            MarksChanged = true;
+        }
     }
 
     private void SampleTrail() {
         if (++StepsSinceTrailPoint < TrailStride) return;
         StepsSinceTrailPoint = 0;
-        TrailPoints.addLast(Session.Ball().Position());
+        TrailPoints.addLast(Session.Snapshot().Ball().Position());
         while (TrailPoints.size() > TrailDots) TrailPoints.removeFirst();
     }
 
@@ -229,19 +248,18 @@ public class TableTennisIn3D extends Application {
         boolean PlayerHit = HitBy == Side.Player;
         Rig.OnRallyHit(PlayerHit);
 
-        ShotAssist.Debug D = Session.LastShot();
-        ShotOverlay.Set(D.Contact(), D.RacketVel(), D.IncomingVel(), D.ReflectDir(),
-                      D.IntendDir(), D.FinalDir(), D.Goal(), D.Landing(),
-                      D.Speed(), D.SpinPlan(), D.Passes(), D.Legal());
-        ShotOverlay.SetTargetArea(Session.TargetHalfWidth(), Session.TargetNearDepth(),
-                                Session.TargetFarDepth(), !PlayerHit);
+        ShotDecision D = Session.Snapshot().LastShot();
+        ShotOverlay.Set(D.Contact(), D.RacketVelocity(), D.IncomingVelocity(), D.ReflectDirection(),
+                      D.IntendedDirection(), D.FinalDirection(), D.Target(), D.Landing(),
+                      D.Speed(), D.Spin(), D.Passes(), D.Legal());
+        ShotOverlay.SetTargetArea(D.Area().HalfWidth(), D.Area().NearDepth(), D.Area().FarDepth(), !PlayerHit);
         RefreshShotReadout();
     }
 
     /** Interpolated between the last two physics states, or 480 Hz against 60 Hz stutters. */
     private void Render(double FrameSeconds) {
         double Alpha = Paused ? 0 : Math.min(1, Accumulator / Simulation.Step);
-        BallState From = Session.PreviousBall(), To = Session.Ball();
+        BallState From = Session.Snapshot().PreviousBall(), To = Session.Snapshot().Ball();
         BallModel.Update(new BallState(
                 Vec3.Lerp(From.Position(), To.Position(), Alpha),
                 Vec3.Lerp(From.Velocity(), To.Velocity(), Alpha),
@@ -249,13 +267,13 @@ public class TableTennisIn3D extends Application {
                 Quat.Slerp(From.Orientation(), To.Orientation(), Alpha)));
 
         Rig.UpdateRally(FrameSeconds, To.Position());
-        DrawPaddle(PlayerView, PrevPlayerPose, Session.PlayerBlade(), Alpha);
-        DrawPaddle(OpponentView, PrevOpponentPose, Session.OpponentBlade(), Alpha);
+        DrawPaddle(PlayerView, PrevPlayerPose, Session.Snapshot().PlayerBlade(), Alpha);
+        DrawPaddle(OpponentView, PrevOpponentPose, Session.Snapshot().OpponentBlade(), Alpha);
 
         if (ShowTrail) FlightTrail.SetPath(TrailPoints);
-        if (MarksAtBounceCount != Session.BounceCount()) {
-            MarksAtBounceCount = Session.BounceCount();
-            Marks.SetMarks(Session.BounceMarks());
+        if (MarksChanged) {
+            MarksChanged = false;
+            Marks.SetMarks(BounceMarkPoints);
         }
         if (ShowControlDebug) HudLayer.SetControl(ControlReadout());
     }
@@ -271,7 +289,7 @@ public class TableTennisIn3D extends Application {
     }
 
     private void RefreshGhost() {
-        Ghost.SetShown(ShowGhost && CurrentShot.State().SpinRate() > 1e-6);
+        Ghost.SetShown(ShowGhost && CurrentShot.Ball().SpinRate() > 1e-6);
     }
 
     /**
@@ -279,13 +297,13 @@ public class TableTennisIn3D extends Application {
      * downstream of the blade's target, so the ball never steers the control.
      */
     private String ControlReadout() {
-        BallState B = Session.Ball();
-        Vec3 BladeCentre = Session.PlayerBlade().Centre();
+        BallState B = Session.Snapshot().Ball();
+        Vec3 BladeCentre = Session.Snapshot().PlayerBlade().Centre();
         Vec3 Target = PendingAim != null ? PendingAim : BladeCentre;
 
-        double Dist = PlayerReach.TravelDistance(BladeCentre, Target);
-        double Travel = PlayerReach.TravelTime(BladeCentre, Target);
-        double Arrive = PlayerReach.TimeToDepth(B, Target.Z());
+        double Dist = ReachTiming.TravelDistance(BladeCentre, Target);
+        double Travel = ReachTiming.TravelTime(BladeCentre, Target);
+        double Arrive = ReachTiming.TimeToDepth(B, Target.Z());
         boolean Clamped = RawAim != null
                 && (Math.abs(RawAim.X() - Target.X()) > 1e-6 || Math.abs(RawAim.Z() - Target.Z()) > 1e-6);
 
@@ -303,8 +321,8 @@ public class TableTennisIn3D extends Application {
             RawAim == null ? "" : String.format("   ray -> x %+.3f  z %+.3f", RawAim.X(), RawAim.Z()),
             BladeCentre.X(), BladeCentre.Y(), BladeCentre.Z(),
             Target.X(), Target.Y(), Target.Z(), Clamped ? "   (clamped)" : "",
-            -PlayerReach.MaxX, PlayerReach.MaxX, PlayerReach.HitY, PlayerReach.ZNear, PlayerReach.ZFar,
-            Dist, Travel * 1000, Stroke.TrackSpeed,
+            -ReachEnvelope.MaxX, ReachEnvelope.MaxX, ReachEnvelope.HitY, ReachEnvelope.ZNear, ReachEnvelope.ZFar,
+            Dist, Travel * 1000, CursorFollower.TrackSpeed,
             B.Position().X(), B.Position().Y(), B.Position().Z(),
             Double.isNaN(Arrive) ? "  --  " : String.format("%.0f ms", Arrive * 1000), Target.Z(),
             ReachVerdict(Travel, Arrive));
@@ -327,7 +345,7 @@ public class TableTennisIn3D extends Application {
         Viewport.addEventHandler(MouseEvent.MOUSE_PRESSED, E -> {
             if (!E.isSecondaryButtonDown()) return;
             Brushing = true;
-            BrushHoldZ = Session.PlayerBlade().Centre().Z();
+            BrushHoldZ = Session.Snapshot().PlayerBlade().Centre().Z();
             Aim(Viewport, E);
         });
         Viewport.addEventHandler(MouseEvent.MOUSE_RELEASED, E -> {
@@ -341,14 +359,14 @@ public class TableTennisIn3D extends Application {
     private void Aim(SubScene Viewport, MouseEvent E) {
         Point2D P = Viewport.sceneToLocal(E.getSceneX(), E.getSceneY());
         // Only for a degenerate ray; used as an input it would be a loop with gain.
-        Vec3 Fallback = PendingAim != null ? PendingAim : Session.PlayerBlade().Centre();
+        Vec3 Fallback = PendingAim != null ? PendingAim : Session.Snapshot().PlayerBlade().Centre();
 
         CursorX = P.getX();
         CursorY = P.getY();
-        RawAim = MouseAim.OnHittingPlane(Viewport, P.getX(), P.getY(), PlayerReach.HitY, Fallback);
+        RawAim = MouseAim.OnHittingPlane(Viewport, P.getX(), P.getY(), ReachEnvelope.HitY, Fallback);
         PendingAim = Brushing
-                ? PlayerReach.ClampBrushed(RawAim, P.getY() / Math.max(1, Viewport.getHeight()), BrushHoldZ)
-                : PlayerReach.Clamp(RawAim);
+                ? ReachEnvelope.ClampBrushed(RawAim, P.getY() / Math.max(1, Viewport.getHeight()), BrushHoldZ)
+                : ReachEnvelope.Clamp(RawAim);
         Session.SetAim(PendingAim);
     }
 
@@ -367,7 +385,7 @@ public class TableTennisIn3D extends Application {
             case CLOSE_BRACKET -> TimeScale = Math.min(2.0, TimeScale * 1.6);
             case G -> { ShowGhost = !ShowGhost; RefreshGhost(); }
             case T -> { ShowTrail = !ShowTrail; FlightTrail.SetShown(ShowTrail); }
-            case A -> Session.SetAutoReplay(!Session.AutoReplay());
+            case A -> Session.SetAutoReplay(!Session.Snapshot().AutoReplay());
             case B -> BallModel.SetMagnified(!BallModel.IsMagnified());
             case F -> Rig.ToggleRallyCam();
             case C -> Rig.Next();
@@ -391,29 +409,25 @@ public class TableTennisIn3D extends Application {
     }
 
     private void ToggleDemo() {
-        Session.SetDemoMode(!Session.DemoMode());
-        HudLayer.SetFeed(Session.DemoMode() ? CurrentShot.Name() + "   [DEMO -- M to take over]"
+        Session.SetDemoMode(!Session.Snapshot().DemoMode());
+        HudLayer.SetFeed(Session.Snapshot().DemoMode() ? CurrentShot.Name() + "   [DEMO -- M to take over]"
                                        : CurrentShot.Name());
     }
 
     private void Pick(int Index) {
-        if (Index < Shots.All.length) LaunchShot(Shots.All[Index]);
+        if (Index < Feeds.All.size()) LaunchShot(Feeds.All.get(Index));
     }
 
-    private Shots NextShot(int Delta) {
-        int I = 0;
-        for (int K = 0; K < Shots.All.length; K++) {
-            if (Shots.All[K] == CurrentShot) { I = K; break; }
-        }
-        return Shots.ByIndex(I + Delta);
+    private Feed NextShot(int Delta) {
+        return Feeds.Next(CurrentShot, Delta);
     }
 
     /** Start a rally with this feed, keeping the score, and clear what the last one drew. */
-    private void LaunchShot(Shots Shot) {
+    private void LaunchShot(Feed Shot) {
         CurrentShot = Shot;
         Session.Launch(Shot);
         HudLayer.SetFeed(Shot.Name());
-        HudLayer.SetScore(Session.Score());
+        HudLayer.SetScore(Session.Snapshot().Score());
         Rig.OnRallyHit(true);   // the feed stands in for the player's own shot
 
         Accumulator = 0;
@@ -421,6 +435,8 @@ public class TableTennisIn3D extends Application {
         TrailPoints.clear();
         FlightTrail.Clear();
         Marks.Clear();
+        BounceMarkPoints.clear();
+        MarksChanged = false;
 
         // The no-spin ghost, predicted once at the trail's stride and length so they compare dot for dot.
         List<Vec3> GhostPath = FlightPredictor.Path(Shot.WithoutSpin(), TrailDots * TrailStride * Simulation.Step, TrailStride);
@@ -442,7 +458,7 @@ public class TableTennisIn3D extends Application {
 
     private void ApplyArg(String Name, String Value) {
         switch (Name) {
-            case "--shot" -> CurrentShot = Shots.ByName(Value);
+            case "--shot" -> CurrentShot = Feeds.ByName(Value);
             case "--at"   -> ScreenshotAt = Double.parseDouble(Value);
             case "--out"  -> ScreenshotPath = Value;
             case "--view" -> Rig.Apply(CameraRig.View.FromArg(Value));
@@ -459,7 +475,7 @@ public class TableTennisIn3D extends Application {
         ScreenshotPath = null;
         try {
             ImageIO.write(SwingFXUtils.fromFXImage(MainScene.snapshot(null), null), "png", new File(Path));
-            System.out.println("wrote " + Path + " at t=" + String.format("%.3f", Session.Time()));
+            System.out.println("wrote " + Path + " at t=" + String.format("%.3f", Session.Snapshot().Time()));
         } catch (Exception E) {
             System.err.println("screenshot failed: " + E);
         }

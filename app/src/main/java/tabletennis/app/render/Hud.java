@@ -7,8 +7,8 @@ import javafx.scene.control.Label;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
-import tabletennis.game.Scoreboard;
-import tabletennis.game.Side;
+import tabletennis.game.match.ScoreSnapshot;
+import tabletennis.game.rally.Side;
 
 /**
  * What a player needs on screen: the score, the feed name, the key legend, and the V and D debug
@@ -55,12 +55,12 @@ public final class Hud {
 
     public void SetFeed(String Name) { Feed.setText("feed: " + Name); }
 
-    public void SetScore(Scoreboard.Snapshot S) {
+    public void SetScore(ScoreSnapshot S) {
         Score.setText(ScoreLine(S));
     }
 
     /** The serving dot sits by the server's score; "deuce" is spelled out because the rule changes. */
-    static String ScoreLine(Scoreboard.Snapshot S) {
+    static String ScoreLine(ScoreSnapshot S) {
         String Games = "games " + S.PlayerGames() + " - " + S.OpponentGames();
         if (S.MatchWinner() != null) {
             return (S.MatchWinner() == Side.Player ? "YOU WIN" : "OPPONENT WINS") + "   " + Games;

@@ -1,4 +1,6 @@
-package tabletennis.game;
+package tabletennis.game.match;
+
+import tabletennis.game.rally.Side;
 
 /**
  * The match score by ITTF Laws 2.11 and 2.13: games to 11 won by two with no ceiling, service
@@ -10,13 +12,13 @@ public final class Scoreboard {
     /** ITTF 2.11.1 */
     public static final int PointsToWinGame = 11;
     public static final int WinBy = 2;
+
     /** ITTF 2.13.3 */
     public static final int ServeRotation = 2;
     public static final int DeuceFrom = 10;
 
-    /** Read-only, for display; matchWinner is null until the match is decided. */
-    public record Snapshot(int PlayerPoints, int OpponentPoints, int PlayerGames, int OpponentGames,
-                           Side Server, boolean Deuce, Side MatchWinner) {}
+    /** Best of five: first to three games. */
+    private static final int DefaultGamesToWinMatch = 3;
 
     private final int GamesToWinMatch;
     private int PlayerPoints, OpponentPoints;
@@ -25,7 +27,7 @@ public final class Scoreboard {
     /** ITTF 2.13.6: whoever served first in a game receives first in the next. */
     private Side OpeningServer = Side.Player;
 
-    public Scoreboard() { this(3); }
+    public Scoreboard() { this(DefaultGamesToWinMatch); }
 
     public Scoreboard(int GamesToWinMatch) {
         if (GamesToWinMatch < 1) throw new IllegalArgumentException("a match needs at least one game");
@@ -52,22 +54,23 @@ public final class Scoreboard {
         OpeningServer = OpeningServer.Other();
     }
 
-    public int Points(Side S) { return S == Side.Player ? PlayerPoints : OpponentPoints; }
+    public int Points(Side Of) { return Of == Side.Player ? PlayerPoints : OpponentPoints; }
 
-    public int Games(Side S) { return S == Side.Player ? PlayerGames : OpponentGames; }
+    public int Games(Side Of) { return Of == Side.Player ? PlayerGames : OpponentGames; }
 
     public boolean IsDeuce() {
         return PlayerPoints >= DeuceFrom && OpponentPoints >= DeuceFrom;
     }
 
     public boolean GameOver() {
-        int Hi = Math.max(PlayerPoints, OpponentPoints);
-        int Lo = Math.min(PlayerPoints, OpponentPoints);
-        return Hi >= PointsToWinGame && Hi - Lo >= WinBy;
+        int Leader = Math.max(PlayerPoints, OpponentPoints);
+        int Trailer = Math.min(PlayerPoints, OpponentPoints);
+        return Leader >= PointsToWinGame && Leader - Trailer >= WinBy;
     }
 
     public boolean MatchOver() { return MatchWinner() != null; }
 
+    /** Null until the match is decided. */
     public Side MatchWinner() {
         if (PlayerGames >= GamesToWinMatch) return Side.Player;
         if (OpponentGames >= GamesToWinMatch) return Side.Opponent;
@@ -83,8 +86,8 @@ public final class Scoreboard {
         return Turns % 2 == 0 ? OpeningServer : OpeningServer.Other();
     }
 
-    public Snapshot Snapshot() {
-        return new Snapshot(PlayerPoints, OpponentPoints, PlayerGames, OpponentGames,
-                            Server(), IsDeuce(), MatchWinner());
+    public ScoreSnapshot Snapshot() {
+        return new ScoreSnapshot(PlayerPoints, OpponentPoints, PlayerGames, OpponentGames,
+                                 Server(), IsDeuce(), MatchWinner());
     }
 }

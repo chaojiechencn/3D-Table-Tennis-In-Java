@@ -9,9 +9,18 @@ import tabletennis.engine.world.Racket;
 import tabletennis.engine.world.StepReport;
 import tabletennis.engine.world.SurfaceHit;
 import tabletennis.engine.world.SurfaceKind;
+import tabletennis.game.ai.BallFollower;
+import tabletennis.game.ai.Opponent;
+import tabletennis.game.control.ReachEnvelope;
+import tabletennis.game.feed.Feed;
+import tabletennis.game.feed.Feeds;
+import tabletennis.game.match.ScoreSnapshot;
 import tabletennis.game.rally.EventType;
 import tabletennis.game.rally.RallyEvent;
 import tabletennis.game.rally.Referee;
+import tabletennis.game.rally.Side;
+import tabletennis.game.shot.ShotAssist;
+import tabletennis.game.shot.ShotTuning;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -22,13 +31,13 @@ import static tabletennis.testing.Claims.Check;
 final class GameSessionTest {
 
     /** An opponent that never plays: its blade stands far behind the table, so feeds run out. */
-    private static final Opponent Statue = (Ball, Blade, Seconds) -> Blade.PlaceAt(new Vec3(0, 0.20, -4.0), Follower.Square);
+    private static final Opponent Statue = (Ball, Blade, Seconds) -> Blade.PlaceAt(new Vec3(0, 0.20, -4.0), BallFollower.Square);
 
     /** Hit well past the far end without touching the table: out, and then the floor. */
-    private static final Shots LongFeed = Feed("long", new Vec3(0, 0.30, 1.52), new Vec3(0, 1.5, -14));
+    private static final Feed LongFeed = RawFeed("long", new Vec3(0, 0.30, 1.52), new Vec3(0, 1.5, -14));
 
     /** Dropped short on the player's own half, rising toward the player after its bounce. */
-    private static final Shots Bouncer = Feed("bouncer", new Vec3(0, 0.30, 0.45), new Vec3(0, 0, 1.2));
+    private static final Feed Bouncer = RawFeed("bouncer", new Vec3(0, 0.30, 0.45), new Vec3(0, 0, 1.2));
 
     /**
      * An opponent that digs the ball off the table surface: as the ball falls onto the far half a
@@ -42,12 +51,12 @@ final class GameSessionTest {
             Vec3 At = Ball.Position();
             if (Ball.Velocity().Y() > 0) Bounced = true;
             if (Set) {
-                Blade.MoveTo(Blade.Position().Plus(new Vec3(0, 0, 0.01)), Follower.Square, Seconds);
+                Blade.MoveTo(Blade.Position().Plus(new Vec3(0, 0, 0.01)), BallFollower.Square, Seconds);
             } else if (Bounced && Ball.Velocity().Y() < 0 && At.Y() < 0.03) {
-                Blade.PlaceAt(new Vec3(At.X(), At.Y(), At.Z() - 0.03), Follower.Square);
+                Blade.PlaceAt(new Vec3(At.X(), At.Y(), At.Z() - 0.03), BallFollower.Square);
                 Set = true;
             } else {
-                Blade.PlaceAt(Follower.Ready, Follower.Square);
+                Blade.PlaceAt(BallFollower.Ready, BallFollower.Square);
             }
         }
     }
@@ -55,21 +64,23 @@ final class GameSessionTest {
     /** First bounce: whichever half it lands on opens that side's racket and no other. */
     @Test
     void TheFirstBounceOpensOnlyTheRacketOnThatHalf() {
-        for (Shots Shot : new Shots[]{Shots.ByName("Serve"), Bouncer}) {
+        for (Feed Shot : new Feed[]{Feeds.ByName("Serve"), Bouncer}) {
             GameSession Game = new GameSession();
             Game.Launch(Shot);
             List<RallyEvent> Events = new ArrayList<>();
-            boolean ShutWhileInAir = true;
-            while (Game.BounceCount() == 0 && Game.Time() < 2) {
-                ShutWhileInAir &= !Game.PlayerMayHit() && !Game.OpponentMayHit();
-                Events.addAll(Game.Step().Events());
+            boolean ShutWhileInAir = true, Bounced = false;
+            while (!Bounced && Game.Snapshot().Time() < 2) {
+                ShutWhileInAir &= !Game.Snapshot().PlayerMayHit() && !Game.Snapshot().OpponentMayHit();
+                List<RallyEvent> StepEvents = Game.Step().Events();
+                Events.addAll(StepEvents);
+                Bounced = Happened(StepEvents, EventType.TableBounce);
             }
             boolean Near = Events.stream().filter(Event -> Event.Type() == EventType.TableBounce).findFirst()
                                  .map(Event -> Event.Half() == Side.Player).orElse(false);
             Check("the first bounce opens only the racket on that half (" + Shot.Name() + ")",
-                  ShutWhileInAir && Game.PlayerMayHit() == Near && Game.OpponentMayHit() == !Near,
+                  ShutWhileInAir && Game.Snapshot().PlayerMayHit() == Near && Game.Snapshot().OpponentMayHit() == !Near,
                   String.format("closed in the air=%b; landed %s; player=%b opponent=%b", ShutWhileInAir,
-                                Near ? "near" : "far", Game.PlayerMayHit(), Game.OpponentMayHit()));
+                                Near ? "near" : "far", Game.Snapshot().PlayerMayHit(), Game.Snapshot().OpponentMayHit()));
         }
     }
 
@@ -77,18 +88,18 @@ final class GameSessionTest {
     @Test
     void ASecondBounceLosesThePoint() {
         GameSession Drop = new GameSession(Statue, new ShotAssist());
-        Drop.Launch(Shots.ByName("ITTF drop test"));
+        Drop.Launch(Feeds.ByName("ITTF drop test"));
         boolean OpenedAfterOne = false;
-        GameSession.StepResult Decided = null;
+        StepResult Decided = null;
         for (int Step = 0; Step < (int) (3.0 / Simulation.Step) && Decided == null; Step++) {
-            GameSession.StepResult Result = Drop.Step();
-            OpenedAfterOne |= Drop.OpponentMayHit();
+            StepResult Result = Drop.Step();
+            OpenedAfterOne |= Drop.Snapshot().OpponentMayHit();
             if (Result.PointAwarded()) Decided = Result;
         }
         Check("a second bounce on the receiver's half is the receiver's point lost",
               OpenedAfterOne && Decided != null && Decided.PointTo() == Side.Player,
               String.format("first bounce opened the opponent=%b; point to %s at t=%.3f s",
-                            OpenedAfterOne, Decided == null ? "nobody" : Decided.PointTo(), Drop.Time()));
+                            OpenedAfterOne, Decided == null ? "nobody" : Decided.PointTo(), Drop.Snapshot().Time()));
     }
 
     /** Own half: a shot that comes straight back off a still blade onto the player's own half. */
@@ -97,17 +108,17 @@ final class GameSessionTest {
         ShotTuning RawPhysics = ShotTuning.Builder()
                 .QualityCore(0).QualityCoreMin(0).QualityFalloff(1e-9).AssistFloor(0).Build();
         GameSession Own = new GameSession(Statue, new ShotAssist(RawPhysics));
-        Own.SetAim(PlayerReach.Clamp(new Vec3(0, 0, RisingThroughTheHittingPlane(Bouncer).Z())));
+        Own.SetAim(ReachEnvelope.Clamp(new Vec3(0, 0, RisingThroughTheHittingPlane(Bouncer).Z())));
         Own.Launch(Bouncer);
         Side OwnHit = null, OwnPoint = null;
         for (int Step = 0; Step < (int) (3.0 / Simulation.Step) && OwnPoint == null; Step++) {
-            GameSession.StepResult Result = Own.Step();
+            StepResult Result = Own.Step();
             if (Result.Contact()) OwnHit = Result.HitBy();
             if (Result.PointAwarded()) OwnPoint = Result.PointTo();
         }
         Check("a return that falls back on the hitter's own half loses the point",
-              OwnHit == Side.Player && OwnPoint == Side.Opponent && Own.Ball().Position().Z() > 0,
-              String.format("hit by %s, point to %s, ball at z=%+.2f", OwnHit, OwnPoint, Own.Ball().Position().Z()));
+              OwnHit == Side.Player && OwnPoint == Side.Opponent && Own.Snapshot().Ball().Position().Z() > 0,
+              String.format("hit by %s, point to %s, ball at z=%+.2f", OwnHit, OwnPoint, Own.Snapshot().Ball().Position().Z()));
     }
 
     /** Out, then floor: two terminal events on one rally, exactly one point, against the hitter. */
@@ -118,33 +129,33 @@ final class GameSessionTest {
         int Awards = 0;
         List<RallyEvent> Events = new ArrayList<>();
         for (int Step = 0; Step < (int) (3.0 / Simulation.Step); Step++) {
-            GameSession.StepResult Result = Out.Step();
+            StepResult Result = Out.Step();
             Events.addAll(Result.Events());
             if (Result.PointAwarded()) Awards++;
         }
         boolean Both = Happened(Events, EventType.OutOfBounds) && Happened(Events, EventType.FloorTouch);
         Check("out and then the floor end the rally with exactly one point, against the hitter",
-              Both && Awards == 1 && Out.Score().OpponentPoints() == 1 && Out.Score().PlayerPoints() == 0,
+              Both && Awards == 1 && Out.Snapshot().Score().OpponentPoints() == 1 && Out.Snapshot().Score().PlayerPoints() == 0,
               String.format("out+floor both fired=%b; %d award(s); score %d-%d", Both, Awards,
-                            Out.Score().PlayerPoints(), Out.Score().OpponentPoints()));
+                            Out.Snapshot().Score().PlayerPoints(), Out.Snapshot().Score().OpponentPoints()));
     }
 
     /** Net cord: a feed that clips the cord and still lands on the far half is a live ball. */
     @Test
     void ALegalNetCordStaysInPlay() {
-        Shots Cord = NetCordFeed();
+        Feed Cord = NetCordFeed();
         boolean TouchedNet = false, Opened = false, EarlyPoint = false;
         if (Cord != null) {
             GameSession Net = new GameSession(Statue, new ShotAssist());
             Net.Launch(Cord);
             List<RallyEvent> Events = new ArrayList<>();
-            for (int Step = 0; Step < (int) (2.0 / Simulation.Step) && !Net.OpponentMayHit(); Step++) {
-                GameSession.StepResult Result = Net.Step();
+            for (int Step = 0; Step < (int) (2.0 / Simulation.Step) && !Net.Snapshot().OpponentMayHit(); Step++) {
+                StepResult Result = Net.Step();
                 Events.addAll(Result.Events());
                 EarlyPoint |= Result.PointAwarded();
             }
             TouchedNet = Happened(Events, EventType.NetTouch);
-            Opened = Net.OpponentMayHit();
+            Opened = Net.Snapshot().OpponentMayHit();
         }
         Check("a ball that clips the net and lands legally stays in play",
               TouchedNet && Opened && !EarlyPoint,
@@ -157,15 +168,15 @@ final class GameSessionTest {
     @Test
     void NoRacketTouchesADecidedBall() {
         GameSession Dead = new GameSession();
-        Dead.Launch(Shots.ByName("Into the net"));
+        Dead.Launch(Feeds.ByName("Into the net"));
         boolean Over = false;
         int LateContacts = 0;
         double Closest = Double.MAX_VALUE;
         for (int Step = 0; Step < (int) (4.0 / Simulation.Step); Step++) {
             PointAtTheBall(Dead);
-            GameSession.StepResult Result = Dead.Step();
+            StepResult Result = Dead.Step();
             if (Over && Result.Contact()) LateContacts++;
-            if (Over) Closest = Math.min(Closest, Dead.PlayerBlade().Centre().Minus(Dead.Ball().Position()).Length());
+            if (Over) Closest = Math.min(Closest, Dead.Snapshot().PlayerBlade().Centre().Minus(Dead.Snapshot().Ball().Position()).Length());
             Over |= Result.PointAwarded();
         }
         Check("once a point is decided, no racket can touch the ball again",
@@ -178,18 +189,17 @@ final class GameSessionTest {
     @Test
     void ATableTouchOnTheContactsOwnStepIsNotABounce() {
         GameSession Dig = new GameSession(new Digger(), new ShotAssist());
-        Dig.Launch(Shots.ByName("ITTF drop test"));
+        Dig.Launch(Feeds.ByName("ITTF drop test"));
         double ContactAt = Double.NaN, BounceGap = Double.NaN;
         Side DigPoint = null;
         for (int Step = 0; Step < (int) (3.0 / Simulation.Step) && DigPoint == null; Step++) {
-            int Bounces = Dig.BounceCount();
-            GameSession.StepResult Result = Dig.Step();
-            if (Result.Contact() && Double.isNaN(ContactAt)) ContactAt = Dig.Time();
-            if (!Double.isNaN(ContactAt) && Double.isNaN(BounceGap) && Dig.BounceCount() > Bounces) {
-                BounceGap = Dig.Time() - ContactAt;
+            StepResult Result = Dig.Step();
+            if (Result.Contact() && Double.isNaN(ContactAt)) ContactAt = Dig.Snapshot().Time();
+            if (!Double.isNaN(ContactAt) && Double.isNaN(BounceGap) && Happened(Result.Events(), EventType.TableBounce)) {
+                BounceGap = Dig.Snapshot().Time() - ContactAt;
             }
             if (Result.PointAwarded()) DigPoint = Result.PointTo();
-            if (!Double.isNaN(ContactAt) && Dig.Time() - ContactAt > 0.1) break;
+            if (!Double.isNaN(ContactAt) && Dig.Snapshot().Time() - ContactAt > 0.1) break;
         }
         Check("a table touch on the contact's own step does not score as the hitter's own half",
               !Double.isNaN(ContactAt) && BounceGap <= Referee.ContactBounceWindow && DigPoint == null,
@@ -205,8 +215,8 @@ final class GameSessionTest {
         On.Launch(LongFeed);
         double PointAt = Double.NaN, DueAt = Double.NaN;
         for (int Step = 0; Step < (int) (4.0 / Simulation.Step) && Double.isNaN(DueAt); Step++) {
-            if (On.Step().PointAwarded()) PointAt = On.Time();
-            if (On.ReplayDue()) DueAt = On.Time();
+            if (On.Step().PointAwarded()) PointAt = On.Snapshot().Time();
+            if (On.ReplayDue()) DueAt = On.Snapshot().Time();
         }
         double Delay = DueAt - PointAt;
         Check("with auto-replay on, the next feed is due one point-end delay after the point",
@@ -214,12 +224,12 @@ final class GameSessionTest {
               String.format("due %.4f s after the point (delay %.3f s, step %.4f s)",
                             Delay, GameSession.PointEndDelay, Simulation.Step));
 
-        Scoreboard.Snapshot Before = On.Score();
+        ScoreSnapshot Before = On.Snapshot().Score();
         On.Launch(LongFeed);
         Check("a new feed keeps the match score and reopens the rally",
-              On.Score().equals(Before) && !On.PointOver() && !On.PlayerMayHit() && !On.OpponentMayHit(),
+              On.Snapshot().Score().equals(Before) && !On.Snapshot().PointOver() && !On.Snapshot().PlayerMayHit() && !On.Snapshot().OpponentMayHit(),
               String.format("score %d-%d kept=%b; point over=%b", Before.PlayerPoints(),
-                            Before.OpponentPoints(), On.Score().equals(Before), On.PointOver()));
+                            Before.OpponentPoints(), On.Snapshot().Score().equals(Before), On.Snapshot().PointOver()));
 
         GameSession Off = new GameSession(Statue, new ShotAssist());
         Off.SetAutoReplay(false);
@@ -230,9 +240,9 @@ final class GameSessionTest {
             EverDue |= Off.ReplayDue();
         }
         Check("with auto-replay off, no feed is scheduled but the point still counts",
-              !EverDue && Off.Score().OpponentPoints() == 1,
+              !EverDue && Off.Snapshot().Score().OpponentPoints() == 1,
               String.format("replay due=%b over 6 s; score %d-%d", EverDue,
-                            Off.Score().PlayerPoints(), Off.Score().OpponentPoints()));
+                            Off.Snapshot().Score().PlayerPoints(), Off.Snapshot().Score().OpponentPoints()));
     }
 
     /** The same inputs, step for step, give the same game -- bit for bit. */
@@ -241,13 +251,13 @@ final class GameSessionTest {
         GameSession First = new GameSession(), Second = new GameSession();
         for (GameSession Game : new GameSession[]{First, Second}) {
             Game.SetDemoMode(true);
-            Game.Launch(Shots.ByName("Serve"));
+            Game.Launch(Feeds.ByName("Serve"));
         }
         int Steps = (int) (10.0 / Simulation.Step), FirstDifference = -1, Contacts = 0;
         for (int Step = 0; Step < Steps && FirstDifference < 0; Step++) {
-            GameSession.StepResult A = First.Step(), B = Second.Step();
+            StepResult A = First.Step(), B = Second.Step();
             if (A.Contact()) Contacts++;
-            if (!A.equals(B) || !First.Ball().equals(Second.Ball())) FirstDifference = Step;
+            if (!A.equals(B) || !First.Snapshot().Ball().equals(Second.Snapshot().Ball())) FirstDifference = Step;
         }
         Check("two sessions fed the same inputs stay identical",
               FirstDifference < 0 && Contacts > 0,
@@ -255,8 +265,8 @@ final class GameSessionTest {
                                   : "diverged at step " + FirstDifference);
     }
 
-    private static Shots Feed(String Name, Vec3 Position, Vec3 Velocity) {
-        return new Shots(Name, Name, BallState.At(Position, Velocity, Vec3.Zero), null);
+    private static Feed RawFeed(String Name, Vec3 Position, Vec3 Velocity) {
+        return Feed.Raw(Name, Name, BallState.At(Position, Velocity, Vec3.Zero));
     }
 
     private static boolean Happened(List<RallyEvent> Events, EventType Type) {
@@ -265,20 +275,20 @@ final class GameSessionTest {
 
     /** Point the stand-in hand's cursor at the ball, through the real envelope. */
     private static void PointAtTheBall(GameSession Game) {
-        Vec3 Ball = Game.Ball().Position();
-        Game.SetAim(PlayerReach.Clamp(new Vec3(Ball.X(), 0, Ball.Z())));
+        Vec3 Ball = Game.Snapshot().Ball().Position();
+        Game.SetAim(ReachEnvelope.Clamp(new Vec3(Ball.X(), 0, Ball.Z())));
     }
 
     /** Where a feed's ball first rises through the player's hitting plane after its bounce. */
-    private static Vec3 RisingThroughTheHittingPlane(Shots Shot) {
+    private static Vec3 RisingThroughTheHittingPlane(Feed Shot) {
         PhysicsWorld World = new PhysicsWorld();
-        World.Launch(Shot.State());
+        World.Launch(Shot.Ball());
         int Bounces = 0;
         for (int Step = 0; Step < (int) (2.0 / Simulation.Step); Step++) {
             double HeightBefore = World.Ball().Position().Y();
             Bounces += TableBounces(World.Step());
             double HeightAfter = World.Ball().Position().Y();
-            if (Bounces > 0 && HeightBefore < PlayerReach.HitY && HeightAfter >= PlayerReach.HitY) {
+            if (Bounces > 0 && HeightBefore < ReachEnvelope.HitY && HeightAfter >= ReachEnvelope.HitY) {
                 return World.Ball().Position();
             }
         }
@@ -289,13 +299,13 @@ final class GameSessionTest {
      * A feed that touches the net cord and still lands first on the far half, found by search so it
      * does not hang on hand-tuned numbers: a paddle-free flight is the honest judge.
      */
-    private static Shots NetCordFeed() {
+    private static Feed NetCordFeed() {
         for (double Vz = 6; Vz <= 10; Vz += 1) {
             for (double Vy = -0.5; Vy <= 2.5; Vy += 0.02) {
-                Shots Candidate = Feed(String.format("cord feed vz=-%.0f vy=%+.2f", Vz, Vy),
+                Feed Candidate = RawFeed(String.format("cord feed vz=-%.0f vy=%+.2f", Vz, Vy),
                                        new Vec3(0, 0.20, 1.2), new Vec3(0, Vy, -Vz));
                 PhysicsWorld World = new PhysicsWorld();
-                World.Launch(Candidate.State());
+                World.Launch(Candidate.Ball());
                 boolean Touched = false;
                 SurfaceHit Last = null;
                 int Bounces = 0;
