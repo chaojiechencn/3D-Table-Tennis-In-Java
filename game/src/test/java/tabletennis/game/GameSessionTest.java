@@ -102,6 +102,26 @@ final class GameSessionTest {
                             OpenedAfterOne, Decided == null ? "nobody" : Decided.PointTo(), Drop.Snapshot().Time()));
     }
 
+    /** Untouched: the opponent's legal return bounces past a player who never moves, to the floor. */
+    @Test
+    void ALegalReturnTheReceiverNeverTouchesIsTheHittersPoint() {
+        GameSession Idle = new GameSession();
+        Idle.Launch(Feeds.ByName("Serve"));
+        boolean Returned = false, BouncedOnPlayerHalf = false, PlayerTouched = false;
+        Side Point = null;
+        for (int Step = 0; Step < (int) (4.0 / Simulation.Step) && Point == null; Step++) {
+            StepResult Result = Idle.Step();
+            Returned |= Result.HitBy() == Side.Opponent;
+            PlayerTouched |= Result.HitBy() == Side.Player;
+            BouncedOnPlayerHalf |= Idle.Snapshot().PlayerMayHit();
+            if (Result.PointAwarded()) Point = Result.PointTo();
+        }
+        Check("a legal return the receiver never touches is the hitter's point",
+              Returned && BouncedOnPlayerHalf && !PlayerTouched && Point == Side.Opponent,
+              String.format("returned=%b; bounced on the player's half=%b; player touched=%b; point to %s",
+                            Returned, BouncedOnPlayerHalf, PlayerTouched, Point));
+    }
+
     /** Own half: a shot that comes straight back off a still blade onto the player's own half. */
     @Test
     void AReturnOntoTheHittersOwnHalfLosesThePoint() {

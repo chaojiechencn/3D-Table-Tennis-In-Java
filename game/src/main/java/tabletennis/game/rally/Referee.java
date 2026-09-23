@@ -12,7 +12,7 @@ import java.util.List;
 /**
  * The rally rules (ITTF one-bounce rule), judged one physics step at a time. A racket may strike
  * only after the ball has bounced on its own half; a second bounce there, a return onto the
- * hitter's own half, or a shot that goes out or reaches the floor decides the point. A decided
+ * hitter's own half, a shot that goes out, or a ball that reaches the floor decides the point. A decided
  * point latches: it is awarded once however many rules fire, and both rackets are withdrawn.
  * A net cord is deliberately not a rule: a ball that clips the cord and lands legally is good.
  */
@@ -76,9 +76,20 @@ public final class Referee {
 
         boolean Terminal = Latest(Events, EventType.OutOfBounds) != null
                         || Latest(Contacts, EventType.FloorTouch) != null;
-        if (Terminal) Winner = Award(Winner, LastHitter == Side.Opponent ? Side.Player : Side.Opponent);
+        if (Terminal) Winner = Award(Winner, TerminalWinner());
 
         return new Ruling(List.copyOf(Events), Winner);
+    }
+
+    /**
+     * Once a shot has bounced legally, the ball is the receiver's to return, so reaching the floor
+     * is the receiver's point lost. Before that, out or floor is the hitter's fault; a feed counts
+     * as the player's shot.
+     */
+    private Side TerminalWinner() {
+        if (PlayerMayHit) return Side.Opponent;
+        if (OpponentMayHit) return Side.Player;
+        return LastHitter == Side.Opponent ? Side.Player : Side.Opponent;
     }
 
     private void TrackShot(RallyEvent Event) {

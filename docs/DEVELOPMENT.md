@@ -44,7 +44,7 @@ actually measured. The build shows test output, so `check` prints every line.
 | Module | Checks | Covers |
 | --- | --- | --- |
 | engine | 54 | Flight, drag and Magnus against published measurements; RK4 order; the ITTF drop test; bounces, net and spin reversal; tunnelling; energy |
-| game | 99 | Every feed's legality; the referee's rules; scoring; the reach envelope and cursor follower; the opponent; shot tuning; whole points through `GameSession`; the golden trace |
+| game | 101 | Every feed's legality; the referee's rules; scoring; the reach envelope and cursor follower; the opponent; shot tuning; whole points through `GameSession`; the golden trace |
 | app | 11 | The fixed-step clock; command-line parsing; key bindings against the legend; score formatting |
 
 **The golden trace.** `GoldenTraceTest` plays 39 scripted scenarios through `GameSession` and

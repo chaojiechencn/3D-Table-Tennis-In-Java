@@ -47,6 +47,23 @@ final class RefereeTest {
     }
 
     @Test
+    void AShotTheReceiverNeverTouchesIsTheReceiversPointLost() {
+        Referee AfterAReturn = new Referee();
+        Judge(AfterAReturn, 0.1, RallyEvent.Hit(Side.Opponent, OpponentHalf));
+        Judge(AfterAReturn, 0.4, Bounce(PlayerHalf));
+        Side ReturnPoint = Judge(AfterAReturn, 0.8, RallyEvent.Of(EventType.FloorTouch, new Vec3(0, -0.76, 2)));
+
+        Referee AfterAFeed = new Referee();
+        Judge(AfterAFeed, 0.4, Bounce(OpponentHalf));
+        Side FeedPoint = Judge(AfterAFeed, 0.8, RallyEvent.Of(EventType.FloorTouch, new Vec3(0, -0.76, -2)));
+
+        Check("a legal shot that reaches the floor untouched is the receiver's point lost",
+              ReturnPoint == Side.Opponent && FeedPoint == Side.Player,
+              "opponent's return past the player: point to " + ReturnPoint
+              + "; feed past the opponent: point to " + FeedPoint);
+    }
+
+    @Test
     void AReturnOntoTheHittersOwnHalfLosesThePoint() {
         Referee Rules = new Referee();
         Judge(Rules, 0.1, RallyEvent.Hit(Side.Player, PlayerHalf));

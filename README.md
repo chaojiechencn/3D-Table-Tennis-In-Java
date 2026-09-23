@@ -40,7 +40,7 @@ For IDE setup, a manual build with Liberica Full JDK and deterministic screensho
 .\gradlew.bat check
 ```
 
-This runs every module's JUnit checks: 164 falsifiable claims, each printed with its measured
+This runs every module's JUnit checks: 166 falsifiable claims, each printed with its measured
 number. One of them replays a golden trace that pins the whole game bit for bit. See
 [Development](docs/DEVELOPMENT.md#validation).
 

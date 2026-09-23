@@ -100,6 +100,8 @@ an axis; fix the physics.**
    freezes (`ReachEnvelope.ClampBrushed`). `ReachEnvelope.Clamp` never leaves the hitting plane.
 7. **`TrackSpeed` stays at 13 m/s.** The reach envelope was the fix for unhittable balls, not blade
    speed; `ReachabilityTest` measures the margin.
+8. **After a legal bounce the ball is the receiver's to return** (`Referee`). Reaching the floor
+   from there is the receiver's point lost, not the last hitter's. A feed counts as the player's shot.
 
 ## Known open defects
 
@@ -109,11 +111,7 @@ Do not rediscover these, and do not undo a fix for them.
    `Opponent` interface; a predicting opponent is a second implementation.
 2. **The `Top` and `High` views cannot address the whole depth envelope.** Left alone
    deliberately: they are inspection views, not rally views.
-3. **A missed legal return scores for the receiver.** When a return bounces legally on the
-   receiver's half and then reaches the floor untouched, the floor rule awards the point against
-   the last hitter. The fix belongs in `Referee`: once the hitter's shot has bounced on the
-   receiver's half, a floor contact is the receiver's point lost.
-4. **Candidate: a moving blade is carried a whole step on every contact pass.** After a swept
+3. **Candidate: a moving blade is carried a whole step on every contact pass.** After a swept
    contact has used part of the step, `PhysicsWorld.EarliestContact` still detects against a whole
    step of blade motion. Kept until deliberately changed.
 

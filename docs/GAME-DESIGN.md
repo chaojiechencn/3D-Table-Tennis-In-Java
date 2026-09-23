@@ -121,6 +121,10 @@ pipeline stage receives only the groups it uses.
   it is left out of the world, so the blade still tracks on screen but the ball passes through it.
   A second bounce on the receiver's half, a return onto the hitter's own half, a shot out, or a
   floor contact decides the point.
+- **The floor scores against whoever the ball belongs to.** Before a shot bounces legally, a floor
+  contact is the hitter's fault. After the bounce the ball is the receiver's to return, so it is the
+  receiver's point lost; a feed counts as the player's shot. Until this was fixed, an idle player
+  won every point on the `Serve` feed.
 - **Out is judged per shot.** Every racket hit starts the in/out question again.
 - **A net cord decides nothing.** Under ITTF a rally ball that clips the cord and lands legally is
   good. A cord that kills the ball still decides the point a moment later, through the own-half or

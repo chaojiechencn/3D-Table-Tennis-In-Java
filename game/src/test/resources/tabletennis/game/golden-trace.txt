@@ -1,28 +1,28 @@
 scenario Serve / idle
 @126 hit opponent
 #480 feb1bf85105e4a1c
-@688 point player
+@688 point opponent
 #960 ea3ce75f86287b94
 #1440 d7e603b159f96899
 @1536 replay
 @1663 hit opponent
 #1920 addbb35be558e4bc
-@2225 point player
+@2225 point opponent
 #2400 deb76c3d91c6942f
 #2880 8bef1fa95c93eebe
 @3073 replay
 @3200 hit opponent
 #3360 6226f989e2d2c5e1
-@3762 point player
+@3762 point opponent
 #3840 06ec21a0c695a846
 #4320 69fcf4ff156917ed
 @4610 replay
 @4737 hit opponent
 #4800 d35357d963cd3c31
 #5280 2dc6dc20e8e90c2b
-@5299 point player
+@5299 point opponent
 #5760 bf0c2ee02a6a81f2
-= bf0c2ee02a6a81f2 points 4-0 games 0-0
+= bf0c2ee02a6a81f2 points 0-4 games 0-0
 scenario Serve / pointer
 @126 hit opponent
 @390 hit player
@@ -101,7 +101,7 @@ scenario Flat drive / idle
 #480 d127dac18ed1437e
 @489 hit player
 #960 f670f610157cb425
-@1135 point opponent
+@1135 point player
 #1440 c518508db9b5b257
 #1920 f7440092192e4e98
 @1985 replay
@@ -109,7 +109,7 @@ scenario Flat drive / idle
 #2400 e9bb77d327704ec2
 @2475 hit player
 #2880 283b5e27a0f9144d
-@3121 point opponent
+@3121 point player
 #3360 ae68bf851319aba3
 #3840 8902970fde0e6a0f
 @3971 replay
@@ -117,10 +117,10 @@ scenario Flat drive / idle
 #4320 a3fd28459d4a7ac6
 @4461 hit player
 #4800 e14a2ea56479ef86
-@5107 point opponent
+@5107 point player
 #5280 07e5256476240932
 #5760 c2f8b26f66d76b26
-= c2f8b26f66d76b26 points 0-3 games 0-0
+= c2f8b26f66d76b26 points 3-0 games 0-0
 scenario Flat drive / pointer
 @85 hit opponent
 @346 hit player
@@ -199,7 +199,7 @@ scenario Topspin loop / idle
 #480 84a8cbba1c4200b3
 @506 hit player
 #960 42ce73eeddb233ca
-@1137 point opponent
+@1137 point player
 #1440 48160466fe805bc7
 #1920 f7efb85dbee0067d
 @1986 replay
@@ -207,7 +207,7 @@ scenario Topspin loop / idle
 #2400 761f153e8236f7ba
 @2493 hit player
 #2880 8bab42c7d4ce6e18
-@3124 point opponent
+@3124 point player
 #3360 2fa4e6717eea8bf5
 #3840 b0822cd1dd48b5c4
 @3973 replay
@@ -215,10 +215,10 @@ scenario Topspin loop / idle
 #4320 07e3c6d43de1d8e6
 @4480 hit player
 #4800 7bfaad481d49fa12
-@5111 point opponent
+@5111 point player
 #5280 bf6edffb025e3940
 #5760 d2a679c85f2df8ed
-= d2a679c85f2df8ed points 0-3 games 0-0
+= d2a679c85f2df8ed points 3-0 games 0-0
 scenario Topspin loop / pointer
 @98 hit opponent
 @356 hit player
@@ -394,28 +394,28 @@ scenario Heavy backspin push / demo
 scenario Sidespin hook (left) / idle
 @124 hit opponent
 #480 9b12b63ec8918c13
-@679 point player
+@679 point opponent
 #960 c4ff51eb7605a100
 #1440 e61380130d3b36c2
 @1527 replay
 @1652 hit opponent
 #1920 4f54e5cd6f43dd39
-@2207 point player
+@2207 point opponent
 #2400 589fceb390e2586d
 #2880 fb447896ebc00399
 @3055 replay
 @3180 hit opponent
 #3360 dff8212a119e9095
-@3735 point player
+@3735 point opponent
 #3840 bb6d2bab61f69033
 #4320 ad65f2fd63f069c6
 @4583 replay
 @4708 hit opponent
 #4800 2c96e364e7970970
-@5263 point player
+@5263 point opponent
 #5280 c0052820aba7b0d8
 #5760 847fe444ecdc0d5b
-= 847fe444ecdc0d5b points 4-0 games 0-0
+= 847fe444ecdc0d5b points 0-4 games 0-0
 scenario Sidespin hook (left) / pointer
 @124 hit opponent
 @384 hit player
@@ -488,28 +488,28 @@ scenario Sidespin hook (left) / demo
 scenario Sidespin hook (right) / idle
 @124 hit opponent
 #480 3a821e5ce2ef1d13
-@679 point player
+@679 point opponent
 #960 c263f24661151400
 #1440 c96e4080e6960ec2
 @1527 replay
 @1652 hit opponent
 #1920 5b6a8bb1694dcc39
-@2207 point player
+@2207 point opponent
 #2400 2b7ef6a1af808f6d
 #2880 1548915c19cc3999
 @3055 replay
 @3180 hit opponent
 #3360 60847d43ab6b7a95
-@3735 point player
+@3735 point opponent
 #3840 3c5adafec4870033
 #4320 df597e12641d65c6
 @4583 replay
 @4708 hit opponent
 #4800 bb5584de86e33470
-@5263 point player
+@5263 point opponent
 #5280 7a37f54389c6edd8
 #5760 cf3cfaf3ab50935b
-= cf3cfaf3ab50935b points 4-0 games 0-0
+= cf3cfaf3ab50935b points 0-4 games 0-0
 scenario Sidespin hook (right) / pointer
 @124 hit opponent
 @384 hit player
@@ -584,13 +584,13 @@ scenario Smash / idle
 @462 hit player
 #480 43b0bb60f3b980c5
 #960 317954ad2258e380
-@1108 point opponent
+@1108 point player
 #1440 72b9993108c460f3
 #1920 4ce890e6c0f0b498
 @1958 replay
 @2008 hit opponent
 #2400 29b1aca73a7b33ed
-@2578 point player
+@2578 point opponent
 #2880 aff4b04a932b13e6
 #3360 4d3caa582a5c6294
 @3427 replay
@@ -598,13 +598,13 @@ scenario Smash / idle
 #3840 ee74f2b08dfd2576
 @3890 hit player
 #4320 5acb7b563183738d
-@4536 point opponent
+@4536 point player
 #4800 8f07d574b319158a
 #5280 a2b5469b5db99613
 @5386 replay
 @5436 hit opponent
 #5760 3950c3d01fc621be
-= 3950c3d01fc621be points 1-2 games 0-0
+= 3950c3d01fc621be points 2-1 games 0-0
 scenario Smash / pointer
 @51 hit opponent
 @315 hit player
@@ -678,74 +678,74 @@ scenario Smash / demo
 #5760 aa79bb4d4101eefc
 = aa79bb4d4101eefc points 0-0 games 0-0
 scenario Cross-court loop / idle
-@378 point opponent
+@378 point player
 #480 1c95b64fdb429538
 #960 6632d45ba724206a
 @1227 replay
 #1440 c473e468e439f783
-@1606 point opponent
+@1606 point player
 #1920 9979f5ee1fe0d304
 #2400 f316b0321a4d292e
 @2455 replay
-@2834 point opponent
+@2834 point player
 #2880 bd62892c9511ef76
 #3360 5785fd8f6dfe58aa
 @3683 replay
 #3840 08efc7499bfb2233
-@4062 point opponent
+@4062 point player
 #4320 e905e3271c662695
 #4800 eb2a7895df59ac1a
 @4911 replay
 #5280 38c1167daaebe27d
-@5290 point opponent
+@5290 point player
 #5760 68ac4cf50a40786c
-= 68ac4cf50a40786c points 0-5 games 0-0
+= 68ac4cf50a40786c points 5-0 games 0-0
 scenario Cross-court loop / pointer
-@378 point opponent
+@378 point player
 #480 3dd85cc4138c377a
 #960 8407ff212c8aa699
 @1227 replay
 #1440 d36122933a8ba6e5
-@1606 point opponent
+@1606 point player
 #1920 3a37f4624dd39229
 #2400 52e1fb29c502d537
 @2455 replay
-@2834 point opponent
+@2834 point player
 #2880 6f4fbeeb8c8d5acc
 #3360 17f315c92a54896a
 @3683 replay
 #3840 aaa0e8459e99a4ac
-@4062 point opponent
+@4062 point player
 #4320 37f2e59d5779bc68
 #4800 73e86702ef1af2ca
 @4911 replay
 #5280 793c88dc014c8416
-@5290 point opponent
+@5290 point player
 #5760 973e1a330d392e1b
-= 973e1a330d392e1b points 0-5 games 0-0
+= 973e1a330d392e1b points 5-0 games 0-0
 scenario Cross-court loop / demo
-@378 point opponent
+@378 point player
 #480 1c95b64fdb429538
 #960 6632d45ba724206a
 @1227 replay
 #1440 c473e468e439f783
-@1606 point opponent
+@1606 point player
 #1920 9979f5ee1fe0d304
 #2400 f316b0321a4d292e
 @2455 replay
-@2834 point opponent
+@2834 point player
 #2880 bd62892c9511ef76
 #3360 5785fd8f6dfe58aa
 @3683 replay
 #3840 08efc7499bfb2233
-@4062 point opponent
+@4062 point player
 #4320 e905e3271c662695
 #4800 eb2a7895df59ac1a
 @4911 replay
 #5280 38c1167daaebe27d
-@5290 point opponent
+@5290 point player
 #5760 68ac4cf50a40786c
-= 68ac4cf50a40786c points 0-5 games 0-0
+= 68ac4cf50a40786c points 5-0 games 0-0
 scenario Into the net / idle
 @155 point opponent
 #480 bea94d08d8ce6981
@@ -1128,28 +1128,28 @@ scenario Backspin lob / demo
 scenario Serve / sweep with brush
 @126 hit opponent
 #480 5631cb473b26c5d1
-@688 point player
+@688 point opponent
 #960 5852f49491c90b23
 #1440 e356c9363176036f
 @1536 replay
 @1663 hit opponent
 #1920 765d6a1183aac11a
-@2225 point player
+@2225 point opponent
 #2400 1ba0df8ff1d156e1
 #2880 650f77d375bd3299
 @3073 replay
 @3200 hit opponent
 #3360 1e0f63c1f62dca8f
-@3762 point player
+@3762 point opponent
 #3840 c8c51e8e3231ee95
 #4320 a676c31b63028f90
 @4610 replay
 @4737 hit opponent
 #4800 7b82acc5cf29fd51
 #5280 248622e46bea2370
-@5299 point player
+@5299 point opponent
 #5760 31f760df68265fdb
-= 31f760df68265fdb points 4-0 games 0-0
+= 31f760df68265fdb points 0-4 games 0-0
 scenario Serve / demo toggled
 @126 hit opponent
 @403 hit player
@@ -1176,14 +1176,14 @@ scenario Serve / demo toggled
 #3840 5dcbd11af929cd19
 @3893 hit player
 #4320 c9f8135f7e9871da
-@4399 point opponent
+@4399 point player
 #4800 76a5027b642d7215
 @5247 replay
 #5280 898461228c6235f6
 @5374 hit opponent
 @5651 hit player
 #5760 ca772cedf15c8dbe
-= ca772cedf15c8dbe points 0-1 games 0-0
+= ca772cedf15c8dbe points 1-0 games 0-0
 scenario Serve / auto-replay toggled
 @126 hit opponent
 @390 hit player
