@@ -3,6 +3,7 @@ package tabletennis.engine.flight;
 import tabletennis.engine.BallSpec;
 import tabletennis.engine.BallState;
 import tabletennis.engine.Simulation;
+import tabletennis.engine.aero.DragModel;
 import tabletennis.engine.math.Numeric;
 import tabletennis.engine.math.Vec3;
 
@@ -19,8 +20,11 @@ public final class TrialFlight {
     /** Which way along Z the flight is expected to cross the net plane. */
     public enum Heading { TowardNegativeZ, TowardPositiveZ }
 
-    /** NetHeight is the ball centre's height at z = 0, or NaN if it never crossed heading that way. */
-    public record Flight(Vec3 Landing, double NetHeight) {}
+    /**
+     * NetHeight is the ball centre's height at z = 0, or NaN if it never crossed heading that way;
+     * Seconds is the time from launch to the landing (or to the step limit).
+     */
+    public record Flight(Vec3 Landing, double NetHeight, double Seconds) {}
 
     private static final int LandingMaxSteps = 6 * Simulation.StepsPerSecond;
 
@@ -30,12 +34,17 @@ public final class TrialFlight {
     }
 
     public static Flight Fly(BallState Launch, Heading Toward, double StepSeconds, int MaxSteps) {
+        return Fly(Launch, Toward, StepSeconds, MaxSteps, 1.0);
+    }
+
+    /** As flown under a sideways-lift gain (Aerodynamics.Magnus); 1 is the measured physics. */
+    public static Flight Fly(BallState Launch, Heading Toward, double StepSeconds, int MaxSteps, double SideLift) {
         BallState Current = Launch;
         double NetHeight = Double.NaN;
         double PreviousZ = Launch.Position().Z();
 
         for (int Step = 0; Step < MaxSteps; Step++) {
-            BallState Next = Integrator.Step(Current, StepSeconds);
+            BallState Next = Integrator.Step(Current, StepSeconds, DragModel.Measured, SideLift);
             Vec3 From = Current.Position(), To = Next.Position();
 
             if (Double.isNaN(NetHeight) && CrossedNetPlane(PreviousZ, To.Z(), Toward)) {
@@ -45,12 +54,12 @@ public final class TrialFlight {
             PreviousZ = To.Z();
 
             if (To.Y() <= BallSpec.Radius && Next.Velocity().Y() < 0) {
-                double Along = (From.Y() - BallSpec.Radius) / (From.Y() - To.Y());
-                return new Flight(Vec3.Lerp(From, To, Numeric.Clamp(Along, 0, 1)), NetHeight);
+                double Along = Numeric.Clamp((From.Y() - BallSpec.Radius) / (From.Y() - To.Y()), 0, 1);
+                return new Flight(Vec3.Lerp(From, To, Along), NetHeight, (Step + Along) * StepSeconds);
             }
             Current = Next;
         }
-        return new Flight(Current.Position(), NetHeight);
+        return new Flight(Current.Position(), NetHeight, MaxSteps * StepSeconds);
     }
 
     private static boolean CrossedNetPlane(double FromZ, double ToZ, Heading Toward) {

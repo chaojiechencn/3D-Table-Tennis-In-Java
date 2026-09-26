@@ -10,8 +10,8 @@ import javafx.scene.layout.VBox;
 import tabletennis.game.match.ScoreSnapshot;
 
 /**
- * What a player needs on screen: the score, the feed, the key legend, and the V and D readouts
- * while they are toggled on. Layout only; the text comes from the formatters beside it.
+ * What a player needs on screen: the score, the feed, the spin on their last shot, the key
+ * legend, and the V and D readouts while they are toggled on. Layout only; the text comes from the formatters beside it.
  */
 public final class Hud {
 
@@ -21,13 +21,15 @@ public final class Hud {
     private final Label Score = PanelLabel(20, "#ffffff");   // the one number a player looks up for
     private final Label Feed = PanelLabel(15, "#eaf2ff");
     private final Label Shot = PanelLabel(12, "#ff9a3c");
+    private final Label Spin = PanelLabel(14, "#ffd76a");
     private final Label Legend = PanelLabel(12, "#8d9bab");
     private final Label Control = PanelLabel(12, "#7fd4a8");
 
     public Hud(String LegendText) {
         Legend.setText(LegendText);
         SetShot(null);
-        Root.getChildren().addAll(Corner(Pos.TOP_LEFT, Feed, Shot),
+        SetSpin(null);
+        Root.getChildren().addAll(Corner(Pos.TOP_LEFT, Feed, Spin, Shot),
                                   Corner(Pos.TOP_CENTER, Score),
                                   Corner(Pos.TOP_RIGHT, Control),
                                   Corner(Pos.BOTTOM_LEFT, Legend));
@@ -46,6 +48,9 @@ public final class Hud {
 
     /** Null hides the line; unmanaged as well as invisible, or it leaves a blank row. */
     public void SetShot(String Text) { ShowLabel(Shot, Text); }
+
+    /** The spin on the player's last shot; always shown once there is one. */
+    public void SetSpin(String Text) { ShowLabel(Spin, Text); }
 
     /** Null hides the whole D panel, not just its text. */
     public void SetControl(String Text) {

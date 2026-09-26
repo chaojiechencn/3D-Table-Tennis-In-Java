@@ -35,4 +35,55 @@ final class CursorFollowerTest {
               CursorFollower.TrackSpeed < 17.8,
               String.format("%.1f m/s tracking against a measured 17.8 m/s swing", CursorFollower.TrackSpeed));
     }
+
+    /**
+     * The face keys, with the blade held still. The resting face is not square: a still blade
+     * reads as driving forward, so the automatic lean rests it 28.8 degrees closed. Each key tilts
+     * the face from there, its own way, by 20-32 degrees (W to 49, S to 2.9, A and D to 39 off
+     * square), and letting go settles it back to rest.
+     */
+    @Test
+    void TheFaceKeysTiltTheFaceAndLetGo() {
+        record Tilt(String Key, double Close, double Side) {}
+        Vec3 Rest = SettledFace(0, 0, null);
+        StringBuilder Measured = new StringBuilder(String.format("rest %.1f deg closed; ", AngleFromSquare(Rest)));
+        boolean AllRight = true;
+        for (Tilt Each : new Tilt[]{new Tilt("W", 1, 0), new Tilt("S", -1, 0), new Tilt("D", 0, 1), new Tilt("A", 0, -1)}) {
+            Vec3[] Released = new Vec3[1];
+            Vec3 Held = SettledFace(Each.Close(), Each.Side(), Released);
+            Vec3 Moved = Held.Minus(Rest);
+            boolean RightWay = Each.Close() > 0 ? Moved.Y() < 0 : Each.Close() < 0 ? Moved.Y() > 0
+                             : Each.Side() > 0 ? Moved.X() > 0 : Moved.X() < 0;
+            double Turned = AngleBetween(Held, Rest), Back = AngleBetween(Released[0], Rest);
+            AllRight &= RightWay && Turned >= 15 && Back < 0.5;
+            Measured.append(String.format("%s %.1f deg from rest %s, %.2f deg after release; ", Each.Key(), Turned,
+                                          RightWay ? "the right way" : "THE WRONG WAY", Back));
+        }
+        Check("each face key tilts the face at least 15 degrees its own way, and letting go returns it to rest",
+              AllRight, Measured.toString());
+    }
+
+    /** The face after half a second holding the tilt, and, if asked, after half a second let go. */
+    private static Vec3 SettledFace(double Close, double Side, Vec3[] AfterRelease) {
+        Vec3 Start = new Vec3(0, 0.16, 1.6);
+        Racket Blade = new Racket(Start, CursorFollower.Square);
+        CursorFollower Hand = new CursorFollower(Start);
+        Hand.SetFaceTilt(Close, Side);
+        for (int Step = 0; Step < Simulation.StepsPerSecond / 2; Step++) Hand.Advance(Blade, Simulation.Step);
+        Vec3 Held = Blade.Normal();
+        if (AfterRelease != null) {
+            Hand.SetFaceTilt(0, 0);
+            for (int Step = 0; Step < Simulation.StepsPerSecond / 2; Step++) Hand.Advance(Blade, Simulation.Step);
+            AfterRelease[0] = Blade.Normal();
+        }
+        return Held;
+    }
+
+    private static double AngleBetween(Vec3 A, Vec3 B) {
+        return Math.toDegrees(Math.acos(Math.min(1, A.Normalized().Dot(B.Normalized()))));
+    }
+
+    private static double AngleFromSquare(Vec3 Normal) {
+        return Math.toDegrees(Math.acos(Math.min(1, Normal.Normalized().Dot(CursorFollower.Square))));
+    }
 }

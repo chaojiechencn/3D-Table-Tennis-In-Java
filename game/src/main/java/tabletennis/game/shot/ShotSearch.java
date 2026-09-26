@@ -40,6 +40,7 @@ final class ShotSearch {
     private final ShotTuning.SearchKnobs Ladder;
     private final ShotTuning.RescueKnobs Fallback;
     private final ShotTuning.SpinKnobs SpinTuning;
+    private final double PlayerCurveGain;
 
     ShotSearch(ShotTuning Tuning) {
         Strength = Tuning.Strength();
@@ -48,6 +49,12 @@ final class ShotSearch {
         Ladder = Tuning.Search();
         Fallback = Tuning.Rescue();
         SpinTuning = Tuning.Spin();
+        PlayerCurveGain = Tuning.Contact().CurveGain();
+    }
+
+    /** The sideways-lift gain a shot flies under: the player's curves, the opponent's does not. */
+    double CurveGainFor(double TowardOpponent) {
+        return TowardOpponent < 0 ? PlayerCurveGain : 1.0;
     }
 
     /**
@@ -67,8 +74,7 @@ final class ShotSearch {
             for (int Rung = 0; Rung < Ladder.SpeedCandidates(); Rung++) {
                 double Speed = Clamp(Pace * SpeedFactor(Rung), Math.min(SpeedFloor, Strength.MaxShotSpeed()),
                                      Strength.MaxShotSpeed());
-                LaunchSolver.Solution Solved = LaunchSolver.AtTarget(Contact, AimAt, Speed,
-                                                                     Intended.Spin().Top(), Intended.Spin().Side());
+                LaunchSolver.Solution Solved = Solve(Contact, AimAt, Speed, Intended.Spin(), TowardOpponent);
                 Vec3 Blended = Vec3.Lerp(Solved.State().Velocity(), CapReflection(Reflect), Limits.PhysicalBlend());
                 Candidate Graded = Evaluate(Contact, AimAt, Constrain(Blended, TowardOpponent, Speed),
                                             Intended.Spin(), TowardOpponent, Pass);
@@ -88,7 +94,8 @@ final class ShotSearch {
      * player's aim, then spin, as still works. Some contacts only have a slow, honest answer.
      */
     Candidate Rescue(Vec3 Contact, double WantX, SpinPlan Wanted, double TowardOpponent, Candidate Best) {
-        SpinPlan[] Spins = { Wanted, new SpinPlan(SpinTuning.BaseTopspin(), 0) };
+        // Half the sidespin before none, so a curve too big to land still curves.
+        SpinPlan[] Spins = { Wanted, new SpinPlan(Wanted.Top(), Wanted.Side() / 2), new SpinPlan(SpinTuning.BaseTopspin(), 0) };
         int RescuedPasses = Ladder.MaxCorrectionPasses() + 1;
         for (double AimFraction : Fallback.RescueAimFracs()) {
             for (SpinPlan Spin : Spins) {
@@ -97,7 +104,7 @@ final class ShotSearch {
                     for (int Rung = 0; Rung < Fallback.RescueSpeedSteps(); Rung++) {
                         double Speed = Fallback.RescueMinSpeed() + (Strength.MaxShotSpeed() - Fallback.RescueMinSpeed())
                                 * Rung / (double) (Fallback.RescueSpeedSteps() - 1);
-                        LaunchSolver.Solution Solved = LaunchSolver.AtTarget(Contact, AimAt, Speed, Spin.Top(), Spin.Side());
+                        LaunchSolver.Solution Solved = Solve(Contact, AimAt, Speed, Spin, TowardOpponent);
                         Vec3 Velocity = Constrain(Solved.State().Velocity(), TowardOpponent, Speed);
                         Candidate Graded = Evaluate(Contact, AimAt, Velocity, Spin, TowardOpponent, RescuedPasses);
                         if (Graded.Cost() < Best.Cost()) Best = Graded;
@@ -169,9 +176,26 @@ final class ShotSearch {
         return Cost;
     }
 
-    private static Flight Fly(Vec3 From, Vec3 Velocity, Vec3 Spin, double TowardOpponent) {
+    private Flight Fly(Vec3 From, Vec3 Velocity, Vec3 Spin, double TowardOpponent) {
         TrialFlight.Heading Toward = TowardOpponent < 0 ? TrialFlight.Heading.TowardNegativeZ
                                                         : TrialFlight.Heading.TowardPositiveZ;
-        return TrialFlight.Fly(BallState.At(From, Velocity, Spin), Toward, TrialStep, (int) (MaxFlightTime / TrialStep));
+        return TrialFlight.Fly(BallState.At(From, Velocity, Spin), Toward, TrialStep, (int) (MaxFlightTime / TrialStep),
+                               CurveGainFor(TowardOpponent));
+    }
+
+    /**
+     * How far sideways the curve alone carries a shot launched straight at AimAt: the landing's
+     * miss across, flown under this shot's curve gain.
+     */
+    double CurveOf(Vec3 Contact, Vec3 AimAt, double Speed, SpinPlan Spin, double TowardOpponent) {
+        BallState Launch = LaunchSolver.AtTarget(Contact, AimAt, Speed, Spin.Top(), Spin.Side()).State();
+        return Fly(Contact, Launch.Velocity(), Launch.Spin(), TowardOpponent).Landing().X() - AimAt.X();
+    }
+
+    /** A shot flying under a curve gain is aimed off the target so it bends back onto it. */
+    private LaunchSolver.Solution Solve(Vec3 Contact, Vec3 AimAt, double Speed, SpinPlan Spin, double TowardOpponent) {
+        double Gain = CurveGainFor(TowardOpponent);
+        return Gain == 1.0 ? LaunchSolver.AtTarget(Contact, AimAt, Speed, Spin.Top(), Spin.Side())
+                           : LaunchSolver.Curving(Contact, AimAt, Speed, Spin.Top(), Spin.Side(), Gain);
     }
 }

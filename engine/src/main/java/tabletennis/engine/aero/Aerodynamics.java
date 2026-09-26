@@ -99,10 +99,33 @@ public final class Aerodynamics {
     }
 
     public static Vec3 Acceleration(Vec3 Velocity, Vec3 Spin, DragModel Model) {
-        return new Vec3(0, -Environment.Gravity, 0).Plus(Drag(Velocity, Spin, Model)).Plus(Magnus(Velocity, Spin));
+        return Acceleration(Velocity, Spin, Model, 1.0);
+    }
+
+    /** SideLift scales only the sideways share of the Magnus force; 1 is the measured physics. */
+    public static Vec3 Acceleration(Vec3 Velocity, Vec3 Spin, DragModel Model, double SideLift) {
+        return new Vec3(0, -Environment.Gravity, 0).Plus(Drag(Velocity, Spin, Model))
+                                                   .Plus(Magnus(Velocity, Spin, SideLift));
     }
 
     public static Derivative DerivativeOf(Vec3 Velocity, Vec3 Spin, DragModel Model) {
-        return new Derivative(Velocity, Acceleration(Velocity, Spin, Model), SpinDecay(Spin, Velocity));
+        return DerivativeOf(Velocity, Spin, Model, 1.0);
+    }
+
+    public static Derivative DerivativeOf(Vec3 Velocity, Vec3 Spin, DragModel Model, double SideLift) {
+        return new Derivative(Velocity, Acceleration(Velocity, Spin, Model, SideLift), SpinDecay(Spin, Velocity));
+    }
+
+    /**
+     * The Magnus force with its horizontal, across-the-flight component scaled by SideLift: the
+     * curve sidespin makes, and nothing else. Not physics: an arcade hook for a game that wants
+     * curves a player can see. At exactly 1 the measured force is returned untouched.
+     */
+    public static Vec3 Magnus(Vec3 Velocity, Vec3 Spin, double SideLift) {
+        Vec3 Force = Magnus(Velocity, Spin);
+        if (SideLift == 1.0) return Force;
+        Vec3 Across = Vec3.Up.Cross(Velocity).Normalized();
+        if (Across.LengthSquared() == 0) return Force;   // a vertical flight has no sideways
+        return Force.PlusScaled(Across, (SideLift - 1.0) * Force.Dot(Across));
     }
 }

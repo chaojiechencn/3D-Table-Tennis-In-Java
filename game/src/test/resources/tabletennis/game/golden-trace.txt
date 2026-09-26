@@ -26,371 +26,359 @@ scenario Serve / idle
 scenario Serve / pointer
 @126 hit opponent
 @390 hit player
-#480 58991b3ed483a4ff
-@752 hit opponent
-#960 d87941ab0927f8a0
-@993 hit player
-@1256 hit opponent
-@1409 hit player
-#1440 278a23473a1aa372
-@1899 hit opponent
-#1920 6ecf2565b14b1fcc
-@2137 hit player
-#2400 7940c4a86582eab3
-@2402 hit opponent
-@2554 hit player
-#2880 a379356129040f48
-@3044 hit opponent
-@3283 hit player
-#3360 53f73a582b5b8659
-@3546 hit opponent
-@3698 hit player
-#3840 ead3c0734b350e4f
-@4188 hit opponent
-#4320 513257a912f175cd
-@4428 hit player
-@4691 hit opponent
-#4800 07914a56caa0611e
-@4843 hit player
-#5280 711702a17dce5edf
-@5333 hit opponent
-@5573 hit player
-#5760 a16c5647d430a20a
-= a16c5647d430a20a points 0-0 games 0-0
+#480 70af84253f1a0ba2
+@743 hit opponent
+#960 cd006e039a50ef5e
+@991 hit player
+@1344 hit opponent
+#1440 c1e47828764e78d6
+@1584 hit player
+#1920 c43ce258a0094114
+@1932 hit opponent
+@2171 hit player
+#2400 6d57737f6b7d180c
+@2547 hit opponent
+@2794 hit player
+#2880 7ab5362df3066c0f
+@3154 hit opponent
+#3360 51337e62e71ec0a0
+@3400 hit player
+@3758 hit opponent
+#3840 d9c52b3624506343
+@4006 hit player
+#4320 ce45ee4277ac5593
+@4362 hit opponent
+@4600 hit player
+#4800 666f1ee14e0cc288
+@4946 hit opponent
+@5186 hit player
+#5280 8984829ff4676f02
+@5534 hit opponent
+#5760 4a4b42b11dd90d33
+= 4a4b42b11dd90d33 points 0-0 games 0-0
 scenario Serve / demo
 @126 hit opponent
 @403 hit player
-#480 ed4908b41670ce29
-@565 hit opponent
-@893 hit player
-#960 ba40a88d43b91da2
-@1038 hit opponent
-@1418 hit player
-#1440 2abb6b16bbdf246d
-@1609 hit opponent
-@1879 hit player
-#1920 a9993e34a14c36d3
-@2041 hit opponent
-#2400 2b59a996e1b61a40
-@2445 hit player
-@2628 hit opponent
-#2880 76200618e7d315a6
-@2885 hit player
-@3051 hit opponent
-@3346 hit player
-#3360 70c4e0380aea8bb7
-@3490 hit opponent
-@3750 hit player
-#3840 30ad27f97935c19b
-@3916 hit opponent
-@4211 hit player
-#4320 97aad94c86b219b6
-@4355 hit opponent
-@4615 hit player
-@4781 hit opponent
-#4800 69a4c4e5ade5b88a
-@5075 hit player
-@5219 hit opponent
-#5280 f8a8ab8fd0206317
-@5479 hit player
-@5645 hit opponent
-#5760 7973e8b918e6b687
-= 7973e8b918e6b687 points 0-0 games 0-0
+#480 5a7534c9d83a090a
+@580 hit opponent
+@851 hit player
+#960 ae53e226b7d6d30f
+@1014 hit opponent
+@1272 hit player
+@1438 hit opponent
+#1440 255da58b9f21bd39
+@1815 hit player
+#1920 eff2390d0479c982
+@2010 hit opponent
+@2296 hit player
+#2400 0c15164025954d7c
+@2482 hit opponent
+@2756 hit player
+#2880 4353b0aae635527e
+@2916 hit opponent
+@3291 hit player
+#3360 3f2929f090417eaf
+@3485 hit opponent
+#3840 01bacbaeabaef296
+@3875 hit player
+@4042 hit opponent
+@4319 hit player
+#4320 d69a3d021aca3241
+@4482 hit opponent
+@4742 hit player
+#4800 a8e6d1a7bb608dc8
+@4908 hit opponent
+#5280 7a183229b473326c
+@5286 hit player
+@5483 hit opponent
+#5760 e26da5bd482d4559
+= e26da5bd482d4559 points 0-0 games 0-0
 scenario Flat drive / idle
 @85 hit opponent
 #480 d127dac18ed1437e
 @489 hit player
-#960 f670f610157cb425
-@1135 point player
-#1440 c518508db9b5b257
-#1920 f7440092192e4e98
-@1985 replay
-@2071 hit opponent
-#2400 e9bb77d327704ec2
-@2475 hit player
-#2880 283b5e27a0f9144d
-@3121 point player
-#3360 ae68bf851319aba3
-#3840 8902970fde0e6a0f
-@3971 replay
-@4057 hit opponent
-#4320 a3fd28459d4a7ac6
-@4461 hit player
-#4800 e14a2ea56479ef86
-@5107 point player
-#5280 07e5256476240932
-#5760 c2f8b26f66d76b26
-= c2f8b26f66d76b26 points 3-0 games 0-0
+#960 0cc1e966a2b63f98
+@1090 point player
+#1440 7f6d093a0d1f7869
+#1920 0e7693043a2446ff
+@1939 replay
+@2025 hit opponent
+#2400 bdbb680d56ee338e
+@2429 hit player
+#2880 a9237a1bba1de3d4
+@3030 point player
+#3360 cd695de01d5e3b47
+#3840 a4b06e141d681e72
+@3879 replay
+@3965 hit opponent
+#4320 db053b3dc79c6124
+@4369 hit player
+#4800 4771c4ce047fed24
+@4970 point player
+#5280 8d06a3dcb61251d6
+#5760 65b503bd86e712cf
+= 65b503bd86e712cf points 3-0 games 0-0
 scenario Flat drive / pointer
 @85 hit opponent
 @346 hit player
-#480 5448c32ff260586e
-@581 hit opponent
-@813 hit player
-#960 4fd6de40b55f9ac0
-@1084 hit opponent
-@1236 hit player
-#1440 224c4c7b3a11969c
-@1726 hit opponent
-#1920 9b8e064afbd64086
-@1966 hit player
-@2230 hit opponent
-@2383 hit player
-#2400 7125a535d460d66f
-@2873 hit opponent
-#2880 a271b9dd01040dae
-@3111 hit player
-#3360 d07e2b0bb37db742
-@3379 hit opponent
-@3532 hit player
-#3840 bede398b76c987b0
-@4022 hit opponent
-@4260 hit player
-#4320 43a80bda6fbf5d97
-@4528 hit opponent
-@4680 hit player
-#4800 e7aa0e622a45640e
-@5170 hit opponent
-#5280 5b5776a5fdfac5b6
-@5410 hit player
-@5673 hit opponent
-#5760 27d024f02954e4ab
-= 27d024f02954e4ab points 0-0 games 0-0
+#480 8bbcfdea9ded154b
+@664 hit opponent
+@895 hit player
+#960 e13c914a0875cb35
+@1164 hit opponent
+@1317 hit player
+#1440 c71b845cf4b7ec3d
+@1572 hit opponent
+@1820 hit player
+#1920 392e00aba9522607
+@2077 hit opponent
+@2231 hit player
+#2400 f54262c3ea257a3e
+@2824 point player
+#2880 3af0f9147b08f12f
+#3360 c73a60299f0e5bb8
+@3672 replay
+@3758 hit opponent
+#3840 e62e4782954c96d9
+@4019 hit player
+#4320 88b00fc63f73ae9f
+@4337 hit opponent
+@4568 hit player
+#4800 e7a5975eb7dd8a37
+@4837 hit opponent
+@4990 hit player
+@5245 hit opponent
+#5280 812d4bc425fe0831
+@5493 hit player
+@5750 hit opponent
+#5760 10dbd8e0b9b67d2b
+= 10dbd8e0b9b67d2b points 1-0 games 0-0
 scenario Flat drive / demo
 @85 hit opponent
 #480 86441cb236ed37b4
 @498 hit player
-@728 hit opponent
-#960 464eac956b916b73
-@983 hit player
-@1134 hit opponent
-@1402 hit player
-#1440 bd17f0d08eb2fe3b
-@1566 hit opponent
-@1860 hit player
-#1920 1f12a261109b788d
-@2004 hit opponent
-@2264 hit player
-#2400 f824cef50b9d7aff
-@2430 hit opponent
-@2725 hit player
-@2869 hit opponent
-#2880 7dad89f02c4e1542
-@3247 hit player
-#3360 58455d7134f71485
-@3438 hit opponent
-@3709 hit player
-#3840 8a6725b1b0772e6d
-@3871 hit opponent
-@4277 hit player
-#4320 629b4e70831d02dd
-@4460 hit opponent
-@4717 hit player
-#4800 50ab2a3c6d06700b
-@4883 hit opponent
-#5280 4cce179f62ff5e29
-@5295 hit player
-@5478 hit opponent
-@5735 hit player
-#5760 5845175f7d9663fe
-= 5845175f7d9663fe points 0-0 games 0-0
+@681 hit opponent
+#960 f2b536619ff28098
+@962 hit player
+@1125 hit opponent
+@1383 hit player
+#1440 fc6a2658ab3f8a36
+@1549 hit opponent
+#1920 0fa82cfa2526b465
+@1926 hit player
+@2121 hit opponent
+#2400 33b27cc333b78859
+@2407 hit player
+@2593 hit opponent
+#2880 8241c5b4177449d4
+@3002 hit player
+@3200 hit opponent
+#3360 1ba6acc798957980
+@3456 hit player
+@3637 hit opponent
+#3840 61c854d80f95d496
+@4039 hit player
+@4240 hit opponent
+#4320 6e817fb3b4b5d13e
+@4526 hit player
+@4712 hit opponent
+#4800 40bc5e4ed5c482ef
+@5121 hit player
+#5280 83a3a7d9469b6210
+@5319 hit opponent
+@5575 hit player
+@5755 hit opponent
+#5760 4715f50b4904c7c4
+= 4715f50b4904c7c4 points 0-0 games 0-0
 scenario Topspin loop / idle
 @98 hit opponent
 #480 84a8cbba1c4200b3
 @506 hit player
-#960 42ce73eeddb233ca
-@1137 point player
-#1440 48160466fe805bc7
-#1920 f7efb85dbee0067d
-@1986 replay
-@2085 hit opponent
-#2400 761f153e8236f7ba
-@2493 hit player
-#2880 8bab42c7d4ce6e18
-@3124 point player
-#3360 2fa4e6717eea8bf5
-#3840 b0822cd1dd48b5c4
-@3973 replay
-@4072 hit opponent
-#4320 07e3c6d43de1d8e6
-@4480 hit player
-#4800 7bfaad481d49fa12
-@5111 point player
-#5280 bf6edffb025e3940
-#5760 d2a679c85f2df8ed
-= d2a679c85f2df8ed points 3-0 games 0-0
+#960 bff1615c80985dcb
+@1144 point player
+#1440 493830b2ffc2210f
+#1920 38966bec5e86548c
+@1993 replay
+@2092 hit opponent
+#2400 1b933fc3258a5e3d
+@2500 hit player
+#2880 a75c55704e8434c3
+@3138 point player
+#3360 673ad0640666fb4a
+#3840 06555d0ccc2bcf52
+@3987 replay
+@4086 hit opponent
+#4320 3744bc673c3f228c
+@4494 hit player
+#4800 7757592b230b1800
+@5132 point player
+#5280 3bb081c66693e918
+#5760 61ac104eb9673d8f
+= 61ac104eb9673d8f points 3-0 games 0-0
 scenario Topspin loop / pointer
 @98 hit opponent
 @356 hit player
-#480 9950d67e6e204912
-@587 hit opponent
-@819 hit player
-#960 283b1d987c39b72a
-@1090 hit opponent
-@1242 hit player
-#1440 7b8e0154995c352f
-@1732 hit opponent
-#1920 5049330012a62f17
-@1972 hit player
-@2235 hit opponent
-@2388 hit player
-#2400 063af3c264824709
-@2878 hit opponent
-#2880 a499df59358a9dce
-@3116 hit player
-#3360 114770606b8c1986
-@3383 hit opponent
-@3535 hit player
-#3840 498ed1ac688d60fe
-@4025 hit opponent
-@4264 hit player
-#4320 533728a7fac9967d
-@4527 hit opponent
-@4679 hit player
-#4800 5272cfd773c99e58
-@5169 hit opponent
-#5280 3b1b338761008544
-@5409 hit player
-@5673 hit opponent
-#5760 dbc85d6d8ee6a085
-= dbc85d6d8ee6a085 points 0-0 games 0-0
+#480 b8dc9805ce0ccb48
+@583 hit opponent
+@830 hit player
+#960 43cf7cb45fc06844
+@1088 hit opponent
+@1241 hit player
+#1440 ee5e600b3008d782
+@1495 hit opponent
+@1743 hit player
+#1920 9714dffa37db93ac
+@2000 hit opponent
+@2155 hit player
+#2400 23545eaf63b4ba6b
+@2749 point player
+#2880 766511a284668ff6
+#3360 ac592ef876b79ccd
+@3598 replay
+@3697 hit opponent
+#3840 a55ee7df39f01452
+@3955 hit player
+@4182 hit opponent
+#4320 e6c8683d100ac758
+@4429 hit player
+@4687 hit opponent
+#4800 be9a45b4909a9ba0
+@4840 hit player
+@5094 hit opponent
+#5280 4c77077f44a88c63
+@5342 hit player
+@5599 hit opponent
+@5754 hit player
+#5760 9e5d9784ded40905
+= 9e5d9784ded40905 points 1-0 games 0-0
 scenario Topspin loop / demo
 @98 hit opponent
 @370 hit player
-#480 b13f124631717f9c
-@505 hit opponent
-@773 hit player
-@929 hit opponent
-#960 d433fd2ad2ce1df3
-@1334 hit player
-#1440 349194466a50289c
-@1529 hit opponent
-@1796 hit player
-#1920 3fb56bfd51ffb596
-@1959 hit opponent
-@2253 hit player
-@2398 hit opponent
-#2400 998f02a1105457ee
-@2780 hit player
-#2880 d551068f6b0371ae
-@2972 hit opponent
-#3360 3b05cd208411beb3
-@3384 hit player
-@3584 hit opponent
-#3840 7052cfdef6a50600
-@3852 hit player
-@4014 hit opponent
-#4320 cbfd783b83403920
-@4420 hit player
-@4603 hit opponent
-#4800 f4380c529f3909d9
-@4860 hit player
-@5026 hit opponent
-#5280 2e5809d4203fa399
-@5438 hit player
-@5621 hit opponent
-#5760 d9461dfbd8200221
-= d9461dfbd8200221 points 0-0 games 0-0
+#480 a140f36ed90a23f7
+@507 hit opponent
+@883 hit player
+#960 0ada3a4b1b583802
+@1040 hit opponent
+@1316 hit player
+#1440 a7430fc8970f9543
+@1477 hit opponent
+@1853 hit player
+#1920 366b55328eb1d7fd
+@2047 hit opponent
+@2333 hit player
+#2400 55c6e9e8dc3be38a
+@2519 hit opponent
+#2880 983132468bb459b2
+@2928 hit player
+@3126 hit opponent
+#3360 a8c73f51bb61e0a2
+@3382 hit player
+@3562 hit opponent
+#3840 d3bb800e893246e9
+@3968 hit player
+@4164 hit opponent
+#4320 840c0a7ee4b38721
+@4450 hit player
+@4636 hit opponent
+#4800 7ef37c7e0ab124cf
+@4902 hit player
+@5066 hit opponent
+#5280 e1375c009436d4ee
+@5324 hit player
+@5490 hit opponent
+#5760 3cec99b4a2d6c43c
+= 3cec99b4a2d6c43c points 0-0 games 0-0
 scenario Heavy backspin push / idle
 @215 hit opponent
 #480 c282123c181224a7
 @589 hit player
-@929 point opponent
-#960 de52f452d78dd866
-@1362 replay
-#1440 dcbcd2e3afd665ed
-@1578 hit opponent
-#1920 1a381c435ebe4e70
-@1952 hit player
-@2292 point opponent
-#2400 d3460600f31700df
-@2725 replay
-#2880 722d5a52e7d1b37a
-@2941 hit opponent
-@3315 hit player
-#3360 7ed1f3a2a91763e4
-@3655 point opponent
-#3840 5b96f0dced30a96b
-@4088 replay
-@4304 hit opponent
-#4320 54fadca647561fd1
-@4678 hit player
-#4800 58910c546d98e349
-@5018 point opponent
-#5280 9fa330421e44e5db
-@5451 replay
-@5667 hit opponent
-#5760 b56f75cce2343fbc
-= b56f75cce2343fbc points 0-4 games 0-0
+#960 d328c432255dfb22
+@1156 hit opponent
+#1440 e71a5b0f8dbc9a7c
+@1761 point opponent
+#1920 10da26cf0ef3c843
+#2400 14da0ad8c80c7260
+@2610 replay
+@2826 hit opponent
+#2880 e3908f5aa8ed8d9a
+@3200 hit player
+#3360 89b7eaba560c5df7
+@3767 hit opponent
+#3840 c5b5778bcdaec5f9
+#4320 681ff73495654c40
+@4372 point opponent
+#4800 100480ac7c992ea4
+@5221 replay
+#5280 e8b2d0f65c2f411f
+@5437 hit opponent
+#5760 980af162d37bae45
+= 980af162d37bae45 points 0-2 games 0-0
 scenario Heavy backspin push / pointer
 @215 hit opponent
 @468 hit player
-#480 0f9b1930f6171169
-@727 hit opponent
-@880 hit player
-#960 6e7e7787b7453353
-@1370 hit opponent
-#1440 0f2738061a12e768
-@1608 hit player
-@1876 hit opponent
-#1920 233db955070bd255
-@2028 hit player
-#2400 b09fd3f0ae083237
-@2518 hit opponent
-@2758 hit player
-#2880 ce7023a6dbd67cdb
-@3021 hit opponent
-@3173 hit player
-#3360 b2d55b51ba092ac5
-@3663 hit opponent
-#3840 b4e4ae4c7803e3e0
-@3903 hit player
-@4166 hit opponent
-@4318 hit player
-#4320 65e4c56fb7e6a14c
-#4800 99abd38f94315149
-@4808 hit opponent
-@5048 hit player
-#5280 b13c4301fc6a1d50
-@5311 hit opponent
-@5463 hit player
-#5760 337e494015c27446
-= 337e494015c27446 points 0-0 games 0-0
+#480 091d3dc27f6d61ac
+@723 hit opponent
+@879 hit player
+#960 8fafb58387cc9b54
+#1440 73981fe3e99879c7
+@1473 point player
+#1920 7bb7c3b3c71ca2b8
+@2322 replay
+#2400 8e2b899fb00eb3f0
+@2538 hit opponent
+@2791 hit player
+#2880 b8ffd05fef52d707
+@3046 hit opponent
+@3202 hit player
+#3360 abdcd53469caf9f7
+@3796 point player
+#3840 af2ccc554b624433
+#4320 e82a1ba7e4fd6fca
+@4645 replay
+#4800 1f4d09a1a64601b8
+@4861 hit opponent
+@5114 hit player
+#5280 a5e8588f8ed252bd
+@5369 hit opponent
+@5525 hit player
+#5760 7eb291b115d4fd94
+= 7eb291b115d4fd94 points 2-0 games 0-0
 scenario Heavy backspin push / demo
 @215 hit opponent
 #480 ad9d7114676b9efb
 @617 hit player
-@860 hit opponent
-#960 7bab243b130fa16b
-@1114 hit player
-@1265 hit opponent
-#1440 56825d5f2f992430
-@1659 hit player
-@1851 hit opponent
-#1920 bb93ca5c376a2703
-@2250 hit player
-#2400 aeb15dfaa9758b1f
-@2449 hit opponent
-@2860 hit player
-#2880 15d1374b58aba833
-@3060 hit opponent
-@3329 hit player
-#3360 a66b6537a9335853
-@3491 hit opponent
-@3783 hit player
-#3840 2c60414b557f93b3
-@3928 hit opponent
+@809 hit opponent
+#960 7b00f95491d616eb
+@1249 hit player
+#1440 d6fb44dbca84b032
+@1454 hit opponent
+@1840 hit player
+#1920 cffbeaadc040a9d6
+@2005 hit opponent
+#2400 d847df4abf748d9b
+@2431 hit player
+@2594 hit opponent
+#2880 04bb548e13b89689
+@3020 hit player
+@3183 hit opponent
+#3360 682ca244b2a928ad
+@3461 hit player
+@3625 hit opponent
+#3840 1e877e43e3cb160a
+@3885 hit player
+@4050 hit opponent
 @4308 hit player
-#4320 206b6486b400c1cd
-@4499 hit opponent
-@4769 hit player
-#4800 1c9def174d3f02b6
-@4931 hit opponent
-#5280 d323ad0ea332ba21
-@5338 hit player
-@5522 hit opponent
-#5760 a7dd1c190aacd3fa
-= a7dd1c190aacd3fa points 0-0 games 0-0
+#4320 65ceca1e0ae96671
+@4477 hit opponent
+@4736 hit player
+#4800 b3bc757eac2b6868
+@4905 hit opponent
+@5164 hit player
+#5280 ff93ec1da3f18456
+@5332 hit opponent
+@5707 hit player
+#5760 ecf5e5dec4f4167e
+= ecf5e5dec4f4167e points 0-0 games 0-0
 scenario Sidespin hook (left) / idle
 @124 hit opponent
 #480 9b12b63ec8918c13
@@ -419,72 +407,72 @@ scenario Sidespin hook (left) / idle
 scenario Sidespin hook (left) / pointer
 @124 hit opponent
 @384 hit player
-#480 2e0d93f2b4a89b66
-@732 hit opponent
-#960 c606da68925966f5
-@967 hit player
-@1231 hit opponent
-@1384 hit player
-#1440 7506685a1b142ceb
-@1874 hit opponent
-#1920 2c3f8e8dbed7c2a1
-@2112 hit player
-@2379 hit opponent
-#2400 7d4649aa2ba75239
-@2531 hit player
-#2880 ad4bf28a569c7231
-@3021 hit opponent
-@3260 hit player
-#3360 042b26fb13ac53ac
-@3523 hit opponent
-@3675 hit player
-#3840 288afb1b12d086ce
-@4165 hit opponent
-#4320 e9ff4764c93d1ac1
-@4404 hit player
-@4667 hit opponent
-#4800 40377d30e1b97d91
-@4820 hit player
-#5280 f72f3fd2c0f5311e
-@5310 hit opponent
-@5548 hit player
-#5760 f80559de3ada8ea2
-= f80559de3ada8ea2 points 0-0 games 0-0
+#480 8896ed9d8f610e6c
+@750 hit opponent
+#960 e2ac4acd00bc3391
+@998 hit player
+@1360 hit opponent
+#1440 7c66d39e7062b43b
+@1609 hit player
+#1920 de756c4b799262ae
+@1964 hit opponent
+@2202 hit player
+#2400 7e628c325094a28f
+@2547 hit opponent
+@2787 hit player
+#2880 296b59d9dc40c446
+@3163 hit opponent
+#3360 c43fe9214fa3e28b
+@3427 hit player
+@3795 hit opponent
+#3840 98e27d09b90e4e68
+@4042 hit player
+#4320 a44ca91fc79c9535
+@4400 hit opponent
+@4638 hit player
+#4800 a2c49dad0c1af084
+@4989 hit opponent
+@5229 hit player
+#5280 5ab8e7f3f628d70e
+@5577 hit opponent
+#5760 dbc548cc338e62d0
+= dbc548cc338e62d0 points 0-0 games 0-0
 scenario Sidespin hook (left) / demo
 @124 hit opponent
 #480 04ed25173396642c
 @532 hit player
-@724 hit opponent
-#960 318ab39ace175e7c
-@988 hit player
-@1152 hit opponent
-#1440 73499a5505e64e0f
-@1564 hit player
-@1747 hit opponent
-#1920 d94cd6950353a146
-@2130 hit player
-@2326 hit opponent
-#2400 b8ac8159ff8df350
-@2728 hit player
-#2880 73e448ecbbf3916b
-@2927 hit opponent
-@3203 hit player
-#3360 fcdc504b0b8fee5f
-@3365 hit opponent
-@3658 hit player
-@3803 hit opponent
-#3840 97d6c688c60a03a0
-@4183 hit player
-#4320 bc28ce6bce211e44
-@4374 hit opponent
-@4779 hit player
-#4800 15b4a5f9b6f0f508
-@4977 hit opponent
-#5280 a2822cd0aa7461cb
-@5393 hit player
-@5595 hit opponent
-#5760 f62a50344d46a4e1
-= f62a50344d46a4e1 points 0-0 games 0-0
+@693 hit opponent
+#960 d30063d419580d68
+@1110 hit player
+@1269 hit opponent
+#1440 2ed57c7299a4c26c
+@1546 hit player
+@1710 hit opponent
+#1920 24905efffc284a53
+@1970 hit player
+@2136 hit opponent
+#2400 6a08063cafbaf811
+@2513 hit player
+@2709 hit opponent
+#2880 3a268f20c45021ec
+@2995 hit player
+@3180 hit opponent
+#3360 2a80a3d003fad0b1
+@3589 hit player
+@3786 hit opponent
+#3840 4ec4407f86596397
+@4172 hit player
+#4320 f3bf22228859f1c6
+@4339 hit opponent
+@4761 hit player
+#4800 e786816eb615dfab
+@4922 hit opponent
+@5199 hit player
+#5280 fde7dfbf72242249
+@5362 hit opponent
+@5622 hit player
+#5760 82300bc641673601
+= 82300bc641673601 points 0-0 games 0-0
 scenario Sidespin hook (right) / idle
 @124 hit opponent
 #480 3a821e5ce2ef1d13
@@ -513,170 +501,170 @@ scenario Sidespin hook (right) / idle
 scenario Sidespin hook (right) / pointer
 @124 hit opponent
 @384 hit player
-#480 33e9fc2e46088ee6
-@732 hit opponent
-#960 34fad6c3a726d0f5
-@967 hit player
-@1231 hit opponent
-@1384 hit player
-#1440 7d9ff1180e7c856b
-@1874 hit opponent
-#1920 2189dd045b1ab6a1
-@2112 hit player
-@2379 hit opponent
-#2400 2d336dafa9deb4b9
-@2531 hit player
-#2880 53975951b9f9bdb1
-@3021 hit opponent
-@3260 hit player
-#3360 8354c3a74e17beac
-@3523 hit opponent
-@3675 hit player
-#3840 179bf1f8438a2b4e
-@4165 hit opponent
-#4320 a24c4236bb1222c1
-@4404 hit player
-@4667 hit opponent
-#4800 382740c7c1fff511
-@4820 hit player
-#5280 9a8f186990b1999e
-@5310 hit opponent
-@5548 hit player
-#5760 b2728824047456a2
-= b2728824047456a2 points 0-0 games 0-0
+#480 6dbdae3988a02eec
+@750 hit opponent
+#960 bf722e6fbf1c8691
+@998 hit player
+@1360 hit opponent
+#1440 d7a37dc615d069bb
+@1609 hit player
+#1920 457f47d55058952e
+@1964 hit opponent
+@2202 hit player
+#2400 e54c9e0b0ac8848f
+@2547 hit opponent
+@2787 hit player
+#2880 627ca8cadebdbbc6
+@3163 hit opponent
+#3360 92a652b44014ec8b
+@3427 hit player
+@3795 hit opponent
+#3840 dd6233229863b9e8
+@4042 hit player
+#4320 5781fd89fd4ed0b5
+@4400 hit opponent
+@4638 hit player
+#4800 0b185eb622908684
+@4989 hit opponent
+@5229 hit player
+#5280 281272bc0fe5938e
+@5577 hit opponent
+#5760 bceddf504a645bd0
+= bceddf504a645bd0 points 0-0 games 0-0
 scenario Sidespin hook (right) / demo
 @124 hit opponent
 #480 97d49249d0d277ac
 @532 hit player
-@724 hit opponent
-#960 e8da84a5fa210ffc
-@988 hit player
-@1152 hit opponent
-#1440 738c2357ddad978f
-@1564 hit player
-@1747 hit opponent
-#1920 b153bbcced501546
-@2130 hit player
-@2326 hit opponent
-#2400 e754ad4677b44550
-@2728 hit player
-#2880 0fe5b7b49581fdeb
-@2927 hit opponent
-@3203 hit player
-#3360 757be68d3e7cbedf
-@3365 hit opponent
-@3658 hit player
-@3803 hit opponent
-#3840 1fb4198adbc6dba0
-@4183 hit player
-#4320 81698d4905668a44
-@4374 hit opponent
-@4779 hit player
-#4800 5d44ae7f5879be08
-@4977 hit opponent
-#5280 4647b95f9868cfcb
-@5393 hit player
-@5595 hit opponent
-#5760 b2660c77580029e1
-= b2660c77580029e1 points 0-0 games 0-0
+@693 hit opponent
+#960 3b0bbc5ec50d2668
+@1110 hit player
+@1269 hit opponent
+#1440 468d56260027b06c
+@1546 hit player
+@1710 hit opponent
+#1920 e72eec6a44022dd3
+@1970 hit player
+@2136 hit opponent
+#2400 157abc597e47d211
+@2513 hit player
+@2709 hit opponent
+#2880 30e2c96174e11f6c
+@2995 hit player
+@3180 hit opponent
+#3360 5eb57ed6130c9ab1
+@3589 hit player
+@3786 hit opponent
+#3840 935cd860c7a25817
+@4172 hit player
+#4320 355aabfac2ade2c6
+@4339 hit opponent
+@4761 hit player
+#4800 ca3b405d4fae7b2b
+@4922 hit opponent
+@5199 hit player
+#5280 ab92f600bd21a649
+@5362 hit opponent
+@5622 hit player
+#5760 26d097ba62e1c901
+= 26d097ba62e1c901 points 0-0 games 0-0
 scenario Smash / idle
 @51 hit opponent
 @462 hit player
-#480 43b0bb60f3b980c5
-#960 317954ad2258e380
-@1108 point player
-#1440 72b9993108c460f3
-#1920 4ce890e6c0f0b498
-@1958 replay
-@2008 hit opponent
-#2400 29b1aca73a7b33ed
-@2578 point opponent
-#2880 aff4b04a932b13e6
-#3360 4d3caa582a5c6294
-@3427 replay
-@3479 hit opponent
-#3840 ee74f2b08dfd2576
-@3890 hit player
-#4320 5acb7b563183738d
-@4536 point player
-#4800 8f07d574b319158a
-#5280 a2b5469b5db99613
-@5386 replay
-@5436 hit opponent
-#5760 3950c3d01fc621be
-= 3950c3d01fc621be points 2-1 games 0-0
+#480 e8db8591ac4115ef
+#960 ad2eebfe22b2a43b
+@1059 point player
+#1440 45f4ba6885ec55fc
+@1908 replay
+#1920 edbaa2509cb5374d
+@1960 hit opponent
+@2371 hit player
+#2400 a5ea840c11914053
+#2880 b486c990ebcc2160
+@2968 point player
+#3360 1a59fe8865ff29b2
+@3817 replay
+#3840 74622f5d10c1366c
+@3869 hit opponent
+@4280 hit player
+#4320 290c62e8e9d301f5
+#4800 a5d28cabe5789409
+@4877 point player
+#5280 891e19bb7c6c58e6
+@5726 replay
+#5760 187ed6bbf4811bca
+= 187ed6bbf4811bca points 3-0 games 0-0
 scenario Smash / pointer
 @51 hit opponent
 @315 hit player
-#480 67c43e207aa17deb
-@543 hit opponent
-@775 hit player
-#960 f57710c78e9fa076
-@1046 hit opponent
-@1198 hit player
-#1440 61a56b6e0dd40e46
-@1688 hit opponent
-#1920 6018ee51c45e4606
-@1928 hit player
-@2190 hit opponent
-@2343 hit player
-#2400 2a3f1fe51ff3a653
-@2833 hit opponent
-#2880 97f70c040416ded8
-@3071 hit player
-@3339 hit opponent
-#3360 c85d00c05731c9ce
-@3491 hit player
-#3840 41fa6979fb297c96
-@3981 hit opponent
-@4221 hit player
-#4320 483aacfdde84f902
-@4484 hit opponent
-@4637 hit player
-#4800 227d9a39a0512d05
-@5127 hit opponent
-#5280 e9b4e9e3484206f4
-@5365 hit player
-@5633 hit opponent
-#5760 ea651150a3f28cbd
-= ea651150a3f28cbd points 0-0 games 0-0
+#480 ec6cbea64a063f71
+@540 hit opponent
+@787 hit player
+#960 24ae0678edeebe04
+@1045 hit opponent
+@1199 hit player
+#1440 1651fae1912affe2
+@1455 hit opponent
+@1703 hit player
+#1920 bdfe68136f2cd799
+@1960 hit opponent
+@2113 hit player
+#2400 1dd8007b7eb394ef
+@2706 point player
+#2880 53c23d6b786de05b
+#3360 713dd182ad0c44c9
+@3554 replay
+@3606 hit opponent
+#3840 3162479d38906804
+@3870 hit player
+@4095 hit opponent
+#4320 af3e72b925393c5b
+@4342 hit player
+@4600 hit opponent
+@4754 hit player
+#4800 ed2a771191a0f25d
+@5010 hit opponent
+@5258 hit player
+#5280 16143b1c5fd073aa
+@5515 hit opponent
+@5668 hit player
+#5760 34b733047a00ab1f
+= 34b733047a00ab1f points 1-0 games 0-0
 scenario Smash / demo
 @51 hit opponent
 @472 hit player
-#480 b469e520de1783c7
-@703 hit opponent
-@957 hit player
-#960 fb8190304c6262b9
-@1108 hit opponent
-@1375 hit player
-#1440 832a3b1a35614b57
-@1539 hit opponent
-@1833 hit player
-#1920 27a26fb8789a7bf2
-@1978 hit opponent
-@2361 hit player
-#2400 677cab00f94a6628
-@2554 hit opponent
-#2880 4d4bb1cd68580552
-@2963 hit player
-@3163 hit opponent
-#3360 a434d39aa6835d17
-@3434 hit player
-@3596 hit opponent
-#3840 b5efb97725e803a8
-@4003 hit player
-@4187 hit opponent
-#4320 5d28198707a56380
-@4444 hit player
-@4610 hit opponent
-#4800 75d7cc9f930a931a
-@5025 hit player
-@5209 hit opponent
-#5280 72ed2bb41179cdd6
-@5466 hit player
-@5632 hit opponent
-#5760 aa79bb4d4101eefc
-= aa79bb4d4101eefc points 0-0 games 0-0
+#480 4a8781dbc4b17e05
+@655 hit opponent
+#960 73d2e26fe1d73ed8
+@1090 hit player
+@1293 hit opponent
+#1440 4a8c8e9e22b98fa2
+@1681 hit player
+@1847 hit opponent
+#1920 a086d472f918e9e5
+@2125 hit player
+@2289 hit opponent
+#2400 3beb1d665e1293ce
+@2549 hit player
+@2714 hit opponent
+#2880 849d09dc2b180a2d
+@3091 hit player
+@3286 hit opponent
+#3360 5ce87172bd6e1651
+@3572 hit player
+@3757 hit opponent
+#3840 bcd98402e4b13da1
+@4166 hit player
+#4320 a6e819a15ce74e21
+@4363 hit opponent
+@4749 hit player
+#4800 b743d1259320ba68
+@4915 hit opponent
+@5192 hit player
+#5280 7b3e331a47412bbe
+@5354 hit opponent
+@5614 hit player
+#5760 83b119560bd09e64
+= 83b119560bd09e64 points 0-0 games 0-0
 scenario Cross-court loop / idle
 @378 point player
 #480 1c95b64fdb429538
@@ -849,101 +837,98 @@ scenario Corkscrew serve / idle
 @318 hit opponent
 #480 92bf87e97cd7befa
 @690 hit player
-#960 37ade89babf1ca52
-@1030 point opponent
-#1440 2a4160b94e2121d5
-@1463 replay
-@1782 hit opponent
-#1920 ed238d12ba11cf5a
-@2154 hit player
-#2400 aa2920aed55b4834
-@2494 point opponent
-#2880 8c561a51ee7fdcc9
-@2927 replay
-@3246 hit opponent
-#3360 aae3cc935349c64b
-@3618 hit player
-#3840 a557e009781ca412
-@3958 point opponent
-#4320 0dc4b730118a7852
-@4391 replay
-@4710 hit opponent
-#4800 3b35c5d2a84a7955
-@5082 hit player
-#5280 1f85b2825dc21391
-@5422 point opponent
-#5760 5abf6195a880ad0a
-= 5abf6195a880ad0a points 0-4 games 0-0
+#960 74faf4987a8a7b12
+@1034 point opponent
+#1440 4b71ecda51ed284f
+@1467 replay
+@1786 hit opponent
+#1920 d0df7f3936de6a81
+@2158 hit player
+#2400 205c0e566c7a044e
+@2502 point opponent
+#2880 61aedd0e95470db2
+@2935 replay
+@3254 hit opponent
+#3360 cee55402d3069a3e
+@3626 hit player
+#3840 95ef79c8a92be893
+@3970 point opponent
+#4320 0c453e0eaba1c340
+@4403 replay
+@4722 hit opponent
+#4800 bafce062cb19e749
+@5094 hit player
+#5280 460a037ac912c35d
+@5438 point opponent
+#5760 2b7974a79d0a5a1a
+= 2b7974a79d0a5a1a points 0-4 games 0-0
 scenario Corkscrew serve / pointer
 @121 hit player
-@440 hit opponent
-#480 0b1ce0aa51949525
-@672 hit player
-@940 hit opponent
-#960 0a5125d95fa5bb86
-@1092 hit player
-#1440 8dd0268cec1bf603
-@1582 hit opponent
-@1822 hit player
-#1920 c8ccb026a01ea2b9
-@2085 hit opponent
-@2238 hit player
-#2400 329c0ac37f6464ad
-@2728 hit opponent
-#2880 7eeaa98488921433
-@2966 hit player
-@3234 hit opponent
-#3360 ef26b12be9542a36
-@3387 hit player
-#3840 ad2de26e62f135c5
-@3877 hit opponent
-@4115 hit player
-#4320 f1e796ad7549a77c
-@4383 hit opponent
-@4535 hit player
-#4800 00f11e39bb94f77c
-@5025 hit opponent
-@5265 hit player
-#5280 fe69c46a11db6287
-@5528 hit opponent
-@5681 hit player
-#5760 bd800cce50c6fe4a
-= bd800cce50c6fe4a points 0-0 games 0-0
+@443 hit opponent
+#480 1307392fed830f49
+@675 hit player
+#960 2f427d13f90062c3
+@987 hit opponent
+@1140 hit player
+#1440 f00fc0c137110e8a
+@1721 point player
+#1920 bb55205ac77412cd
+#2400 3aeff6318c707aa8
+@2569 replay
+@2690 hit player
+#2880 51e94268eb9413be
+@3012 hit opponent
+@3244 hit player
+#3360 e242432d4db4608f
+@3554 hit opponent
+@3707 hit player
+#3840 a4342e3bae062099
+@4288 point player
+#4320 10e3449a1f2b60e7
+#4800 3c0c9ee95c33b677
+@5136 replay
+@5257 hit player
+#5280 e179f2054d60fdb4
+@5579 hit opponent
+#5760 d9588311c26afccb
+= d9588311c26afccb points 2-0 games 0-0
 scenario Corkscrew serve / demo
 @318 hit opponent
 #480 ee2f566d474ed5fd
 @582 hit player
-@727 hit opponent
-#960 60e8cb41095272af
-@1109 hit player
-@1295 hit opponent
-#1440 4cc65fb8d0672b1c
-@1557 hit player
-@1721 hit opponent
-#1920 d96f51e30084a1fa
-@2016 hit player
-@2160 hit opponent
-#2400 81b70df807b91b36
-@2539 hit player
-@2731 hit opponent
-#2880 5f28f54758f9810d
-@3134 hit player
-@3331 hit opponent
-#3360 343e868514c9b66c
-@3601 hit player
-@3763 hit opponent
-#3840 418058b749961a8d
-@4169 hit player
-#4320 ffa62587ba98c2f4
-@4352 hit opponent
-@4735 hit player
-#4800 ee33d23a8596f31e
-@4931 hit opponent
-#5280 27a4a7a5d2db56b7
-@5334 hit player
-@5532 hit opponent
-#5760 0226f304cfc3c487
-= 0226f304cfc3c487 points 0-0 games 0-0
+@733 hit opponent
+#960 4f43cf978600d384
+@1116 hit player
+@1308 hit opponent
+#1440 29390850a10d5562
+@1564 hit player
+@1746 hit opponent
+#1920 a453ab184f25d310
+@2017 hit player
+@2183 hit opponent
+#2400 61f36ba472506b44
+@2441 hit player
+@2608 hit opponent
+#2880 2c8116d89097e01b
+@2985 hit player
+@3181 hit opponent
+#3360 d99c6b4e9bce1230
+@3467 hit player
+@3652 hit opponent
+#3840 3f3029241800921b
+@4061 hit player
+@4258 hit opponent
+#4320 1bb5c0f15032ce78
+@4644 hit player
+#4800 64553a63305093bc
+@4810 hit opponent
+@5087 hit player
+@5249 hit opponent
+#5280 a6252f408378b41a
+@5509 hit player
+@5675 hit opponent
+#5760 453441cd7ccebf5f
+= 453441cd7ccebf5f points 0-0 games 0-0
 scenario ITTF drop test / idle
 @335 point player
 #480 67362a172b34a843
@@ -1064,37 +1049,36 @@ scenario Backspin lob / idle
 scenario Backspin lob / pointer
 @171 hit opponent
 @453 hit player
-#480 be1a44680dd6cf5c
-@763 hit opponent
-#960 c95e2bc838cd7cdf
-@993 hit player
-@1265 hit opponent
-@1417 hit player
-#1440 73f17bd0d83cfe1a
-@1907 hit opponent
-#1920 7313861e78563b31
-@2147 hit player
-#2400 4c577739c1bd0d5e
-@2409 hit opponent
-@2561 hit player
-#2880 2018ad3faa0feee7
-@3051 hit opponent
-@3291 hit player
-#3360 9cb909f99cad8ccd
-@3553 hit opponent
-@3705 hit player
-#3840 c108c5c1aa4b7441
-@4195 hit opponent
-#4320 119a4c1bf5cfd3cd
-@4435 hit player
-@4699 hit opponent
-#4800 a178cd28f244abcf
-@4852 hit player
-#5280 98991f49747a2dc0
-@5342 hit opponent
-@5580 hit player
-#5760 d1a33048c6d2def9
-= d1a33048c6d2def9 points 0-0 games 0-0
+#480 f81e45d6c5ee2e33
+@834 hit opponent
+#960 68da52821c4e2669
+@1083 hit player
+@1336 hit opponent
+#1440 9d505eeef7d5ac9f
+@1582 hit player
+@1843 hit opponent
+#1920 095c16efeff79504
+@1996 hit player
+@2250 hit opponent
+#2400 53dd68627a972a28
+@2498 hit player
+@2755 hit opponent
+#2880 7f0deb68701202de
+@2910 hit player
+#3360 a029fb8f1854fefd
+@3504 point player
+#3840 db2b8e60ae75891b
+#4320 fa0a132e0ebf3134
+@4353 replay
+@4525 hit opponent
+#4800 caf1ab233eeac4e0
+@4807 hit player
+@5188 hit opponent
+#5280 b41d303ef0eafc9b
+@5437 hit player
+@5690 hit opponent
+#5760 9335dc63282d9a2a
+= 9335dc63282d9a2a points 1-0 games 0-0
 scenario Backspin lob / demo
 @171 hit opponent
 #480 09cc234d2a4c4094
@@ -1153,68 +1137,69 @@ scenario Serve / sweep with brush
 scenario Serve / demo toggled
 @126 hit opponent
 @403 hit player
-#480 ed4908b41670ce29
-@565 hit opponent
-@893 hit player
-#960 ba40a88d43b91da2
-@1038 hit opponent
-@1418 hit player
-#1440 2abb6b16bbdf246d
-@1609 hit opponent
-@1879 hit player
-#1920 a9993e34a14c36d3
-@2041 hit opponent
-@2312 hit player
-#2400 827a1b19d3d04b54
-@2627 hit opponent
-@2859 hit player
-#2880 e8efccf07c1ac34b
-@3225 hit opponent
-#3360 7486fcf00b5496bd
-@3457 hit player
-@3726 hit opponent
-#3840 5dcbd11af929cd19
-@3893 hit player
-#4320 c9f8135f7e9871da
-@4399 point player
-#4800 76a5027b642d7215
-@5247 replay
-#5280 898461228c6235f6
-@5374 hit opponent
-@5651 hit player
-#5760 ca772cedf15c8dbe
-= ca772cedf15c8dbe points 1-0 games 0-0
+#480 5a7534c9d83a090a
+@580 hit opponent
+@851 hit player
+#960 ae53e226b7d6d30f
+@1014 hit opponent
+@1272 hit player
+@1438 hit opponent
+#1440 255da58b9f21bd39
+@1815 hit player
+#1920 eff2390d0479c982
+@2010 hit opponent
+@2285 hit player
+#2400 f670751dd3eb2406
+@2662 hit opponent
+#2880 eafacb88f5e54a70
+@2915 hit player
+@3288 hit opponent
+#3360 125e3ac73b729056
+@3535 hit player
+#3840 09a20574b620a531
+@3897 hit opponent
+@4298 hit player
+#4320 053a646fddcd2ee4
+@4468 hit opponent
+@4743 hit player
+#4800 46b9171751c60299
+@4903 hit opponent
+@5163 hit player
+#5280 de753ebf69b6af02
+@5329 hit opponent
+@5703 hit player
+#5760 d33efaa50904ea06
+= d33efaa50904ea06 points 0-0 games 0-0
 scenario Serve / auto-replay toggled
 @126 hit opponent
 @390 hit player
-#480 58991b3ed483a4ff
-@752 hit opponent
-#960 d87941ab0927f8a0
-@993 hit player
-@1256 hit opponent
-@1409 hit player
-#1440 278a23473a1aa372
-@1899 hit opponent
-#1920 6ecf2565b14b1fcc
-@2137 hit player
-#2400 7940c4a86582eab3
-@2402 hit opponent
-@2554 hit player
-#2880 a379356129040f48
-@3044 hit opponent
-@3283 hit player
-#3360 53f73a582b5b8659
-@3546 hit opponent
-@3698 hit player
-#3840 ead3c0734b350e4f
-@4188 hit opponent
-#4320 513257a912f175cd
-@4428 hit player
-@4691 hit opponent
-#4800 07914a56caa0611e
-@4843 hit player
-#5280 711702a17dce5edf
-@5333 hit opponent
-@5573 hit player
-#5760 a16c5647d430a20a
-= a16c5647d430a20a points 0-0 games 0-0
+#480 70af84253f1a0ba2
+@743 hit opponent
+#960 cd006e039a50ef5e
+@991 hit player
+@1344 hit opponent
+#1440 c1e47828764e78d6
+@1584 hit player
+#1920 c43ce258a0094114
+@1932 hit opponent
+@2171 hit player
+#2400 6d57737f6b7d180c
+@2547 hit opponent
+@2794 hit player
+#2880 7ab5362df3066c0f
+@3154 hit opponent
+#3360 51337e62e71ec0a0
+@3400 hit player
+@3758 hit opponent
+#3840 d9c52b3624506343
+@4006 hit player
+#4320 ce45ee4277ac5593
+@4362 hit opponent
+@4600 hit player
+#4800 666f1ee14e0cc288
+@4946 hit opponent
+@5186 hit player
+#5280 8984829ff4676f02
+@5534 hit opponent
+#5760 4a4b42b11dd90d33
+= 4a4b42b11dd90d33 points 0-0 games 0-0

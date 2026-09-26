@@ -2,6 +2,7 @@ package tabletennis.engine.world;
 
 import tabletennis.engine.BallState;
 import tabletennis.engine.Simulation;
+import tabletennis.engine.aero.DragModel;
 import tabletennis.engine.contact.ContactSolver;
 import tabletennis.engine.contact.Materials;
 import tabletennis.engine.flight.Integrator;
@@ -26,16 +27,26 @@ public final class PhysicsWorld {
     private BallState PreviousBall;
     private double Time;
     private List<Racket> Rackets = List.of();
+    private double SideLift = 1.0;
 
     public PhysicsWorld() {
         Launch(ParkedBall);
     }
 
-    /** Put a ball in flight; the clock restarts. */
+    /** Put a ball in flight under the measured physics; the clock restarts. */
     public void Launch(BallState State) {
         Ball = State;
         PreviousBall = State;
         Time = 0;
+        SideLift = 1.0;
+    }
+
+    /**
+     * The arcade layer's curve hook: scales the sideways Magnus force on the ball in play until
+     * changed (Aerodynamics.Magnus). 1 is the measured physics.
+     */
+    public void SetSideLift(double Gain) {
+        SideLift = Gain;
     }
 
     /** The rackets that may be struck, in the order equal times of impact resolve; empty for none. */
@@ -56,12 +67,16 @@ public final class PhysicsWorld {
     public StepReport Step() {
         PreviousBall = Ball;
         List<SurfaceHit> Hits = new ArrayList<>();
-        Ball = ResolveContacts(PreviousBall, Integrator.Step(Ball, Simulation.Step), Hits);
+        Ball = ResolveContacts(PreviousBall, Fly(Ball, Simulation.Step), Hits);
         Time += Simulation.Step;
 
         StepReport Report = new StepReport(PreviousBall, Ball, List.copyOf(Hits));
         if (!Ball.IsFinite()) Launch(ParkedBall);   // unreachable, but never freeze on a NaN
         return Report;
+    }
+
+    private BallState Fly(BallState State, double Seconds) {
+        return Integrator.Step(State, Seconds, DragModel.Measured, SideLift);
     }
 
     private record Candidate(Surface Struck, ContactSolver.Contact Touch) {}
@@ -80,7 +95,7 @@ public final class PhysicsWorld {
             if (Earliest == null) return Current;
             ContactSolver.Contact Touch = Earliest.Touch();
 
-            BallState AtContact = Touch.Swept() ? Integrator.Step(Before, StepLeft * Touch.TimeOfImpact()) : Current;
+            BallState AtContact = Touch.Swept() ? Fly(Before, StepLeft * Touch.TimeOfImpact()) : Current;
             ContactSolver.Response Outcome = ContactSolver.Respond(
                     AtContact, Earliest.Struck().Shape(), Touch, Earliest.Struck().Finish(), Simulation.Step);
             Hits.add(new SurfaceHit(Earliest.Struck(), Outcome));
@@ -91,7 +106,7 @@ public final class PhysicsWorld {
             if (Left < 1e-9) continue;
 
             Before = Current;
-            Current = Integrator.Step(Current, Left);
+            Current = Fly(Current, Left);
             StepLeft = Left;
         }
         return Current;

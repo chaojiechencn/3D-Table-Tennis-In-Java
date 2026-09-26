@@ -21,12 +21,17 @@ public final class Integrator {
 
     /** Under a named drag law; the closed-form checks fly a constant coefficient. */
     public static BallState Step(BallState State, double Seconds, DragModel Drag) {
+        return Step(State, Seconds, Drag, 1.0);
+    }
+
+    /** With the sideways Magnus force scaled by SideLift (Aerodynamics.Magnus); 1 is the measured physics. */
+    public static BallState Step(BallState State, double Seconds, DragModel Drag, double SideLift) {
         Vec3 P = State.Position(), V = State.Velocity(), W = State.Spin();
 
-        Derivative K1 = Aerodynamics.DerivativeOf(V, W, Drag);
-        Derivative K2 = Sample(V, W, K1, Seconds * 0.5, Drag);
-        Derivative K3 = Sample(V, W, K2, Seconds * 0.5, Drag);
-        Derivative K4 = Sample(V, W, K3, Seconds, Drag);
+        Derivative K1 = Aerodynamics.DerivativeOf(V, W, Drag, SideLift);
+        Derivative K2 = Sample(V, W, K1, Seconds * 0.5, Drag, SideLift);
+        Derivative K3 = Sample(V, W, K2, Seconds * 0.5, Drag, SideLift);
+        Derivative K4 = Sample(V, W, K3, Seconds, Drag, SideLift);
 
         Vec3 NewPosition = P.PlusScaled(Weighted(K1.PositionRate(), K2.PositionRate(), K3.PositionRate(), K4.PositionRate()), Seconds);
         Vec3 NewVelocity = V.PlusScaled(Weighted(K1.VelocityRate(), K2.VelocityRate(), K3.VelocityRate(), K4.VelocityRate()), Seconds);
@@ -37,10 +42,11 @@ public final class Integrator {
     }
 
     /** The forces depend on velocity and spin only, so position never enters a sample. */
-    private static Derivative Sample(Vec3 V, Vec3 W, Derivative Slope, double Seconds, DragModel Drag) {
+    private static Derivative Sample(Vec3 V, Vec3 W, Derivative Slope, double Seconds, DragModel Drag,
+                                     double SideLift) {
         return Aerodynamics.DerivativeOf(V.PlusScaled(Slope.VelocityRate(), Seconds),
                                          W.PlusScaled(Slope.SpinRate(), Seconds),
-                                         Drag);
+                                         Drag, SideLift);
     }
 
     private static Vec3 Weighted(Vec3 K1, Vec3 K2, Vec3 K3, Vec3 K4) {

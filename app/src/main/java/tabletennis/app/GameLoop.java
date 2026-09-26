@@ -6,6 +6,7 @@ import tabletennis.app.camera.CameraRig;
 import tabletennis.app.hud.ControlReadout;
 import tabletennis.app.hud.Hud;
 import tabletennis.app.hud.ShotLine;
+import tabletennis.app.hud.SpinLine;
 import tabletennis.app.input.MouseControl;
 import tabletennis.app.scene.TableScene;
 import tabletennis.engine.Simulation;
@@ -126,8 +127,10 @@ final class GameLoop {
             Rig.OnRallyHit(Result.HitBy() == Side.Player);
             ShotReadout = ShotLine.Format(Now.LastShot());
             RefreshShotReadout();
+            if (Result.HitBy() == Side.Player) Overlay.SetSpin(SpinLine.Format(Now.LastShot()));
         }
         if (Result.PointAwarded()) Overlay.SetScore(Now.Score());
+        if (Result.Shadow() != null) Result.Shadow().Lines().forEach(System.out::println);   // contact-model log
     }
 
     private void Render(double FrameSeconds) {

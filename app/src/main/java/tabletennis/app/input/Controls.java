@@ -29,7 +29,7 @@ public final class Controls {
             new Binding(Command.NextFeed, "N/P", List.of(KeyCode.N, KeyCode.RIGHT)),
             new Binding(Command.PreviousFeed, "N/P", List.of(KeyCode.P, KeyCode.LEFT)),
             new Binding(Command.Replay, "R replay", List.of(KeyCode.R)),
-            new Binding(Command.ToggleAutoReplay, "A auto-replay", List.of(KeyCode.A)),
+            new Binding(Command.ToggleAutoReplay, "U auto-replay", List.of(KeyCode.U)),
             new Binding(Command.Pause, "SPACE pause", List.of(KeyCode.SPACE)),
             new Binding(Command.SingleStep, ". step", List.of(KeyCode.PERIOD)),
             new Binding(Command.Slower, "[ ]", List.of(KeyCode.OPEN_BRACKET)),
@@ -37,7 +37,7 @@ public final class Controls {
             new Binding(Command.ToggleRallyCam, "F rally-cam", List.of(KeyCode.F)),
             new Binding(Command.NextView, "C preset view", List.of(KeyCode.C)),
             new Binding(Command.ToggleShotOverlay, "V shot debug", List.of(KeyCode.V)),
-            new Binding(Command.ToggleControlReadout, "D control debug", List.of(KeyCode.D)),
+            new Binding(Command.ToggleControlReadout, "I control debug", List.of(KeyCode.I)),
             new Binding(Command.ToggleGhost, "G ghost", List.of(KeyCode.G)),
             new Binding(Command.ToggleTrail, "T trail", List.of(KeyCode.T)),
             new Binding(Command.ToggleBallSize, "B ball x2", List.of(KeyCode.B)),
@@ -53,10 +53,11 @@ public final class Controls {
                     (how you move through the ball aims the shot; hit it CLEAN or it goes out)
                     RIGHT hold = brush: mouse up/down lifts/cuts the bat for spin
                     LEFT drag orbits the camera      scroll zooms
-            FEED    1-9,0 pick   N/P next,prev   R replay   A auto-replay
+            FACE    W/S close,open the face   A/D tilt it left,right   (hold)
+            FEED    1-9,0 pick   N/P next,prev   R replay   U auto-replay
             TIME    SPACE pause   . step   [ ] slower,faster
             VIEW    F rally-cam on/off   C preset view
-                    V shot debug   D control debug
+                    V shot debug   I control debug
                     G ghost   T trail   B ball x2   H hud   ESC quit
             DEMO    M watch it play itself""";
 

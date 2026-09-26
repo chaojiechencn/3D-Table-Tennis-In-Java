@@ -106,11 +106,13 @@ Other keys:
 | `F` | Rally-cam on / off |
 | `C` | Cycle the preset camera views (turns the rally-cam off) |
 | `V` | Shot-assist debug overlay (paddle and ball velocity, raw / intended / final shot, target, predicted landing) |
-| `D` | Control debug overlay (cursor, paddle and target position, legal paddle area, how far and how long the paddle has to travel, where the ball is and when it arrives, and whether you could have got there) |
+| `W` / `S` (hold) | Close / open the racket face: a closed face tops a drive, an open one cuts it |
+| `A` / `D` (hold) | Tilt the racket face left / right |
+| `I` | Control debug overlay (cursor, paddle and target position, legal paddle area, how far and how long the paddle has to travel, where the ball is and when it arrives, and whether you could have got there) |
 | `G` | Toggle the no-spin ghost trail |
 | `T` | Toggle the flight trail |
 | `B` | Draw the ball at 2× (physics still uses 40 mm) |
-| `A` | Toggle auto-replay |
+| `U` | Toggle auto-replay |
 | `H` | Toggle the on-screen legend |
 | `M` | Demo mode: the game plays your side itself, until you press `M` again |
 | `Esc` | Quit |

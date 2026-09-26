@@ -126,7 +126,7 @@ Capture mode writes one PNG and exits:
 | `--view` | `BEHIND`, `SIDE`, `HIGH`, `LOW` or `TOP` (case-insensitive) |
 | `--out` | The PNG to write; also turns auto-replay off, so a late capture still completes |
 | `--demo=true` | Let the demo hand play the player's side |
-| `--controldebug=true` | Show the `D` control readout |
+| `--controldebug=true` | Show the `I` control readout |
 | `--ball2x=true` | Draw the ball at twice its size |
 | `--rallycam=true` | Keep the rally-cam on during a capture |
 

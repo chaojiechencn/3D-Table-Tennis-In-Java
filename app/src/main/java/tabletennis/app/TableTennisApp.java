@@ -13,6 +13,7 @@ import javafx.stage.Stage;
 import tabletennis.app.camera.CameraRig;
 import tabletennis.app.hud.Hud;
 import tabletennis.app.input.Controls;
+import tabletennis.app.input.FaceKeys;
 import tabletennis.app.input.MouseControl;
 import tabletennis.app.scene.TableScene;
 import tabletennis.game.GameSession;
@@ -32,6 +33,7 @@ public final class TableTennisApp extends Application {
     private final CameraRig Rig = new CameraRig();
     private final TableScene World = new TableScene(Session.Snapshot());
     private final Hud Overlay = new Hud(Controls.Legend);
+    private final FaceKeys Face = new FaceKeys();
     private GameLoop Loop;
 
     @Override
@@ -52,6 +54,10 @@ public final class TableTennisApp extends Application {
         Viewport.widthProperty().bind(MainScene.widthProperty());
         Viewport.heightProperty().bind(MainScene.heightProperty());
         MainScene.setOnKeyPressed(Event -> OnKey(Event.getCode()));
+        MainScene.setOnKeyReleased(Event -> { if (Face.Release(Event.getCode())) SendFaceTilt(); });
+        Window.focusedProperty().addListener((Property, Was, Is) -> {
+            if (!Is) { Face.ReleaseAll(); SendFaceTilt(); }
+        });
 
         Window.setScene(MainScene);
         Window.setTitle("Mr. Pong");
@@ -75,6 +81,7 @@ public final class TableTennisApp extends Application {
     }
 
     private void OnKey(KeyCode Key) {
+        if (Face.Press(Key)) { SendFaceTilt(); return; }
         Controls.FeedIndexFor(Key).ifPresentOrElse(
                 Index -> { if (Index < Feeds.All.size()) Loop.Launch(Feeds.All.get(Index)); },
                 () -> Controls.CommandFor(Key).ifPresent(this::Execute));
@@ -102,6 +109,8 @@ public final class TableTennisApp extends Application {
             case Quit -> Platform.exit();
         }
     }
+
+    private void SendFaceTilt() { Session.SetFaceTilt(Face.CloseTilt(), Face.SideTilt()); }
 
     public static void main(String[] Arguments) { launch(Arguments); }
 }

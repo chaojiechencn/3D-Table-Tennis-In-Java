@@ -5,18 +5,21 @@ import tabletennis.engine.math.Vec3;
 /**
  * Everything the last shot was built from, for the shot overlay: the velocities in, the raw
  * reflection, the intended and final directions, the target and predicted landing, and whether
- * the search found a legal shot or fell back.
+ * the search found a legal shot or fell back. TopRevs and SideRevs are the final spin relative to
+ * the heading (negative top is backspin, positive side spins about +Y); RacketSpin says the
+ * racket's own contact chose it.
  */
 public record ShotDecision(Vec3 Contact, Vec3 RacketVelocity, Vec3 IncomingVelocity, Vec3 ReflectDirection,
                            Vec3 IntendedDirection, Vec3 FinalDirection, Vec3 Target, Vec3 Landing,
-                           double Speed, Vec3 Spin, int Passes, boolean Legal, TargetArea Area) {
+                           double Speed, Vec3 Spin, int Passes, boolean Legal, TargetArea Area,
+                           double TopRevs, double SideRevs, boolean RacketSpin) {
 
     private static final Vec3 DownTable = new Vec3(0, 0, -1);
 
     /** Before any contact: nothing to draw. */
     static ShotDecision None(TargetArea Area) {
         return new ShotDecision(Vec3.Zero, Vec3.Zero, Vec3.Zero, DownTable, DownTable, DownTable,
-                                Vec3.Zero, Vec3.Zero, 0, Vec3.Zero, 0, true, Area);
+                                Vec3.Zero, Vec3.Zero, 0, Vec3.Zero, 0, true, Area, 0, 0, false);
     }
 
     /** A unit direction, or down-table when the vector has none. */
