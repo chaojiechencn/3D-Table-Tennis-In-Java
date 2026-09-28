@@ -6,6 +6,7 @@ import tabletennis.app.camera.CameraRig;
 import tabletennis.app.hud.ControlReadout;
 import tabletennis.app.hud.Hud;
 import tabletennis.app.hud.ShotLine;
+import tabletennis.app.hud.SpinLine;
 import tabletennis.app.input.MouseControl;
 import tabletennis.app.scene.TableScene;
 import tabletennis.engine.Simulation;
@@ -13,7 +14,12 @@ import tabletennis.game.GameSession;
 import tabletennis.game.GameSnapshot;
 import tabletennis.game.StepResult;
 import tabletennis.game.feed.Feed;
+import tabletennis.game.match.ScoreSnapshot;
 import tabletennis.game.rally.Side;
+
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.UnaryOperator;
 
 /**
  * The frame loop: pays wall-clock time out as whole physics steps, feeds each step's result to the
@@ -31,7 +37,11 @@ final class GameLoop {
     private final FixedStepClock Clock = new FixedStepClock();
 
     private Feed Current;
+    private UnaryOperator<Feed> NextRally = Same -> Same;
+    private Function<Feed, String> Heading = Feed::Name;
+    private Consumer<ScoreSnapshot> OnMatchOver = Final -> { };
     private boolean ControlReadoutShown;
+    private boolean ShotLog;           // the contact model's two lines per player hit, for developers
     private String ShotReadout = "";   // the last contact's numbers; nothing until the first contact
     private long LastPulseNanos;
 
@@ -47,11 +57,25 @@ final class GameLoop {
 
     Feed Current() { return Current; }
 
+    /** Which ball opens the next rally, given the last one: the same drill, or a rotation. */
+    void SetRallyOrder(UnaryOperator<Feed> Order) { NextRally = Order; }
+
+    /** The HUD's heading for a ball, redrawn at every launch. */
+    void SetHeading(Function<Feed, String> Text) { Heading = Text; }
+
+    /** Called once when a point decides the match. */
+    void SetOnMatchOver(Consumer<ScoreSnapshot> Handler) { OnMatchOver = Handler; }
+
+    /** The per-hit contact-model log on standard output; a developer's tool, off for players. */
+    void SetShotLog(boolean On) { ShotLog = On; }
+
+    void RefreshHeading() { if (Current != null) Overlay.SetHeading(Heading.apply(Current)); }
+
     /** Start a rally with this feed, keeping the score, and clear what the last one drew. */
     void Launch(Feed Shot) {
         Current = Shot;
         Session.Launch(Shot);
-        Overlay.SetFeed(Shot.Name());
+        Overlay.SetHeading(Heading.apply(Shot));
         Overlay.SetScore(Session.Snapshot().Score());
         Rig.OnRallyHit(true);   // the feed stands in for the player's own shot
         Clock.Reset();
@@ -60,8 +84,7 @@ final class GameLoop {
 
     void ToggleDemo() {
         Session.SetDemoMode(!Session.Snapshot().DemoMode());
-        boolean Demo = Session.Snapshot().DemoMode();
-        Overlay.SetFeed(Demo ? Current.Name() + "   [DEMO -- M to take over]" : Current.Name());
+        RefreshHeading();
     }
 
     void ToggleShotOverlay() {
@@ -110,7 +133,7 @@ final class GameLoop {
         while (Clock.TakeStep()) {
             Advance();
             if (!Clock.Paused() && Session.ReplayDue()) {
-                Launch(Current);
+                Launch(NextRally.apply(Current));
                 break;
             }
         }
@@ -126,8 +149,13 @@ final class GameLoop {
             Rig.OnRallyHit(Result.HitBy() == Side.Player);
             ShotReadout = ShotLine.Format(Now.LastShot());
             RefreshShotReadout();
+            if (Result.HitBy() == Side.Player) Overlay.SetSpin(SpinLine.Format(Now.LastShot()));
         }
-        if (Result.PointAwarded()) Overlay.SetScore(Now.Score());
+        if (Result.PointAwarded()) {
+            Overlay.SetScore(Now.Score());
+            if (Now.Score().MatchWinner() != null) OnMatchOver.accept(Now.Score());
+        }
+        if (ShotLog && Result.Shadow() != null) Result.Shadow().Lines().forEach(System.out::println);
     }
 
     private void Render(double FrameSeconds) {

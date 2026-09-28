@@ -1,5 +1,6 @@
 package tabletennis.game.control;
 
+import tabletennis.engine.math.Numeric;
 import tabletennis.engine.math.Vec3;
 import tabletennis.engine.world.Racket;
 
@@ -35,9 +36,17 @@ public final class CursorFollower {
 
     private static final double AimMovedBy = 1e-3;
 
+    /**
+     * TUNED: a held face key tilts the face about 31 degrees (0.6 against the forward -1), about
+     * what a player closes over a counter-drive or opens for a push; on top of the automatic lean.
+     */
+    private static final double FaceTilt = 0.6;
+
+
     private Vec3 Target;
     private Vec3 StrokeDirection = Square;
     private double IdleTime = 0;
+    private double CloseTilt = 0, SideTilt = 0;
 
     public CursorFollower(Vec3 RestingAt) {
         this.Target = RestingAt;
@@ -46,6 +55,15 @@ public final class CursorFollower {
     public void AimAt(Vec3 Point) {
         if (Point.Minus(Target).Length() > AimMovedBy) IdleTime = 0;
         Target = Point;
+    }
+
+    /**
+     * The player's own face control, each axis in [-1, 1]: Close +1 turns the face down over the
+     * ball, -1 opens it up; Side +1 turns it toward the player's right. Held, not accumulated.
+     */
+    public void SetFaceTilt(double Close, double Side) {
+        CloseTilt = Numeric.Clamp(Close, -1, 1);
+        SideTilt = Numeric.Clamp(Side, -1, 1);
     }
 
     /** Carry the blade toward the cursor at TrackSpeed and lean its face the way it travels. */
@@ -65,10 +83,28 @@ public final class CursorFollower {
         Blade.MoveTo(To, FaceToward(Blade.Normal(), Seconds), Seconds);
     }
 
-    /** Sideways lean follows the swipe; driving forward (-Z) closes the face for topspin. */
+    /**
+     * Sideways lean follows the swipe; driving forward (-Z) closes the face for topspin. A held face
+     * key overrides the lean where they disagree and adds to it where they agree. Only when held, so
+     * untouched play is bit-for-bit what it was.
+     */
     private Vec3 FaceToward(Vec3 CurrentNormal, double Seconds) {
-        Vec3 Desired = new Vec3(StrokeDirection.X() * FaceLean, StrokeDirection.Z() * FaceClose, -1).Normalized();
+        double Across = StrokeDirection.X() * FaceLean;
+        double Up = StrokeDirection.Z() * FaceClose;
+        if (SideTilt != 0) Across = WithKey(Across, SideTilt);
+        if (CloseTilt != 0) Up = -WithKey(-Up, CloseTilt);
+        Vec3 Desired = new Vec3(Across, Up, -1).Normalized();
         double Easing = 1 - Math.exp(-Seconds / FaceTau);
         return Vec3.Lerp(CurrentNormal, Desired, Easing).Normalized();
+    }
+
+    /**
+     * One face axis with a key held. Adding the tilt to the automatic lean made W only cancel the
+     * lean that opens the face while the bat moves back, leaving it square, and the ball died on
+     * the player's own half; so a lean the other way is dropped and the key's tilt stands alone.
+     */
+    private static double WithKey(double Automatic, double Key) {
+        double Agreeing = Automatic * Key > 0 ? Automatic : 0;
+        return Agreeing + Key * FaceTilt;
     }
 }

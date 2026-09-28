@@ -81,9 +81,39 @@ final class ReachabilityTest {
                             Missed.isEmpty() ? "" : "; missed: " + String.join(", ", Missed)));
     }
 
+    /**
+     * The reported bug, end to end: holding W while chasing the ball must not kill the return. The
+     * same pointing hand as above, with the face key held the whole point; before the fix every one
+     * of these returns died on the player's own half.
+     */
+    @Test
+    void HoldingAFaceKeyStillReturnsTheBall() {
+        List<String> Measured = new ArrayList<>();
+        boolean AllReturned = true;
+        for (double Close : new double[]{1, -1}) {
+            int Returned = 0, Attempted = 0;
+            List<String> Missed = new ArrayList<>();
+            for (Feed Shot : Feeds.All) {
+                if (PathAfterThePlayerSideBounce(Shot) == null) continue;
+                Attempted++;
+                if (PlayThePoint(Shot, Close)) Returned++; else Missed.add(Shot.Name());
+            }
+            AllReturned &= Returned == Attempted;
+            Measured.add(String.format("%s held: %d of %d returned%s", Close > 0 ? "W" : "S", Returned, Attempted,
+                                       Missed.isEmpty() ? "" : " (missed " + String.join(", ", Missed) + ")"));
+        }
+        Check("a player who points at the ball returns it over the net while holding W or S",
+              AllReturned, String.join("; ", Measured));
+    }
+
     /** Play one point with a stand-in hand: point the CURSOR at the ball, let envelope and speed decide. */
     private static boolean PlayThePoint(Feed Shot) {
+        return PlayThePoint(Shot, 0);
+    }
+
+    private static boolean PlayThePoint(Feed Shot, double FaceClose) {
         GameSession Game = new GameSession();
+        Game.SetFaceTilt(FaceClose, 0);
         Game.Launch(Shot);
         boolean Returned = false;
         for (int Step = 0; Step < (int) (14.0 / Simulation.Step); Step++) {

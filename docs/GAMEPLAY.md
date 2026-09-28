@@ -69,12 +69,23 @@ hits it; between hits it flies for real.
 
 - Serving off your own blade (right now a ball is fed in each rally)
 - An AI opponent that reads where the ball is going rather than tracking it
-- A menu, so the game is something you start rather than something you launch
 
 **Planned**
 
 - Multiple paddles that play differently — one built for spin, one for power
 - Earn currency by beating the AI and spend it in a shop
+
+## The menu
+
+The game opens on a menu, with the game playing itself behind it:
+
+- **Play a match** against the AI, best of five; a result screen offers a rematch.
+- **Practice** against one of ten balls, from a steady warm-up to a 30 m/s smash, with topspin,
+  backspin, hooks and a floater in between. The ball comes back until you change it.
+- **Watch the demo**: the game plays your side; press `M` to take over.
+- **How to play**: the controls and features on one page.
+
+`Esc` in a game pauses it and returns to the menu, which offers **Resume**.
 
 ## Controls
 
@@ -84,7 +95,7 @@ Playing the ball:
 | --- | --- |
 | Mouse left / right | Moves the paddle across the table |
 | Mouse up / down | Moves the paddle up the table toward the net, or back behind the baseline |
-| Hold right mouse | Switches up / down to raising and lowering the bat, for brushing up or down the ball. Depth is frozen while held |
+| Hold right mouse | Brush: up / down now raises and lowers the bat from where it is (pressing the button does not move it). Flick up through the ball as it arrives for a loop, down for a chop. Depth is frozen while held |
 | Swipe the paddle sideways | Sends the ball that way — swipe right, ball goes right |
 | Drive the paddle up-table through the ball | Pace, depth and topspin |
 | Pull the paddle back through the ball | Opens the face and cuts backspin |
@@ -93,25 +104,37 @@ Playing the ball:
 There is no hit button — the shot is entirely in the mouse movement. Normally the paddle stays at
 one height; hold the right mouse button to switch the vertical cursor axis to brushing.
 
-Other keys:
+Racket face (hold the key):
+
+| Key | Action |
+| --- | --- |
+| `W` / `S` | Close / open the face: a closed face tops a drive, an open one lifts and cuts |
+| `A` / `D` | Tilt the face right / left |
+
+Game keys:
+
+| Key | Action |
+| --- | --- |
+| `Space` | Pause |
+| `H` | Hide / show the on-screen help |
+| `Esc` | Back to the menu (it offers **Resume**) |
+| `N` / `P`, `←` `→` | Practice: next / previous ball |
+| `R` | Practice: replay the ball |
+| `M` | Practice: let the game play your side, until you press `M` again; in the demo, take over |
+| Left-drag / scroll | Orbit / zoom the camera (turns the follow-cam off) |
+
+Developer keys, only with `--dev=true` (see [Development](DEVELOPMENT.md)):
 
 | Key | Action |
 | --- | --- |
 | `1`–`9`, `0` | Pick the feed shot |
-| `N` / `P`, `←` `→` | Next / previous feed |
-| `R` | Replay the current feed |
-| `Space` | Pause |
 | `.` | Single physics step |
 | `[` `]` | Slow down / speed up (starts at 0.45×) |
 | `F` | Rally-cam on / off |
 | `C` | Cycle the preset camera views (turns the rally-cam off) |
 | `V` | Shot-assist debug overlay (paddle and ball velocity, raw / intended / final shot, target, predicted landing) |
-| `D` | Control debug overlay (cursor, paddle and target position, legal paddle area, how far and how long the paddle has to travel, where the ball is and when it arrives, and whether you could have got there) |
+| `I` | Control debug overlay (cursor, paddle and target position, legal paddle area, how far and how long the paddle has to travel, where the ball is and when it arrives, and whether you could have got there) |
 | `G` | Toggle the no-spin ghost trail |
 | `T` | Toggle the flight trail |
 | `B` | Draw the ball at 2× (physics still uses 40 mm) |
-| `A` | Toggle auto-replay |
-| `H` | Toggle the on-screen legend |
-| `M` | Demo mode: the game plays your side itself, until you press `M` again |
-| `Esc` | Quit |
-| Left-drag / scroll | Orbit / zoom the camera (turns the follow-cam off) |
+| `U` | Toggle auto-replay |

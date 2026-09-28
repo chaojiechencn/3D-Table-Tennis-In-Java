@@ -126,9 +126,11 @@ Capture mode writes one PNG and exits:
 | `--view` | `BEHIND`, `SIDE`, `HIGH`, `LOW` or `TOP` (case-insensitive) |
 | `--out` | The PNG to write; also turns auto-replay off, so a late capture still completes |
 | `--demo=true` | Let the demo hand play the player's side |
-| `--controldebug=true` | Show the `D` control readout |
+| `--controldebug=true` | Show the `I` control readout |
 | `--ball2x=true` | Draw the ball at twice its size |
 | `--rallycam=true` | Keep the rally-cam on during a capture |
+| `--dev=true` | Developer mode, the game as it was before the menu: straight onto the table, every key and overlay (feed digits and `N`/`P` over all feeds, time control, camera presets, `V`/`I`), the ghost trail, the full legend, and the per-hit contact-model log on standard output. `.\gradlew.bat run -Pdev` is the shortcut |
+| `--screen=` | What shows first: `menu` (the default for players), `practice`, `howtoplay`, `result`, or `none` (straight onto the table, the default for developer mode and a capture); a capture with a screen draws that screen |
 
 The capture advances whole physics steps to `--at`, so the same arguments give the same image, up
 to a few pixels of GPU noise. Captures compare well pixel by pixel after a rendering change.

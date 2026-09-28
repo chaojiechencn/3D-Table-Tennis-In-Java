@@ -35,13 +35,14 @@ rules.
 | | `match` | `Scoreboard`, `ScoreSnapshot` |
 | | `control` | `ReachEnvelope`, `CursorFollower`, `DemoHand`, `ReachTiming` |
 | | `ai` | `Opponent`, `BallFollower`, `MeetingPoint`, `HittingZone` |
-| | `shot` | `ShotAssist`, `SwingReading`, `ShotPlanner`, `ShotSearch`, `ShotDecision`, `ShotTuning` |
+| | `shot` | `ShotAssist`, `SwingReading`, `ShotPlanner`, `ShotSearch`, `ShotDecision`, `ShotTuning`; in shadow, `ContactModel`, `SwingHistory`, `ShotReport`, `ShotComparison` |
 | | `feed` | `Feed`, `Feeds` |
 | app | (root) | `TableTennisApp` (composition root), `GameLoop`, `FixedStepClock`, `LaunchOptions`, `FrameCapture` |
 | | `input` | `Controls` (key bindings and the legend), `MouseControl`, `CursorRay` |
 | | `scene` | `Xform`, `TableScene`, `ArenaView`, `Meshes`, `Textures`, `BallView`, `BallShadow`, `RacketView`, `Trail`, `BounceMarks`, `ShotOverlay` |
 | | `camera` | `CameraRig`, `CameraView`, `CameraPose` |
-| | `hud` | `Hud`, `ScoreLine`, `ShotLine`, `ControlReadout` |
+| | `hud` | `Hud`, `ScoreLine`, `ShotLine`, `SpinLine`, `ControlReadout` |
+| | `menu` | `MenuScreen` (main, practice, how to play, result), `Drills` (the practice balls in a player's words) |
 
 ## One step, end to end
 
@@ -61,7 +62,8 @@ golden trace pins it:
 4. **Turn contacts into rally facts.** `RallyFacts.Of` keeps the notable hits (hard enough to
    count, per `SurfaceKind`) and names the hitter by which racket was struck.
 5. **Author the shot.** After a racket contact, `ShotAssist` replaces the raw outgoing ball with an
-   authored shot, through `PhysicsWorld.ReplaceBall`, the engine's one hook for the arcade layer.
+   authored shot, through `PhysicsWorld.ReplaceBall`, and sets the curve the shot flies under
+   (`PhysicsWorld.SetSideLift`): the engine's two hooks for the arcade layer, both measured physics by default.
 6. **Judge.** `Referee.Judge` applies the one-bounce rule, out, floor, own half and the point
    latch, and returns a `Ruling`: the events and the point's winner, if any.
 7. **Score and schedule.** A point goes to `Scoreboard`. A replay is scheduled
@@ -80,7 +82,7 @@ Breaking one of these is a defect even if everything compiles and every check pa
 2. **`scene.Xform` is the only place metres become scene units**, in both directions. Nothing
    else may use `Xform.ScenePerMetre`.
 3. **The app reads snapshots; it never writes game state.** It sends the session commands
-   (`Launch`, `SetAim`, `SetDemoMode`, `SetAutoReplay`) and nothing else.
+   (`Launch`, `NewMatch`, `SetAim`, `SetFaceTilt`, `SetDemoMode`, `SetAutoReplay`) and nothing else.
 4. **One contact solver.** Table, net, floor and both blades differ only by a `Material` and a
    `Collider` shape. The solver asks a shape four questions (`ClosestPoint`, `EscapeNormal`,
    `Sweep`, `VelocityAt`); a new shape answers them and never touches the impulse.
@@ -95,7 +97,7 @@ Breaking one of these is a defect even if everything compiles and every check pa
    second descent, past the end line. This bug was found three times.
 8. **The ball never moves the player's blade.** `CursorFollower.Advance(Racket, Seconds)` takes no
    `BallState`, so the signature enforces it. Anything that reads the ball before the blade's
-   target is chosen is auto-follow in disguise. `ReachTiming` and the `D` readout read the ball
+   target is chosen is auto-follow in disguise. `ReachTiming` and the `I` readout read the ball
    only after the target is set, to answer "could the player have got there".
 9. **Physics never sees a frame time.** The session advances in whole steps only. Anything
    sampled per step for display counts whole steps, not seconds.
@@ -154,8 +156,9 @@ The architecture has a place for each unbuilt feature; none of them needs a rewr
   opponent is a second `Opponent` implementation, built on `FlightPredictor` and `MeetingPoint`,
   which the demo hand already uses. Difficulty has to come from prediction quality: a follower
   cannot be made beatable by slowing it down; it only becomes erratic.
-- **Menus.** A new front in `app`, choosing what `TableTennisApp` launches. The session needs
-  nothing new.
+- **Menus.** Built: `menu.MenuScreen` over the 3D view, and `TableTennisApp` switches between the
+  menu (the demo hand plays behind it), a match, practice and the demo. The session needed only
+  `NewMatch`.
 - **Paddle profiles.** A paddle is a set of `ShotTuning` values ("the defaults plus these
   changes", via `ShotTuning.Builder`). Physical rubber differences belong in a new `Material`.
 - **Currency and the shop** come last, after the core features.

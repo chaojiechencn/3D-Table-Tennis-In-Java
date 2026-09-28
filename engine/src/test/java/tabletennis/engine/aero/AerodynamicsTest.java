@@ -169,6 +169,29 @@ final class AerodynamicsTest {
     }
 
     /** C_L at a given spin ratio, at a fixed mid-rally speed. */
+    /**
+     * The arcade curve hook is not physics, so it must leave the physics alone: at a gain of 1 the
+     * measured force comes back bit for bit, and any other gain scales only the horizontal,
+     * across-the-flight share, never the topspin dip or the along-flight part.
+     */
+    @Test
+    void TheSideLiftGainScalesOnlyTheSidewaysMagnusForce() {
+        Vec3 Velocity = new Vec3(1.5, 1.0, -9.0);
+        Vec3 Spin = new Vec3(-250, 300, 40);   // topspin and sidespin together
+        Vec3 Measured = Aerodynamics.Magnus(Velocity, Spin);
+        Vec3 AtOne = Aerodynamics.Magnus(Velocity, Spin, 1.0);
+        Vec3 AtTen = Aerodynamics.Magnus(Velocity, Spin, 10.0);
+
+        Vec3 Across = Vec3.Up.Cross(Velocity).Normalized();
+        Vec3 Change = AtTen.Minus(Measured);
+        double Sideways = Measured.Dot(Across), SidewaysTen = AtTen.Dot(Across);
+        boolean OnlyAcross = Change.Minus(Across.Scale(Change.Dot(Across))).Length() < 1e-12;
+        Check("a side-lift gain of 1 is the measured Magnus force, and 10 scales only its sideways share",
+              AtOne.equals(Measured) && OnlyAcross && Math.abs(SidewaysTen - 10 * Sideways) < 1e-9,
+              String.format("sideways %.3f -> %.3f m/s^2 at 10; vertical %.3f -> %.3f; gain 1 identical=%b",
+                            Sideways, SidewaysTen, Measured.Y(), AtTen.Y(), AtOne.equals(Measured)));
+    }
+
     private static double LiftAt(double SpinRatio) {
         return Aerodynamics.LiftCoefficient(new Vec3(0, 0, -13.5),
                                             new Vec3(-SpinRatio * 13.5 / BallSpec.Radius, 0, 0));

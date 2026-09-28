@@ -104,8 +104,11 @@ public final class TableScene {
         FlightTrail.SetShown(ShowTrail);
     }
 
-    public void ToggleGhost() {
-        ShowGhost = !ShowGhost;
+    public void ToggleGhost() { SetGhostShown(!ShowGhost); }
+
+    /** The no-spin ghost is a developer's comparison; players see only the real flight. */
+    public void SetGhostShown(boolean Shown) {
+        ShowGhost = Shown;
         RefreshGhost();
     }
 

@@ -20,9 +20,11 @@ a rally a person can keep needs it. Fired at the blade over a 75-point grid of r
 | through the assist | **75 / 75** | 0.38 m | 12.4 m/s |
 
 So after a racket contact, `GameSession` hands the raw result to `ShotAssist`, which authors the
-outgoing launch. Only the launch is authored; the flight after it is the real simulation.
-`PhysicsWorld.ReplaceBall` is the engine's only concession to this. Remove the `ShotAssist` call
-and the realistic game is back, untouched. Keeping the realistic model separable is worth more
+outgoing launch. Only the launch is authored; the flight after it is the real simulation, except
+that a player's shot curves under `CurveGain` (below). `PhysicsWorld.ReplaceBall` and
+`PhysicsWorld.SetSideLift` are the engine's only concessions to this; both default to the measured
+physics. Remove the `ShotAssist` call and the side-lift setting and the realistic game is back,
+untouched. Keeping the realistic model separable is worth more
 than any single tuning win.
 
 ## The shot pipeline
@@ -60,8 +62,9 @@ which reads as broken rather than beatable.
 
 ### Tuning
 
-Every arcade knob lives in `ShotTuning`, in eight groups: `StrengthKnobs`, `AimKnobs`,
-`TargetKnobs`, `QualityKnobs`, `LimitKnobs`, `SearchKnobs`, `RescueKnobs` and `SpinKnobs`. Each
+Every arcade knob lives in `ShotTuning`, in nine groups: `StrengthKnobs`, `AimKnobs`,
+`TargetKnobs`, `QualityKnobs`, `LimitKnobs`, `SearchKnobs`, `RescueKnobs`, `SpinKnobs` and
+`ContactKnobs` (the contact model, below). Each
 pipeline stage receives only the groups it uses.
 
 - Each group validates itself when built, following each knob's mathematical use:
@@ -74,7 +77,7 @@ pipeline stage receives only the groups it uses.
   - `SpeedBackoffPerPass × MaxCorrectionPasses < 1`, so the last pass still moves forward.
 - `ShotTuning.Builder` keeps each default beside its reason. A future paddle profile is "the
   defaults plus these changes".
-- `ShotTuningTest` pins all 57 defaults, so a retune is always a visible, deliberate diff.
+- `ShotTuningTest` pins all 71 defaults, so a retune is always a visible, deliberate diff.
 - Restitution and friction are not duplicated here. They are measured values, single-sourced in
   `Materials` and graded by the engine's tests.
 
@@ -111,6 +114,57 @@ pipeline stage receives only the groups it uses.
   this change the tolerance before a ball went out was 0.6 of the blade radius against a 5 m/s
   ball, 0.4 at 12 m/s and 0.3 at 18 m/s. A mishit is still clearly worse than a clean hit; it no
   longer reads as an automatic loss.
+
+### The contact model: the racket sets the spin
+
+A racket-driven shot is being built to replace the authored one. Today it sets the **spin** of every
+player shot, mouse or demo hand: `ShotAssist` plans with the spin the racket's contact made (capped
+at `MaxSpin`, blended by `RacketSpinShare`, 1 by default) and the search solves a launch that lands
+*with* that spin. Speed and direction are still the assist's. An opponent's shot keeps the arcade
+spin plan. The HUD names the spin of the player's last shot and which way it curves.
+
+**Swipes curve like a banana, by arcade gain.** The measured lift alone saturates: a mid-court shot
+bends 14-28 cm at 4 to 6 m/s whatever the spin past about 40 rev/s, too little to see. Above about
+90 rev/s at the slow end of play the spin ratio leaves the lift fit's data (normal play spans
+S = 0.1-1.4), its quadratic branch goes negative, and the ball curves the WRONG way. So:
+
+- `SidespinGain` (5) multiplies the contact's sidespin, capped at `MaxSidespin` (50 rev/s), below
+  the reversal.
+- `CurveGain` (5.625) multiplies the sideways Magnus force on the player's shot in flight: the 10
+  first tried was too much in play, and it was cut by three quarters twice (to 7.5, then 5.625). The session sets it on the world
+  after a player hit (`PhysicsWorld.SetSideLift`) and resets it to 1 after an opponent hit or a
+  feed, so feeds and the opponent fly the measured physics. At 1 the engine is bit-identical, and
+  every scenario with no player hit in the golden trace is unchanged.
+- The search flies candidates under the same gain and `LaunchSolver.Curving` aims them off target so
+  the curve carries them back on. A firm swipe launches up to ~25 degrees wide and bends 76 cm.
+- Under the gain a hard deep drive can bend further than the table is wide. `MaxCurve` (0.225 m,
+  scaled with the gain from 0.4) scales the sidespin down, from one trial flight, until the planned bend
+  fits; if the search still fails, one straight search follows. At 0.6-0.8 m up to half the first
+  searches failed at ~40 ms each.
+- **Cost.** A curved player contact takes ~15 ms median and ~26 ms worst (measured at 10x), against
+  2-3 ms before: the curving solve re-solves each candidate two or three times.
+
+When the racket spin landed, the golden trace changed only in scenarios with player hits. Curving
+shots beat the following opponent more often.
+
+- **The swing is averaged.** `SwingHistory` records the player's blade once per step, and the contact
+  reads its velocity over `VelocityWindow` (0.040 s, 19 whole steps). The mouse reports more coarsely
+  than the step, so one step's velocity is a sawtooth.
+- **The contact is the engine's own.** `ContactModel` hands `ContactSolver` a blade moving at the
+  averaged velocity, facing the way `CursorFollower` leaned it, with a `Material` built from
+  `ContactKnobs`. There is still one contact solver. A square hit (relative velocity along the normal)
+  keeps its pace and gets no spin; a glancing one trades pace for spin. An upward brush makes topspin,
+  a chop backspin, a swipe to +X spin about +Y.
+- **The knobs start at the measured rubber** (`Materials.Rubber`): restitution and its clamps, `Grip`
+  (the friction limit) and `SpinTransfer` (the tangential restitution). `SwipeToDirection` moves a
+  share of the sidespin's energy into sideways speed; at 0, the default, the ball's inertia alone
+  splits a swipe.
+- **It can never add energy** in the blade's frame, whatever the knobs; `ContactModelTest` sweeps
+  17,000 contacts.
+- **The log.** The full racket-driven shot (speed and direction too) still runs in shadow. Each player hit yields a `ShotComparison` in its `StepResult`, which the app prints as
+  two lines: speed, elevation, aim, top and side spin, and whether the shot clears the cord and lands
+  in by the rules, plus the far-bounce time and the net clearance of the shot played. The flights are
+  `TrialFlight`s at the game step.
 
 ## The rally rules
 
@@ -206,6 +260,39 @@ component and silently evaluated to a constant: once in the face easing, once in
 spin. Before reading a velocity component, ask whose blade it is and whether that component can
 ever be non-zero.
 
+### The brush, made playable
+
+A simulated human (200 ms reaction, a 125 Hz mouse, about 13 ms of timing error) brushed loops and
+chops against every drill. As first built, 48-87% of its brushes met the ball near the rim and a chop
+landed 27% of the time. The vertical sweep crosses the ball faster than a person can time it, the
+bat cannot wait lower than the table top, and a tilted face slides away from the ball. Slowing the
+sweep (13 down to 4.5 m/s) or shortening it (18 cm down to 8 cm) made it worse, not better.
+
+- **A brush is graded as a brush.** When the blade rises or falls faster than `BrushLift` (1 m/s;
+  only a brush moves it vertically), its offset along the brush counts at `BrushAlongWeight` (0.35).
+  A brushed contact glances off the face; the spin comes from the contact physics wherever it
+  touched. Across the face it is graded in full, and no other contact changes. Measured: the loop
+  lands 64% of tries (88% of contacts, +27 rev/s), the chop 67% (97% of contacts, -14 rev/s).
+- **The brush is relative** (`MouseControl.BrushFraction`): pressing the right button no longer
+  moves the bat; a quarter of the screen up or down sweeps the whole band. Before, the bat jumped to
+  the height of the cursor's place on the screen the moment the button went down.
+- The reliable spin is still the face keys on a forward swing (W +52 rev/s); the brush is the
+  harder, showier stroke.
+
+### The face keys
+
+`W`/`S` close and open the face, `A`/`D` tilt it right and left, while held
+(`GameSession.SetFaceTilt`). A key tilts its axis by `FaceTilt` (0.6, about 31 degrees) and the face
+eases there at `FaceTau`. Where the automatic lean agrees with the key it adds on (W while driving
+forward closes the face to 49 degrees and tops the drive, +52 rev/s); where it disagrees it is dropped
+(W while moving back or sideways gives 31 degrees closed, S while driving forward 31 open). The first
+version only added the tilt, so W while backing off to reach a ball merely cancelled the lean that
+opens the face: a square face, a rim contact, and the ball died on the player's own half (1 of 9 feeds
+returned; `ReachabilityTest` and `CursorFollowerTest` now guard it). A bat moving back with the ball
+still cannot hit hard: with W it returns a soft, high topspin ball. The tilt applies only while a key
+is held, so untouched play is bit-for-bit unchanged. `A` and `D` were auto-replay and the control
+readout; those moved to `U` and `I`.
+
 ### The face settles to square
 
 `CursorFollower` leans the face with the stroke and relaxes it to square (`FaceTau`) once the blade
@@ -270,6 +357,6 @@ for a hand that merely points at the ball.
   - magenta and green apart: the solve missed its aim;
   - cyan and orange apart: a constraint is fighting the solve;
   - a green dot off the table: the rescue is in play.
-- **`D`, the control readout.** It exists because "I could not get there" and "that ball was
+- **`I`, the control readout.** It exists because "I could not get there" and "that ball was
   unplayable" look identical on screen and have opposite fixes. It shows the cursor, the raw and
   clamped aim, the blade, the ball and whether the blade could reach it in time.

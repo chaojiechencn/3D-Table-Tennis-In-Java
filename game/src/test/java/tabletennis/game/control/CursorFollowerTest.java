@@ -35,4 +35,99 @@ final class CursorFollowerTest {
               CursorFollower.TrackSpeed < 17.8,
               String.format("%.1f m/s tracking against a measured 17.8 m/s swing", CursorFollower.TrackSpeed));
     }
+
+    /**
+     * The face keys, with the blade held still. The resting face is not square: a still blade
+     * reads as driving forward, so the automatic lean rests it 28.8 degrees closed. Each key tilts
+     * the face from there, its own way (W to 49 closed, S to 31 open, A and D to 39 off square), and
+     * letting go settles it back to rest.
+     */
+    @Test
+    void TheFaceKeysTiltTheFaceAndLetGo() {
+        record Tilt(String Key, double Close, double Side) {}
+        Vec3 Rest = SettledFace(0, 0, null);
+        StringBuilder Measured = new StringBuilder(String.format("rest %.1f deg closed; ", AngleFromSquare(Rest)));
+        boolean AllRight = true;
+        for (Tilt Each : new Tilt[]{new Tilt("W", 1, 0), new Tilt("S", -1, 0), new Tilt("D", 0, 1), new Tilt("A", 0, -1)}) {
+            Vec3[] Released = new Vec3[1];
+            Vec3 Held = SettledFace(Each.Close(), Each.Side(), Released);
+            Vec3 Moved = Held.Minus(Rest);
+            boolean RightWay = Each.Close() > 0 ? Moved.Y() < 0 : Each.Close() < 0 ? Moved.Y() > 0
+                             : Each.Side() > 0 ? Moved.X() > 0 : Moved.X() < 0;
+            double Turned = AngleBetween(Held, Rest), Back = AngleBetween(Released[0], Rest);
+            AllRight &= RightWay && Turned >= 15 && Back < 0.5;
+            Measured.append(String.format("%s %.1f deg from rest %s, %.2f deg after release; ", Each.Key(), Turned,
+                                          RightWay ? "the right way" : "THE WRONG WAY", Back));
+        }
+        Check("each face key tilts the face at least 15 degrees its own way, and letting go returns it to rest",
+              AllRight, Measured.toString());
+    }
+
+    /**
+     * The bug players met: W is "close the face", whatever the bat is doing. Moving back to reach a
+     * ball leans the face open automatically; if W only added its tilt, it merely cancelled that
+     * lean and left the face square, and the ball died on the player's own half. So with W held the
+     * face must be clearly closed, and with S clearly open, while the bat drives forward, moves
+     * back, moves sideways, or stands still.
+     */
+    @Test
+    void AFaceKeyWinsOverTheAutomaticLeanWhateverTheBatIsDoing() {
+        record Motion(String Name, Vec3 Step) {}
+        Motion[] Motions = {
+            new Motion("driving forward", new Vec3(0, 0, -0.02)), new Motion("moving back", new Vec3(0, 0, 0.02)),
+            new Motion("moving sideways", new Vec3(0.02, 0, 0)), new Motion("still", Vec3.Zero),
+        };
+        StringBuilder Measured = new StringBuilder();
+        boolean AllRight = true;
+        for (double Close : new double[]{1, -1}) {
+            for (Motion Each : Motions) {
+                double Pitch = FacePitchWhile(Close, Each.Step());   // + closed (face turned down), - open
+                boolean Right = Close > 0 ? Pitch >= 25 : Pitch <= -25;
+                AllRight &= Right;
+                Measured.append(String.format("%s %s: %s %.0f deg%s; ", Close > 0 ? "W" : "S", Each.Name(),
+                                              Pitch >= 0 ? "closed" : "open", Math.abs(Pitch), Right ? "" : " WRONG"));
+            }
+        }
+        Check("W always closes the face at least 25 degrees and S always opens it, whatever the bat is doing",
+              AllRight, Measured.toString());
+    }
+
+    /** Degrees the face is turned down (closed, positive) after 0.1 s holding the key while the bat moves by Step each step. */
+    private static double FacePitchWhile(double Close, Vec3 Step) {
+        Vec3 At = new Vec3(0, 0.16, 1.6);
+        Racket Blade = new Racket(At, CursorFollower.Square);
+        CursorFollower Hand = new CursorFollower(At);
+        Hand.SetFaceTilt(Close, 0);
+        for (int Each = 0; Each < Simulation.StepsPerSecond / 10; Each++) {
+            At = At.Plus(Step.Scale(Simulation.Step * 480 / 8));   // under TrackSpeed: 1.2 m/s of hand motion
+            Hand.AimAt(At);
+            Hand.Advance(Blade, Simulation.Step);
+        }
+        Vec3 N = Blade.Normal();
+        return Math.toDegrees(Math.atan2(-N.Y(), -N.Z()));
+    }
+
+    /** The face after half a second holding the tilt, and, if asked, after half a second let go. */
+    private static Vec3 SettledFace(double Close, double Side, Vec3[] AfterRelease) {
+        Vec3 Start = new Vec3(0, 0.16, 1.6);
+        Racket Blade = new Racket(Start, CursorFollower.Square);
+        CursorFollower Hand = new CursorFollower(Start);
+        Hand.SetFaceTilt(Close, Side);
+        for (int Step = 0; Step < Simulation.StepsPerSecond / 2; Step++) Hand.Advance(Blade, Simulation.Step);
+        Vec3 Held = Blade.Normal();
+        if (AfterRelease != null) {
+            Hand.SetFaceTilt(0, 0);
+            for (int Step = 0; Step < Simulation.StepsPerSecond / 2; Step++) Hand.Advance(Blade, Simulation.Step);
+            AfterRelease[0] = Blade.Normal();
+        }
+        return Held;
+    }
+
+    private static double AngleBetween(Vec3 A, Vec3 B) {
+        return Math.toDegrees(Math.acos(Math.min(1, A.Normalized().Dot(B.Normalized()))));
+    }
+
+    private static double AngleFromSquare(Vec3 Normal) {
+        return Math.toDegrees(Math.acos(Math.min(1, Normal.Normalized().Dot(CursorFollower.Square))));
+    }
 }

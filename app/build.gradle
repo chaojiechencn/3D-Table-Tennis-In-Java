@@ -16,3 +16,8 @@ dependencies {
 application {
     mainClass = 'tabletennis.app.TableTennisApp'
 }
+
+// .\gradlew.bat run -Pdev : developer mode, straight onto the table with every key and overlay.
+run {
+    if (project.hasProperty('dev')) args '--dev=true'
+}

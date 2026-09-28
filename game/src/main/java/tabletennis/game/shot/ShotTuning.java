@@ -1,16 +1,20 @@
 package tabletennis.game.shot;
 
+import tabletennis.engine.contact.Material;
+import tabletennis.engine.contact.Materials;
+
 import java.util.Arrays;
 import java.util.List;
 
 /**
  * Every number the arcade shot model uses, grouped by the part of the shot that reads it. Each
  * group checks its knobs when built, each only by how the model uses it; the defaults and the
- * reasoning behind them live on the Builder. Measured restitution and friction are not here: they
- * are physics, single-sourced in the engine's Materials.
+ * reasoning behind them live on the Builder. Measured restitution and friction are physics,
+ * single-sourced in the engine's Materials; the contact model's knobs start from them.
  */
 public record ShotTuning(StrengthKnobs Strength, AimKnobs Aim, TargetKnobs Target, QualityKnobs Quality,
-                         LimitKnobs Limits, SearchKnobs Search, RescueKnobs Rescue, SpinKnobs Spin) {
+                         LimitKnobs Limits, SearchKnobs Search, RescueKnobs Rescue, SpinKnobs Spin,
+                         ContactKnobs Contact) {
 
     public ShotTuning {
         Ordered("RescueMinSpeed", Rescue.RescueMinSpeed(), "MaxShotSpeed", Strength.MaxShotSpeed());
@@ -69,10 +73,14 @@ public record ShotTuning(StrengthKnobs Strength, AimKnobs Aim, TargetKnobs Targe
         }
     }
 
-    /** How cleanly the ball was struck, and so how much of the authored shot it earns. */
+    /**
+     * How cleanly the ball was struck, and so how much of the authored shot it earns. A brush
+     * (the blade moving vertically faster than BrushLift) counts its offset along the brush at
+     * BrushAlongWeight: a brush meets the ball glancing off the face, not square in the middle.
+     */
     public record QualityKnobs(double QualityCore, double QualityFalloff, double QualityPaceFrom,
                                double QualityPaceSpan, double QualityPaceLoss, double QualityCoreMin,
-                               double AssistFloor) {
+                               double AssistFloor, double BrushLift, double BrushAlongWeight) {
         public QualityKnobs {
             Finite("QualityCore", QualityCore);
             Positive("QualityFalloff", QualityFalloff);        // divides the quality slope
@@ -81,6 +89,8 @@ public record ShotTuning(StrengthKnobs Strength, AimKnobs Aim, TargetKnobs Targe
             Finite("QualityPaceLoss", QualityPaceLoss);
             Finite("QualityCoreMin", QualityCoreMin);
             Fraction("AssistFloor", AssistFloor);              // a lerp weight
+            NonNegative("BrushLift", BrushLift);
+            Fraction("BrushAlongWeight", BrushAlongWeight);    // scales an offset
         }
     }
 
@@ -152,6 +162,48 @@ public record ShotTuning(StrengthKnobs Strength, AimKnobs Aim, TargetKnobs Targe
         }
     }
 
+    /**
+     * The shadow contact model: the rubber the racket-driven shot is struck with, and the window
+     * the racket's velocity is averaged over. Restitution and its clamps are the bounce along the
+     * face; Grip is the friction limit past which the ball slides instead of gripping; SpinTransfer
+     * is the fraction of slip the topsheet springs back as spin. SwipeToDirection moves that share
+     * of the sidespin's energy into sideways speed, never adding any. RacketSpinShare is how much of
+     * a player shot's spin comes from this contact rather than the arcade spin plan. SidespinGain
+     * multiplies the contact's sidespin so a swipe visibly curves, up to MaxSidespin rev/s.
+     * CurveGain multiplies the sideways Magnus force on the player's shot in flight; MaxCurve is the
+     * most bend, in metres, a shot is planned with, so the search can still land it.
+     */
+    public record ContactKnobs(double Restitution, double RestitutionFade, double MinRestitution,
+                               double MaxRestitution, double Grip, double SpinTransfer, double SpinTransferFade,
+                               double SwipeToDirection, double VelocityWindow, double RacketSpinShare,
+                               double SidespinGain, double MaxSidespin, double CurveGain,
+                               double MaxCurve) {
+        public ContactKnobs {
+            Finite("Restitution", Restitution);
+            Finite("RestitutionFade", RestitutionFade);
+            Fraction("MinRestitution", MinRestitution);        // above 1 a bounce would add energy
+            Fraction("MaxRestitution", MaxRestitution);
+            Ordered("MinRestitution", MinRestitution, "MaxRestitution", MaxRestitution);
+            NonNegative("Grip", Grip);
+            Finite("SpinTransfer", SpinTransfer);              // clamped to [0, 1] where it is used
+            Finite("SpinTransferFade", SpinTransferFade);
+            Fraction("SwipeToDirection", SwipeToDirection);    // a share of an energy
+            Positive("VelocityWindow", VelocityWindow);
+            Fraction("RacketSpinShare", RacketSpinShare);      // a lerp weight
+            NonNegative("SidespinGain", SidespinGain);
+            NonNegative("MaxSidespin", MaxSidespin);
+            NonNegative("CurveGain", CurveGain);
+            NonNegative("MaxCurve", MaxCurve);
+        }
+
+        /** The rubber as the engine's one contact solver takes it; the damping stays the measured rubber's. */
+        public Material Rubber() {
+            return new Material(Restitution, RestitutionFade, MinRestitution, MaxRestitution, Grip,
+                                SpinTransfer, SpinTransferFade, Materials.Rubber.DrillSpinDamping(),
+                                Materials.Rubber.VelocityDamping(), Materials.Rubber.SpinDamping());
+        }
+    }
+
     /** The defaults, adjusted knob by knob; Build() groups and validates them. */
     public static final class Builder {
 
@@ -208,6 +260,13 @@ public record ShotTuning(StrengthKnobs Strength, AimKnobs Aim, TargetKnobs Targe
         private double QualityCoreMin = 0.26;
         /** TUNED: raw rim impulses land 11 times in 75, so a shank still gets some help. */
         private double AssistFloor = 0.35;
+        /** The blade moves vertically only while brushing (the dead axis), so any real rise counts. */
+        private double BrushLift = 1.0;
+        /**
+         * TUNED: at full weight a human's brush met the ball near the rim 48-87% of the time (the
+         * sweep crosses the ball faster than a person can time it), so a brushed shot was a mishit.
+         */
+        private double BrushAlongWeight = 0.35;
 
         // Limits.
         /** Enough reflection to feel like an impact, too little to steer. */
@@ -255,6 +314,41 @@ public record ShotTuning(StrengthKnobs Strength, AimKnobs Aim, TargetKnobs Targe
         private double SidespinPerSwipe = 4.5;
         private double MaxSpin = 55.0;
 
+        // Shadow contact model: measured inverted rubber until play says otherwise.
+        private double Restitution = Materials.Rubber.Restitution();
+        private double RestitutionFade = Materials.Rubber.RestitutionFade();
+        private double MinRestitution = Materials.Rubber.MinRestitution();
+        private double MaxRestitution = Materials.Rubber.MaxRestitution();
+        private double Grip = Materials.Rubber.Friction();
+        private double SpinTransfer = Materials.Rubber.TangentialRestitution();
+        private double SpinTransferFade = Materials.Rubber.TangentialRestitutionFade();
+        /** Zero is pure physics: the ball's inertia alone splits a swipe into direction and sidespin. */
+        private double SwipeToDirection = 0.0;
+        /** Long enough to span several mouse reports, so one report's jitter does not set the shot. */
+        private double VelocityWindow = 0.040;
+        /** All of it: a brush tops, a chop backspins and a swipe curves, as the racket moved. */
+        private double RacketSpinShare = 1.0;
+        /** TUNED: at 1 a swipe's curve was barely visible; an arcade gain, not rubber physics. */
+        private double SidespinGain = 5.0;
+        /**
+         * TUNED: the most sidespin whose curve, under CurveGain, the search can still land (a 1.0-1.3 m
+         * bend, launched up to ~25 degrees wide). Above ~90 rev/s slow shots also leave the lift fit's
+         * data and the curve reverses.
+         */
+        private double MaxSidespin = 50.0;
+        /**
+         * TUNED: the measured lift bends a swipe 12-28 cm at most, too little to see. 10 read as a
+         * banana but too much in play; 7.5 still too much; 5.625 is three quarters of that. The
+         * search aims for it.
+         */
+        private double CurveGain = 5.625;
+        /**
+         * TUNED: the bend of the planned shot launched straight at its target. At 0.4 m every demo
+         * hit's first search landed (at 0.6-0.8 up to half failed, costing ~40 ms each). Scaled with
+         * CurveGain, three quarters at a time, because the full curve was too much in play.
+         */
+        private double MaxCurve = 0.225;
+
         public ShotTuning Build() {
             return new ShotTuning(
                     new StrengthKnobs(MinShotSpeed, MaxShotSpeed, MaxSwingSpeed, LateralEffort, SwingInfluence,
@@ -264,14 +358,18 @@ public record ShotTuning(StrengthKnobs Strength, AimKnobs Aim, TargetKnobs Targe
                     new TargetKnobs(TargetHalfWidthFrac, TargetDepthMinFrac, TargetDepthMaxFrac, SafeDepthFrac,
                                     NetClearance, LandingMargin),
                     new QualityKnobs(QualityCore, QualityFalloff, QualityPaceFrom, QualityPaceSpan,
-                                     QualityPaceLoss, QualityCoreMin, AssistFloor),
+                                     QualityPaceLoss, QualityCoreMin, AssistFloor, BrushLift, BrushAlongWeight),
                     new LimitKnobs(PhysicalBlend, ReflectionCap, MaxHorizontalDeviationDeg, MaxLateralVelocity,
                                    MaxVerticalLaunchAngleDeg, MinVerticalLaunchAngleDeg, MinForwardVelocity),
                     new SearchKnobs(SpeedCandidates, SpeedSpread, SpeedPreference, PassPenalty, MinSearchSpeed,
                                     SearchSpeedFloorFrac, MaxCorrectionPasses, TargetAssist, SpeedBackoffPerPass),
                     new RescueKnobs(RescueQualityFloor, RescueEffortCeiling, RescueMinSpeed, RescueSpeedSteps,
                                     RescueDepthFracs, RescueAimFracs),
-                    new SpinKnobs(DriveBrush, SpinInfluence, BaseTopspin, TopspinPerLift, SidespinPerSwipe, MaxSpin));
+                    new SpinKnobs(DriveBrush, SpinInfluence, BaseTopspin, TopspinPerLift, SidespinPerSwipe, MaxSpin),
+                    new ContactKnobs(Restitution, RestitutionFade, MinRestitution, MaxRestitution, Grip,
+                                     SpinTransfer, SpinTransferFade, SwipeToDirection, VelocityWindow,
+                                     RacketSpinShare, SidespinGain, MaxSidespin, CurveGain,
+                                     MaxCurve));
         }
 
         public Builder MinShotSpeed(double Value)              { MinShotSpeed = Value; return this; }
@@ -303,6 +401,8 @@ public record ShotTuning(StrengthKnobs Strength, AimKnobs Aim, TargetKnobs Targe
         public Builder QualityPaceLoss(double Value)           { QualityPaceLoss = Value; return this; }
         public Builder QualityCoreMin(double Value)            { QualityCoreMin = Value; return this; }
         public Builder AssistFloor(double Value)               { AssistFloor = Value; return this; }
+        public Builder BrushLift(double Value)                 { BrushLift = Value; return this; }
+        public Builder BrushAlongWeight(double Value)          { BrushAlongWeight = Value; return this; }
         public Builder PhysicalBlend(double Value)             { PhysicalBlend = Value; return this; }
         public Builder ReflectionCap(double Value)             { ReflectionCap = Value; return this; }
         public Builder MaxHorizontalDeviationDeg(double Value) { MaxHorizontalDeviationDeg = Value; return this; }
@@ -331,6 +431,20 @@ public record ShotTuning(StrengthKnobs Strength, AimKnobs Aim, TargetKnobs Targe
         public Builder TopspinPerLift(double Value)            { TopspinPerLift = Value; return this; }
         public Builder SidespinPerSwipe(double Value)          { SidespinPerSwipe = Value; return this; }
         public Builder MaxSpin(double Value)                   { MaxSpin = Value; return this; }
+        public Builder Restitution(double Value)               { Restitution = Value; return this; }
+        public Builder RestitutionFade(double Value)           { RestitutionFade = Value; return this; }
+        public Builder MinRestitution(double Value)            { MinRestitution = Value; return this; }
+        public Builder MaxRestitution(double Value)            { MaxRestitution = Value; return this; }
+        public Builder Grip(double Value)                      { Grip = Value; return this; }
+        public Builder SpinTransfer(double Value)              { SpinTransfer = Value; return this; }
+        public Builder SpinTransferFade(double Value)          { SpinTransferFade = Value; return this; }
+        public Builder SwipeToDirection(double Value)          { SwipeToDirection = Value; return this; }
+        public Builder VelocityWindow(double Value)            { VelocityWindow = Value; return this; }
+        public Builder RacketSpinShare(double Value)           { RacketSpinShare = Value; return this; }
+        public Builder SidespinGain(double Value)              { SidespinGain = Value; return this; }
+        public Builder MaxSidespin(double Value)               { MaxSidespin = Value; return this; }
+        public Builder CurveGain(double Value)                 { CurveGain = Value; return this; }
+        public Builder MaxCurve(double Value)                  { MaxCurve = Value; return this; }
 
         private static List<Double> Boxed(double[] Values) {
             return Arrays.stream(Values).boxed().toList();

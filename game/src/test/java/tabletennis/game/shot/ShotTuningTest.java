@@ -31,6 +31,7 @@ final class ShotTuningTest {
         ShotTuning.SearchKnobs Search = Defaults.Search();
         ShotTuning.RescueKnobs Rescue = Defaults.Rescue();
         ShotTuning.SpinKnobs Spin = Defaults.Spin();
+        ShotTuning.ContactKnobs Contact = Defaults.Contact();
 
         Knob[] Expected = {
             new Knob("MinShotSpeed", Strength.MinShotSpeed(), 5.0), new Knob("MaxShotSpeed", Strength.MaxShotSpeed(), 17.0),
@@ -52,6 +53,7 @@ final class ShotTuningTest {
             new Knob("QualityPaceFrom", Quality.QualityPaceFrom(), 6.0), new Knob("QualityPaceSpan", Quality.QualityPaceSpan(), 12.0),
             new Knob("QualityPaceLoss", Quality.QualityPaceLoss(), 0.15), new Knob("QualityCoreMin", Quality.QualityCoreMin(), 0.26),
             new Knob("AssistFloor", Quality.AssistFloor(), 0.35),
+            new Knob("BrushLift", Quality.BrushLift(), 1.0), new Knob("BrushAlongWeight", Quality.BrushAlongWeight(), 0.35),
             new Knob("PhysicalBlend", Limits.PhysicalBlend(), 0.15), new Knob("ReflectionCap", Limits.ReflectionCap(), 6.0),
             new Knob("MaxHorizontalDeviationDeg", Limits.MaxHorizontalDeviationDeg(), 30.0),
             new Knob("MaxLateralVelocity", Limits.MaxLateralVelocity(), 4.5),
@@ -72,6 +74,15 @@ final class ShotTuningTest {
             new Knob("DriveBrush", Spin.DriveBrush(), 0.8), new Knob("SpinInfluence", Spin.SpinInfluence(), 1.0),
             new Knob("BaseTopspin", Spin.BaseTopspin(), 14.0), new Knob("TopspinPerLift", Spin.TopspinPerLift(), 2.6),
             new Knob("SidespinPerSwipe", Spin.SidespinPerSwipe(), 4.5), new Knob("MaxSpin", Spin.MaxSpin(), 55.0),
+            new Knob("Restitution", Contact.Restitution(), 0.878), new Knob("RestitutionFade", Contact.RestitutionFade(), 0.020),
+            new Knob("MinRestitution", Contact.MinRestitution(), 0.45), new Knob("MaxRestitution", Contact.MaxRestitution(), 0.90),
+            new Knob("Grip", Contact.Grip(), 1.20), new Knob("SpinTransfer", Contact.SpinTransfer(), 0.819),
+            new Knob("SpinTransferFade", Contact.SpinTransferFade(), 0.010),
+            new Knob("SwipeToDirection", Contact.SwipeToDirection(), 0.0),
+            new Knob("VelocityWindow", Contact.VelocityWindow(), 0.040),
+            new Knob("RacketSpinShare", Contact.RacketSpinShare(), 1.0),
+            new Knob("SidespinGain", Contact.SidespinGain(), 5.0), new Knob("MaxSidespin", Contact.MaxSidespin(), 50.0),
+            new Knob("CurveGain", Contact.CurveGain(), 5.625), new Knob("MaxCurve", Contact.MaxCurve(), 0.225),
         };
         List<String> Changed = new ArrayList<>();
         for (Knob Each : Expected) {
@@ -113,6 +124,14 @@ final class ShotTuningTest {
             new Invalid("one rescue speed step",       B -> B.RescueSpeedSteps(1)),
             new Invalid("backoff that stops the shot", B -> B.SpeedBackoffPerPass(0.5)),
             new Invalid("negative reflection cap",     B -> B.ReflectionCap(-1)),
+            new Invalid("restitution past 1",          B -> B.MaxRestitution(1.1)),
+            new Invalid("restitution range inverted",  B -> B.MinRestitution(0.95)),
+            new Invalid("negative grip",               B -> B.Grip(-0.1)),
+            new Invalid("swipe share past 1",          B -> B.SwipeToDirection(1.5)),
+            new Invalid("zero velocity window",        B -> B.VelocityWindow(0)),
+            new Invalid("racket spin share past 1",    B -> B.RacketSpinShare(1.2)),
+            new Invalid("negative sidespin gain",      B -> B.SidespinGain(-1)),
+            new Invalid("NaN curve gain",              B -> B.CurveGain(Double.NaN)),
         };
         List<String> Accepted = new ArrayList<>();
         for (Invalid Each : Rejected) {
@@ -137,11 +156,12 @@ final class ShotTuningTest {
                     .RescueSpeedSteps(2).MaxCorrectionPasses(0).SpinInfluence(0)
                     .MinForwardVelocity(0).LandingMargin(0).Build();
             ShotTuning.Builder().PhysicalBlend(1).TargetDepthMinFrac(0.92).Build();
+            ShotTuning.Builder().SwipeToDirection(1).MinRestitution(1).MaxRestitution(1).Grip(0).Build();
         } catch (IllegalArgumentException Rejection) {
             Refused = Rejection.getMessage();
         }
         Check("boundary values the model can run on are accepted",
               Refused == null,
-              Refused == null ? "blend 0 and 1, one candidate, two rescue steps, no passes" : "refused: " + Refused);
+              Refused == null ? "blend 0 and 1, one candidate, two rescue steps, no passes, full swipe share, restitution 1, no grip" : "refused: " + Refused);
     }
 }

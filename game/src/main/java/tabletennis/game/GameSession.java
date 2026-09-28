@@ -18,7 +18,12 @@ import tabletennis.game.rally.RallyEvent;
 import tabletennis.game.rally.RallyFacts;
 import tabletennis.game.rally.Referee;
 import tabletennis.game.rally.Side;
+import tabletennis.game.shot.ContactModel;
 import tabletennis.game.shot.ShotAssist;
+import tabletennis.game.shot.ShotComparison;
+import tabletennis.game.shot.ShotReport;
+import tabletennis.game.shot.ShotTuning;
+import tabletennis.game.shot.SwingHistory;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -51,6 +56,11 @@ public final class GameSession {
     private final Referee Rules = new Referee();
     private final Scoreboard Score = new Scoreboard();
 
+    // The player's swing, averaged for the contact model; the full racket-driven shot is logged beside the played one.
+    private final ShotTuning.ContactKnobs ShadowKnobs = ShotTuning.Defaults().Contact();
+    private final SwingHistory PlayerSwing = new SwingHistory(ShadowKnobs.VelocityWindow());
+    private final ContactModel Shadow = new ContactModel(ShadowKnobs);
+
     private Vec3 Aim;                     // null until the mouse has moved
     private boolean DemoMode;
     private boolean AutoReplay = true;
@@ -70,8 +80,17 @@ public final class GameSession {
         ReplayAt = Double.NaN;
     }
 
+    /** Start a new match: the score goes back to love-all and any scheduled replay is dropped. */
+    public void NewMatch() {
+        Score.Reset();
+        ReplayAt = Double.NaN;
+    }
+
     /** Already mapped and clamped by the caller. */
     public void SetAim(Vec3 Target) { Aim = Target; }
+
+    /** The player's face keys, each axis in [-1, 1]; see CursorFollower.SetFaceTilt. */
+    public void SetFaceTilt(double Close, double Side) { PlayerHand.SetFaceTilt(Close, Side); }
 
     /** The demo hand replaces the mouse; never both. */
     public void SetDemoMode(boolean On) { DemoMode = On; }
@@ -97,6 +116,7 @@ public final class GameSession {
      */
     public StepResult Step() {
         MoveRackets();
+        PlayerSwing.Record(PlayerRacket.Position());
         Physics.SetRackets(StrikableRackets());
 
         BallState BeforeStep = Physics.Ball();
@@ -104,15 +124,29 @@ public final class GameSession {
         List<RallyEvent> Contacts = RallyFacts.Of(Report, PlayerRacket);
 
         Side HitBy = LastHitter(Contacts);
+        ShotComparison Compared = null;
         if (HitBy != null) {
             Racket Struck = HitBy == Side.Player ? PlayerRacket : OpponentRacket;
-            Physics.ReplaceBall(Assist.Assist(BeforeStep, Physics.Ball(), Struck, HitBy == Side.Player));
+            BallState Physical = Physics.Ball();
+            Vec3 SwingVelocity = HitBy == Side.Player ? PlayerSwing.AverageVelocity() : Struck.Velocity();
+            Physics.ReplaceBall(Assist.Assist(BeforeStep, Physical, Struck, HitBy == Side.Player, SwingVelocity));
+            Physics.SetSideLift(Assist.CurveGainFor(HitBy == Side.Player));
+            if (HitBy == Side.Player) Compared = CompareShadow(BeforeStep, Physical.Position());
         }
 
         Referee.Ruling Verdict = Rules.Judge(Contacts, Report.Before(), Report.After(), Physics.Time());
         if (Verdict.PointTo() != null) AwardPoint(Verdict.PointTo());
         ScheduleFallbackReplay();
-        return new StepResult(HitBy, Verdict.PointTo(), Verdict.Events());
+        return new StepResult(HitBy, Verdict.PointTo(), Verdict.Events(), Compared);
+    }
+
+    /** Reads the played ball and the blade only; the world is not touched. */
+    private ShotComparison CompareShadow(BallState Incoming, Vec3 At) {
+        Vec3 Swing = PlayerSwing.AverageVelocity();
+        BallState Struck = Shadow.Strike(Incoming, At, PlayerRacket.Position(), PlayerRacket.Normal(), Swing);
+        double Gain = Assist.CurveGainFor(true);
+        return new ShotComparison(Physics.Time(), Swing, ShotReport.Of(Physics.Ball(), Gain),
+                                  Struck == null ? null : ShotReport.Of(Struck, Gain));
     }
 
     private void MoveRackets() {
