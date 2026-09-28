@@ -15,10 +15,10 @@ final class FaceKeysTest {
     void TheFaceKeysCollideWithNoCommand() {
         List<String> Taken = new ArrayList<>();
         for (KeyCode Key : FaceKeys.All) {
-            Controls.CommandFor(Key).ifPresent(Command -> Taken.add(Key + " -> " + Command));
+            Controls.CommandFor(Key, true).ifPresent(Command -> Taken.add(Key + " -> " + Command));
         }
         Check("W, A, S and D steer the face and nothing else",
-              Taken.isEmpty() && Controls.Legend.contains(FaceKeys.LegendToken),
+              Taken.isEmpty() && Controls.MatchLegend.contains(FaceKeys.LegendToken),
               Taken.isEmpty() ? "no clash; the legend names them" : "also bound: " + Taken);
     }
 
@@ -26,16 +26,16 @@ final class FaceKeysTest {
     void HeldKeysReadAsTiltAndOppositesCancel() {
         FaceKeys Keys = new FaceKeys();
         Keys.Press(KeyCode.W);
-        Keys.Press(KeyCode.D);
+        Keys.Press(KeyCode.A);
         double Close = Keys.CloseTilt(), Side = Keys.SideTilt();
         Keys.Press(KeyCode.S);
         double Cancelled = Keys.CloseTilt();
         Keys.ReleaseAll();
         boolean LetGo = Keys.CloseTilt() == 0 && Keys.SideTilt() == 0;
         boolean NotOurs = !Keys.Press(KeyCode.R);
-        Check("W closes, D tilts right, W with S cancels, losing focus lets go, other keys pass through",
+        Check("W closes, A tilts right, W with S cancels, losing focus lets go, other keys pass through",
               Close == 1 && Side == 1 && Cancelled == 0 && LetGo && NotOurs,
-              String.format("W+D -> close %.0f side %.0f; +S -> close %.0f; released=%b; R passed=%b",
+              String.format("W+A -> close %.0f side %.0f; +S -> close %.0f; released=%b; R passed=%b",
                             Close, Side, Cancelled, LetGo, NotOurs));
     }
 }

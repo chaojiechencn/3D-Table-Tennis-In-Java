@@ -42,7 +42,12 @@ public final class Hud {
 
     public void ToggleShown() { Root.setVisible(!Root.isVisible()); }
 
-    public void SetFeed(String Name) { Feed.setText("feed: " + Name); }
+    public void SetShown(boolean On) { Root.setVisible(On); }
+
+    /** The line at the top left: the mode, and in practice the ball being played. */
+    public void SetHeading(String Text) { Feed.setText(Text); }
+
+    public void SetLegend(String Text) { Legend.setText(Text); }
 
     public void SetScore(ScoreSnapshot Now) { Score.setText(ScoreLine.Format(Now)); }
 

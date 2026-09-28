@@ -53,6 +53,7 @@ final class ShotTuningTest {
             new Knob("QualityPaceFrom", Quality.QualityPaceFrom(), 6.0), new Knob("QualityPaceSpan", Quality.QualityPaceSpan(), 12.0),
             new Knob("QualityPaceLoss", Quality.QualityPaceLoss(), 0.15), new Knob("QualityCoreMin", Quality.QualityCoreMin(), 0.26),
             new Knob("AssistFloor", Quality.AssistFloor(), 0.35),
+            new Knob("BrushLift", Quality.BrushLift(), 1.0), new Knob("BrushAlongWeight", Quality.BrushAlongWeight(), 0.35),
             new Knob("PhysicalBlend", Limits.PhysicalBlend(), 0.15), new Knob("ReflectionCap", Limits.ReflectionCap(), 6.0),
             new Knob("MaxHorizontalDeviationDeg", Limits.MaxHorizontalDeviationDeg(), 30.0),
             new Knob("MaxLateralVelocity", Limits.MaxLateralVelocity(), 4.5),

@@ -260,16 +260,38 @@ component and silently evaluated to a constant: once in the face easing, once in
 spin. Before reading a velocity component, ask whose blade it is and whether that component can
 ever be non-zero.
 
+### The brush, made playable
+
+A simulated human (200 ms reaction, a 125 Hz mouse, about 13 ms of timing error) brushed loops and
+chops against every drill. As first built, 48-87% of its brushes met the ball near the rim and a chop
+landed 27% of the time. The vertical sweep crosses the ball faster than a person can time it, the
+bat cannot wait lower than the table top, and a tilted face slides away from the ball. Slowing the
+sweep (13 down to 4.5 m/s) or shortening it (18 cm down to 8 cm) made it worse, not better.
+
+- **A brush is graded as a brush.** When the blade rises or falls faster than `BrushLift` (1 m/s;
+  only a brush moves it vertically), its offset along the brush counts at `BrushAlongWeight` (0.35).
+  A brushed contact glances off the face; the spin comes from the contact physics wherever it
+  touched. Across the face it is graded in full, and no other contact changes. Measured: the loop
+  lands 64% of tries (88% of contacts, +27 rev/s), the chop 67% (97% of contacts, -14 rev/s).
+- **The brush is relative** (`MouseControl.BrushFraction`): pressing the right button no longer
+  moves the bat; a quarter of the screen up or down sweeps the whole band. Before, the bat jumped to
+  the height of the cursor's place on the screen the moment the button went down.
+- The reliable spin is still the face keys on a forward swing (W +52 rev/s); the brush is the
+  harder, showier stroke.
+
 ### The face keys
 
-`W`/`S` close and open the face, `A`/`D` tilt it left and right, while held
-(`GameSession.SetFaceTilt`). Each adds `FaceTilt` (0.6, about 31 degrees) to the automatic lean's
-direction, and the face eases there at `FaceTau`. The resting face is 28.8 degrees closed (a still
-blade reads as driving forward), so from rest `W` closes it 20 degrees more, `S` opens it 32 degrees
-to nearly square, and `A`/`D` turn it 28 degrees. The spin comes from the contact physics alone: on
-the same flat drive a closed face tops it (+52 rev/s) and an open one cuts it (-52). The tilt is
-added only while a key is held, so untouched play is bit-for-bit unchanged. `A` and `D` were
-auto-replay and the control readout; those moved to `U` and `I`.
+`W`/`S` close and open the face, `A`/`D` tilt it right and left, while held
+(`GameSession.SetFaceTilt`). A key tilts its axis by `FaceTilt` (0.6, about 31 degrees) and the face
+eases there at `FaceTau`. Where the automatic lean agrees with the key it adds on (W while driving
+forward closes the face to 49 degrees and tops the drive, +52 rev/s); where it disagrees it is dropped
+(W while moving back or sideways gives 31 degrees closed, S while driving forward 31 open). The first
+version only added the tilt, so W while backing off to reach a ball merely cancelled the lean that
+opens the face: a square face, a rim contact, and the ball died on the player's own half (1 of 9 feeds
+returned; `ReachabilityTest` and `CursorFollowerTest` now guard it). A bat moving back with the ball
+still cannot hit hard: with W it returns a soft, high topspin ball. The tilt applies only while a key
+is held, so untouched play is bit-for-bit unchanged. `A` and `D` were auto-replay and the control
+readout; those moved to `U` and `I`.
 
 ### The face settles to square
 

@@ -39,8 +39,8 @@ final class CursorFollowerTest {
     /**
      * The face keys, with the blade held still. The resting face is not square: a still blade
      * reads as driving forward, so the automatic lean rests it 28.8 degrees closed. Each key tilts
-     * the face from there, its own way, by 20-32 degrees (W to 49, S to 2.9, A and D to 39 off
-     * square), and letting go settles it back to rest.
+     * the face from there, its own way (W to 49 closed, S to 31 open, A and D to 39 off square), and
+     * letting go settles it back to rest.
      */
     @Test
     void TheFaceKeysTiltTheFaceAndLetGo() {
@@ -61,6 +61,50 @@ final class CursorFollowerTest {
         }
         Check("each face key tilts the face at least 15 degrees its own way, and letting go returns it to rest",
               AllRight, Measured.toString());
+    }
+
+    /**
+     * The bug players met: W is "close the face", whatever the bat is doing. Moving back to reach a
+     * ball leans the face open automatically; if W only added its tilt, it merely cancelled that
+     * lean and left the face square, and the ball died on the player's own half. So with W held the
+     * face must be clearly closed, and with S clearly open, while the bat drives forward, moves
+     * back, moves sideways, or stands still.
+     */
+    @Test
+    void AFaceKeyWinsOverTheAutomaticLeanWhateverTheBatIsDoing() {
+        record Motion(String Name, Vec3 Step) {}
+        Motion[] Motions = {
+            new Motion("driving forward", new Vec3(0, 0, -0.02)), new Motion("moving back", new Vec3(0, 0, 0.02)),
+            new Motion("moving sideways", new Vec3(0.02, 0, 0)), new Motion("still", Vec3.Zero),
+        };
+        StringBuilder Measured = new StringBuilder();
+        boolean AllRight = true;
+        for (double Close : new double[]{1, -1}) {
+            for (Motion Each : Motions) {
+                double Pitch = FacePitchWhile(Close, Each.Step());   // + closed (face turned down), - open
+                boolean Right = Close > 0 ? Pitch >= 25 : Pitch <= -25;
+                AllRight &= Right;
+                Measured.append(String.format("%s %s: %s %.0f deg%s; ", Close > 0 ? "W" : "S", Each.Name(),
+                                              Pitch >= 0 ? "closed" : "open", Math.abs(Pitch), Right ? "" : " WRONG"));
+            }
+        }
+        Check("W always closes the face at least 25 degrees and S always opens it, whatever the bat is doing",
+              AllRight, Measured.toString());
+    }
+
+    /** Degrees the face is turned down (closed, positive) after 0.1 s holding the key while the bat moves by Step each step. */
+    private static double FacePitchWhile(double Close, Vec3 Step) {
+        Vec3 At = new Vec3(0, 0.16, 1.6);
+        Racket Blade = new Racket(At, CursorFollower.Square);
+        CursorFollower Hand = new CursorFollower(At);
+        Hand.SetFaceTilt(Close, 0);
+        for (int Each = 0; Each < Simulation.StepsPerSecond / 10; Each++) {
+            At = At.Plus(Step.Scale(Simulation.Step * 480 / 8));   // under TrackSpeed: 1.2 m/s of hand motion
+            Hand.AimAt(At);
+            Hand.Advance(Blade, Simulation.Step);
+        }
+        Vec3 N = Blade.Normal();
+        return Math.toDegrees(Math.atan2(-N.Y(), -N.Z()));
     }
 
     /** The face after half a second holding the tilt, and, if asked, after half a second let go. */

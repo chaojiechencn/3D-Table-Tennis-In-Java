@@ -41,7 +41,8 @@ rules.
 | | `input` | `Controls` (key bindings and the legend), `MouseControl`, `CursorRay` |
 | | `scene` | `Xform`, `TableScene`, `ArenaView`, `Meshes`, `Textures`, `BallView`, `BallShadow`, `RacketView`, `Trail`, `BounceMarks`, `ShotOverlay` |
 | | `camera` | `CameraRig`, `CameraView`, `CameraPose` |
-| | `hud` | `Hud`, `ScoreLine`, `ShotLine`, `ControlReadout` |
+| | `hud` | `Hud`, `ScoreLine`, `ShotLine`, `SpinLine`, `ControlReadout` |
+| | `menu` | `MenuScreen` (main, practice, how to play, result), `Drills` (the practice balls in a player's words) |
 
 ## One step, end to end
 
@@ -81,7 +82,7 @@ Breaking one of these is a defect even if everything compiles and every check pa
 2. **`scene.Xform` is the only place metres become scene units**, in both directions. Nothing
    else may use `Xform.ScenePerMetre`.
 3. **The app reads snapshots; it never writes game state.** It sends the session commands
-   (`Launch`, `SetAim`, `SetFaceTilt`, `SetDemoMode`, `SetAutoReplay`) and nothing else.
+   (`Launch`, `NewMatch`, `SetAim`, `SetFaceTilt`, `SetDemoMode`, `SetAutoReplay`) and nothing else.
 4. **One contact solver.** Table, net, floor and both blades differ only by a `Material` and a
    `Collider` shape. The solver asks a shape four questions (`ClosestPoint`, `EscapeNormal`,
    `Sweep`, `VelocityAt`); a new shape answers them and never touches the impulse.
@@ -155,8 +156,9 @@ The architecture has a place for each unbuilt feature; none of them needs a rewr
   opponent is a second `Opponent` implementation, built on `FlightPredictor` and `MeetingPoint`,
   which the demo hand already uses. Difficulty has to come from prediction quality: a follower
   cannot be made beatable by slowing it down; it only becomes erratic.
-- **Menus.** A new front in `app`, choosing what `TableTennisApp` launches. The session needs
-  nothing new.
+- **Menus.** Built: `menu.MenuScreen` over the 3D view, and `TableTennisApp` switches between the
+  menu (the demo hand plays behind it), a match, practice and the demo. The session needed only
+  `NewMatch`.
 - **Paddle profiles.** A paddle is a set of `ShotTuning` values ("the defaults plus these
   changes", via `ShotTuning.Builder`). Physical rubber differences belong in a new `Material`.
 - **Currency and the shop** come last, after the core features.

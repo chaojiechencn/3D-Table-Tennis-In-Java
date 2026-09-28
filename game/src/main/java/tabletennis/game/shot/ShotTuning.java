@@ -73,10 +73,14 @@ public record ShotTuning(StrengthKnobs Strength, AimKnobs Aim, TargetKnobs Targe
         }
     }
 
-    /** How cleanly the ball was struck, and so how much of the authored shot it earns. */
+    /**
+     * How cleanly the ball was struck, and so how much of the authored shot it earns. A brush
+     * (the blade moving vertically faster than BrushLift) counts its offset along the brush at
+     * BrushAlongWeight: a brush meets the ball glancing off the face, not square in the middle.
+     */
     public record QualityKnobs(double QualityCore, double QualityFalloff, double QualityPaceFrom,
                                double QualityPaceSpan, double QualityPaceLoss, double QualityCoreMin,
-                               double AssistFloor) {
+                               double AssistFloor, double BrushLift, double BrushAlongWeight) {
         public QualityKnobs {
             Finite("QualityCore", QualityCore);
             Positive("QualityFalloff", QualityFalloff);        // divides the quality slope
@@ -85,6 +89,8 @@ public record ShotTuning(StrengthKnobs Strength, AimKnobs Aim, TargetKnobs Targe
             Finite("QualityPaceLoss", QualityPaceLoss);
             Finite("QualityCoreMin", QualityCoreMin);
             Fraction("AssistFloor", AssistFloor);              // a lerp weight
+            NonNegative("BrushLift", BrushLift);
+            Fraction("BrushAlongWeight", BrushAlongWeight);    // scales an offset
         }
     }
 
@@ -254,6 +260,13 @@ public record ShotTuning(StrengthKnobs Strength, AimKnobs Aim, TargetKnobs Targe
         private double QualityCoreMin = 0.26;
         /** TUNED: raw rim impulses land 11 times in 75, so a shank still gets some help. */
         private double AssistFloor = 0.35;
+        /** The blade moves vertically only while brushing (the dead axis), so any real rise counts. */
+        private double BrushLift = 1.0;
+        /**
+         * TUNED: at full weight a human's brush met the ball near the rim 48-87% of the time (the
+         * sweep crosses the ball faster than a person can time it), so a brushed shot was a mishit.
+         */
+        private double BrushAlongWeight = 0.35;
 
         // Limits.
         /** Enough reflection to feel like an impact, too little to steer. */
@@ -345,7 +358,7 @@ public record ShotTuning(StrengthKnobs Strength, AimKnobs Aim, TargetKnobs Targe
                     new TargetKnobs(TargetHalfWidthFrac, TargetDepthMinFrac, TargetDepthMaxFrac, SafeDepthFrac,
                                     NetClearance, LandingMargin),
                     new QualityKnobs(QualityCore, QualityFalloff, QualityPaceFrom, QualityPaceSpan,
-                                     QualityPaceLoss, QualityCoreMin, AssistFloor),
+                                     QualityPaceLoss, QualityCoreMin, AssistFloor, BrushLift, BrushAlongWeight),
                     new LimitKnobs(PhysicalBlend, ReflectionCap, MaxHorizontalDeviationDeg, MaxLateralVelocity,
                                    MaxVerticalLaunchAngleDeg, MinVerticalLaunchAngleDeg, MinForwardVelocity),
                     new SearchKnobs(SpeedCandidates, SpeedSpread, SpeedPreference, PassPenalty, MinSearchSpeed,
@@ -388,6 +401,8 @@ public record ShotTuning(StrengthKnobs Strength, AimKnobs Aim, TargetKnobs Targe
         public Builder QualityPaceLoss(double Value)           { QualityPaceLoss = Value; return this; }
         public Builder QualityCoreMin(double Value)            { QualityCoreMin = Value; return this; }
         public Builder AssistFloor(double Value)               { AssistFloor = Value; return this; }
+        public Builder BrushLift(double Value)                 { BrushLift = Value; return this; }
+        public Builder BrushAlongWeight(double Value)          { BrushAlongWeight = Value; return this; }
         public Builder PhysicalBlend(double Value)             { PhysicalBlend = Value; return this; }
         public Builder ReflectionCap(double Value)             { ReflectionCap = Value; return this; }
         public Builder MaxHorizontalDeviationDeg(double Value) { MaxHorizontalDeviationDeg = Value; return this; }

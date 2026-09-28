@@ -7,12 +7,13 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * The racket-face keys, held rather than pressed: W closes the face, S opens it, A and D tilt it
- * left and right. Opposite keys held together cancel. Input only; the session owns the face.
+ * The racket-face keys, held rather than pressed: W closes the face, S opens it, A tilts it to the
+ * player's right and D to the left (swapped at players' request). Opposite keys held together
+ * cancel. Input only; the session owns the face.
  */
 public final class FaceKeys {
 
-    public static final KeyCode Close = KeyCode.W, Open = KeyCode.S, Left = KeyCode.A, Right = KeyCode.D;
+    public static final KeyCode Close = KeyCode.W, Open = KeyCode.S, Left = KeyCode.D, Right = KeyCode.A;
 
     public static final List<KeyCode> All = List.of(Close, Open, Left, Right);
 
@@ -40,7 +41,7 @@ public final class FaceKeys {
     /** +1 closed (W), -1 open (S), 0 neither or both. */
     public double CloseTilt() { return Axis(Close, Open); }
 
-    /** +1 toward the player's right (D), -1 left (A), 0 neither or both. */
+    /** +1 toward the player's right (A), -1 left (D), 0 neither or both. */
     public double SideTilt() { return Axis(Right, Left); }
 
     private double Axis(KeyCode Positive, KeyCode Negative) {

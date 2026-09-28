@@ -1,0 +1,17 @@
+plugins {
+    id 'org.teavm' version '0.15.0'
+}
+
+dependencies {
+    implementation project(':game')
+}
+
+teavm.js {
+    mainClass = 'tabletennis.web.WebProbe'
+    obfuscated = false
+}
+
+teavm.wasmGC {
+    copyRuntime = true
+    mainClass = 'tabletennis.web.WebProbe'
+}

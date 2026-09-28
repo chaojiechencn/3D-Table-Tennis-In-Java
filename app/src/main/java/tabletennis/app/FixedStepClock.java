@@ -50,6 +50,8 @@ final class FixedStepClock {
 
     void TogglePause() { Paused = !Paused; }
 
+    void SetPaused(boolean On) { Paused = On; }
+
     /** Pauses, and advances exactly one step on the next frame. */
     void QueueSingleStep() {
         Paused = true;

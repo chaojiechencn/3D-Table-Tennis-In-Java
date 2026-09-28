@@ -42,6 +42,7 @@ public final class CursorFollower {
      */
     private static final double FaceTilt = 0.6;
 
+
     private Vec3 Target;
     private Vec3 StrokeDirection = Square;
     private double IdleTime = 0;
@@ -83,16 +84,27 @@ public final class CursorFollower {
     }
 
     /**
-     * Sideways lean follows the swipe; driving forward (-Z) closes the face for topspin. The face
-     * keys add their tilt on top, only when held, so untouched play is bit-for-bit what it was.
+     * Sideways lean follows the swipe; driving forward (-Z) closes the face for topspin. A held face
+     * key overrides the lean where they disagree and adds to it where they agree. Only when held, so
+     * untouched play is bit-for-bit what it was.
      */
     private Vec3 FaceToward(Vec3 CurrentNormal, double Seconds) {
         double Across = StrokeDirection.X() * FaceLean;
         double Up = StrokeDirection.Z() * FaceClose;
-        if (SideTilt != 0) Across += SideTilt * FaceTilt;
-        if (CloseTilt != 0) Up -= CloseTilt * FaceTilt;
+        if (SideTilt != 0) Across = WithKey(Across, SideTilt);
+        if (CloseTilt != 0) Up = -WithKey(-Up, CloseTilt);
         Vec3 Desired = new Vec3(Across, Up, -1).Normalized();
         double Easing = 1 - Math.exp(-Seconds / FaceTau);
         return Vec3.Lerp(CurrentNormal, Desired, Easing).Normalized();
+    }
+
+    /**
+     * One face axis with a key held. Adding the tilt to the automatic lean made W only cancel the
+     * lean that opens the face while the bat moves back, leaving it square, and the ball died on
+     * the player's own half; so a lean the other way is dropped and the key's tilt stands alone.
+     */
+    private static double WithKey(double Automatic, double Key) {
+        double Agreeing = Automatic * Key > 0 ? Automatic : 0;
+        return Agreeing + Key * FaceTilt;
     }
 }

@@ -80,6 +80,12 @@ public final class GameSession {
         ReplayAt = Double.NaN;
     }
 
+    /** Start a new match: the score goes back to love-all and any scheduled replay is dropped. */
+    public void NewMatch() {
+        Score.Reset();
+        ReplayAt = Double.NaN;
+    }
+
     /** Already mapped and clamped by the caller. */
     public void SetAim(Vec3 Target) { Aim = Target; }
 

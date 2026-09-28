@@ -8,17 +8,22 @@ import java.util.List;
 
 /**
  * The command line, as --name=value pairs; anything else is ignored. A CapturePath switches to
- * offline capture: --shot="Topspin loop" --at=0.45 --view=SIDE --out=frame.png.
+ * offline capture: --shot="Topspin loop" --at=0.45 --view=SIDE --out=frame.png. --dev=true is
+ * developer mode, the game as it was before the menu: straight onto the table, every key, overlay
+ * and feed. --screen picks what shows first (menu, practice, howtoplay, result or none): the menu
+ * for players, nothing for developer mode or a capture.
  */
 record LaunchOptions(Feed FirstFeed, CameraView View, boolean BallMagnified, boolean ControlReadout,
-                     boolean DemoMode, boolean RallyCamInCapture, String CapturePath, double CaptureAt) {
+                     boolean DemoMode, boolean RallyCamInCapture, String CapturePath, double CaptureAt,
+                     boolean Developer, String Screen) {
 
     static LaunchOptions Parse(List<String> Arguments) {
         Feed FirstFeed = Feeds.Default();
         CameraView View = null;
         boolean BallMagnified = false, ControlReadout = false, DemoMode = false, RallyCam = false;
-        String CapturePath = null;
+        String CapturePath = null, Screen = null;
         double CaptureAt = 0;
+        boolean Developer = false;
 
         for (String Argument : Arguments) {
             String[] NameAndValue = Argument.split("=", 2);
@@ -33,11 +38,14 @@ record LaunchOptions(Feed FirstFeed, CameraView View, boolean BallMagnified, boo
                 case "--controldebug" -> ControlReadout = Boolean.parseBoolean(Value);
                 case "--demo" -> DemoMode = Boolean.parseBoolean(Value);
                 case "--rallycam" -> RallyCam = Boolean.parseBoolean(Value);
+                case "--dev" -> Developer = Boolean.parseBoolean(Value);
+                case "--screen" -> Screen = Value.toLowerCase();
                 default -> { }
             }
         }
+        if (Screen == null) Screen = CapturePath != null || Developer ? "none" : "menu";
         return new LaunchOptions(FirstFeed, View, BallMagnified, ControlReadout, DemoMode, RallyCam,
-                                 CapturePath, CaptureAt);
+                                 CapturePath, CaptureAt, Developer, Screen);
     }
 
     boolean Capturing() { return CapturePath != null; }

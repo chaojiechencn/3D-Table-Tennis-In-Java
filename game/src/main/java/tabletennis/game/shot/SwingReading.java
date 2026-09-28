@@ -50,9 +50,14 @@ final class SwingReading {
         return new Swing(Drive, SwipeX, Lift, Brush, Amount, OffX, OffY, FaceX);
     }
 
-    /** 1 mid-blade falling to 0 at the rim, with a clean core that shrinks as the ball arrives faster. */
+    /**
+     * 1 mid-blade falling to 0 at the rim, with a clean core that shrinks as the ball arrives faster.
+     * A brush counts its offset along the brush for less; no other contact changes.
+     */
     double ContactQuality(BallState Incoming, Swing Read) {
-        double OffCentre = Math.min(1, Math.hypot(Read.OffX(), Read.OffY()));
+        boolean Brushed = Math.abs(Read.Lift()) > Quality.BrushLift();
+        double Along = Brushed ? Read.OffY() * Quality.BrushAlongWeight() : Read.OffY();
+        double OffCentre = Math.min(1, Math.hypot(Read.OffX(), Along));
         double PaceFraction = Clamp((Incoming.Speed() - Quality.QualityPaceFrom()) / Quality.QualityPaceSpan(), 0, 1);
         double Core = Math.max(Quality.QualityCoreMin(), Quality.QualityCore() - Quality.QualityPaceLoss() * PaceFraction);
         double Rim = Core + Quality.QualityFalloff();

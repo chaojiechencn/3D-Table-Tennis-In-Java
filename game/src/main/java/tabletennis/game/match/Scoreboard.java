@@ -48,6 +48,15 @@ public final class Scoreboard {
         }
     }
 
+    /** A fresh match: love-all, no games, the player serving first. */
+    public void Reset() {
+        PlayerPoints = 0;
+        OpponentPoints = 0;
+        PlayerGames = 0;
+        OpponentGames = 0;
+        OpeningServer = Side.Player;
+    }
+
     private void StartNextGame() {
         PlayerPoints = 0;
         OpponentPoints = 0;

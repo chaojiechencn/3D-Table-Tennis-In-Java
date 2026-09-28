@@ -17,11 +17,35 @@ final class ControlsTest {
     void TheLegendNamesEveryBinding() {
         List<String> Missing = new ArrayList<>();
         for (Controls.Binding Each : Controls.Bindings) {
-            if (!Controls.Legend.contains(Each.LegendToken())) Missing.add(Each.Action() + " (" + Each.LegendToken() + ")");
+            String Legend = Each.Developer() ? Controls.DeveloperLegend : Controls.PracticeLegend;
+            if (!Legend.contains(Each.LegendToken())) Missing.add(Each.Action() + " (" + Each.LegendToken() + ")");
         }
-        if (!Controls.Legend.contains(Controls.FeedDigitsToken)) Missing.add("feed digits");
-        Check("every key binding is named in the on-screen legend", Missing.isEmpty(),
+        if (!Controls.DeveloperLegend.contains(Controls.FeedDigitsToken)) Missing.add("feed digits");
+        Check("every key binding is named in the legend of the people it is for", Missing.isEmpty(),
               Missing.isEmpty() ? Controls.Bindings.size() + " bindings and the feed digits" : "missing: " + Missing);
+    }
+
+    /** A player sees and reaches only player keys: debug overlays and time control need --dev. */
+    @Test
+    void DeveloperKeysNeedDeveloperMode() {
+        List<String> Leaked = new ArrayList<>();
+        for (Controls.Binding Each : Controls.Bindings) {
+            if (!Each.Developer()) continue;
+            for (KeyCode Key : Each.Keys()) {
+                if (Controls.CommandFor(Key, false).isPresent()) Leaked.add(Key + " works without --dev");
+                if (Controls.CommandFor(Key, true).isEmpty()) Leaked.add(Key + " dead even with --dev");
+            }
+            if (Controls.PracticeLegend.contains(Each.LegendToken())) Leaked.add(Each.LegendToken() + " in the player legend");
+        }
+        for (Controls.Command Each : Controls.PracticeOnly) {
+            for (Controls.Binding Binding : Controls.Bindings) {
+                if (Binding.Action() == Each && Controls.MatchLegend.contains(Binding.LegendToken())) {
+                    Leaked.add(Binding.LegendToken() + " offered in a match");
+                }
+            }
+        }
+        Check("developer keys work only with --dev, and a match offers no practice-only key", Leaked.isEmpty(),
+              Leaked.isEmpty() ? "player legend clean; every developer key answers only in developer mode" : String.join("; ", Leaked));
     }
 
     @Test

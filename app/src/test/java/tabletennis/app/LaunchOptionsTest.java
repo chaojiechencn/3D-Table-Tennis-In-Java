@@ -34,4 +34,22 @@ final class LaunchOptionsTest {
                   && Options.View() == null,
               Describe(Options));
     }
+
+    /**
+     * A player starts at the menu with no developer keys; a capture starts on the table, so every
+     * documented capture line still draws the same frame; --screen and --dev override both.
+     */
+    @Test
+    void PlayersStartAtTheMenuAndCapturesOnTheTable() {
+        LaunchOptions Player = LaunchOptions.Parse(List.of());
+        LaunchOptions Capture = LaunchOptions.Parse(List.of("--out=frame.png"));
+        LaunchOptions Developer = LaunchOptions.Parse(List.of("--dev=true"));
+        LaunchOptions Asked = LaunchOptions.Parse(List.of("--out=frame.png", "--screen=HowToPlay", "--dev=true"));
+        Check("a player starts at the menu, developer mode and a capture on the table, and --screen overrides both",
+              Player.Screen().equals("menu") && !Player.Developer() && Capture.Screen().equals("none")
+                  && Developer.Screen().equals("none") && Developer.Developer()
+                  && Asked.Screen().equals("howtoplay") && Asked.Developer(),
+              String.format("player %s dev=%b; developer %s; capture %s; asked %s dev=%b", Player.Screen(),
+                            Player.Developer(), Developer.Screen(), Capture.Screen(), Asked.Screen(), Asked.Developer()));
+    }
 }

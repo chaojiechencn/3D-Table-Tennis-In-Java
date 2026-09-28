@@ -90,4 +90,18 @@ final class ScoreboardTest {
               Board.Points(Side.Player) == 11 && Board.Points(Side.Opponent) == 9,
               "reads " + Board.Points(Side.Player) + "-" + Board.Points(Side.Opponent) + " after the game-winning point");
     }
+
+    /** The menu's "play again": a finished match starts over from love-all with the player serving. */
+    @Test
+    void ANewMatchStartsFromLoveAll() {
+        Scoreboard Score = new Scoreboard();
+        while (!Score.MatchOver()) Score.PointTo(Side.Opponent);
+        String Finished = Score.Snapshot().toString();
+        Score.Reset();
+        ScoreSnapshot Fresh = Score.Snapshot();
+        Check("a reset match is love-all, no games, no winner, the player serving",
+              Fresh.PlayerPoints() == 0 && Fresh.OpponentPoints() == 0 && Fresh.PlayerGames() == 0
+              && Fresh.OpponentGames() == 0 && Fresh.MatchWinner() == null && Fresh.Server() == Side.Player,
+              "from " + Finished + " to " + Fresh);
+    }
 }
